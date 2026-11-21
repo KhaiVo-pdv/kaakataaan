@@ -83,6 +83,7 @@ export function makeMetro(track, owner) {
   part(g, new THREE.CylinderGeometry(0.008, 0.008, 0.3, 4), mat('#3a2a1a'), 1.0);
   const flag = part(g, new THREE.BoxGeometry(0.16, 0.1, 0.01), mat(TRACK_COLOR[track], { glow: true }), 1.08);
   flag.position.x = 0.08;
+  g.scale.setScalar(1.25);
   return g;
 }
 
@@ -102,7 +103,7 @@ export function makeBarbarianShip() {
       sh.rotation.x = Math.PI / 2;
       sh.position.set(-0.2 + i * 0.13, 0.1, side * 0.105);
     }
-  g.scale.setScalar(1.5);
+  g.scale.setScalar(2);
   return g;
 }
 
@@ -111,6 +112,7 @@ export function makeBuoy(done, land) {
   const g = new THREE.Group();
   part(g, new THREE.CylinderGeometry(0.05, 0.07, 0.1, 8), mat(done ? '#e0533a' : land ? '#ffd36a' : '#d9d4c7'), 0.05);
   if (land) part(g, new THREE.ConeGeometry(0.05, 0.12, 6), mat('#ffd36a', { glow: true }), 0.16);
+  g.scale.setScalar(1.8);
   return g;
 }
 
