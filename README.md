@@ -1,13 +1,26 @@
+<img src="icons/icon-192.png" alt="PDV" width="96" align="right">
+
 # Kaakataaan
 
-**Kaakataaan** là bản phát triển tiếp từ [Katanittes của Sowtank](https://github.com/KurusuDes/CatanTestFriendos) (giấy phép MIT), thêm:
+**Kaakataaan** is based on [Katanittes by Sowtank](https://github.com/KurusuDes/CatanTestFriendos) (MIT license).
+This version is developed by **Khai Vo (PDV)** and adds the Catan expansions:
 
-- ⛵ **Bản mở rộng Navegantes (Seafarers):** 4 kịch bản, tàu, cướp biển, đảo mới có điểm thưởng, sương mù để khám phá, kèm màn hướng dẫn luật có hình minh hoạ.
-- 🇻🇳 **Tiếng Việt** (mặc định) và tiếng Anh.
+- ⛵ **Seafarers:** 4 scenarios, ships, the pirate, new islands with bonus points and fog to explore.
+- 🏰 **Cities & Knights:** 3 commodities, city improvements and metropolises, city walls, knights, barbarian attacks and the full set of 54 progress cards.
+- 📖 Illustrated rules for each expansion.
+- 🇻🇳 Vietnamese (default) and English, and a new PDV logo.
 
-Chạy trên máy: `py tools/serve.py` rồi mở http://localhost:8123/ · Kiểm thử: `npm test`.
+| | |
+|---|---|
+| 🎮 **Play** | https://khaivo-pdv.github.io/kaakataaan/ |
+| 👤 **This version** | Khai Vo (PDV) — [KhaiVo-pdv](https://github.com/KhaiVo-pdv) |
+| 🧩 **Original game** | Katanittes by Sowtank — [KurusuDes/CatanTestFriendos](https://github.com/KurusuDes/CatanTestFriendos) |
 
-Toàn bộ ghi công cho tác giả gốc được giữ nguyên trong [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) và trong game. Phần dưới đây là README gốc của Katanittes.
+Run locally: `py tools/serve.py`, then open http://localhost:8123/ · Tests: `npm test`.
+
+All credit to the original author is kept in [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) and in the game.
+This is an unofficial fan project, not affiliated with Catan GmbH, CATAN Studio or Kosmos.
+Below is the original Katanittes README.
 
 ---
 
