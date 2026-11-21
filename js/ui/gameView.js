@@ -40,6 +40,7 @@ export function gameScreen(root) {
     offer: h('div'),
     overlay: h('div'),
     pass: h('div'),
+    barb: h('div', { class: 'barb-slot' }), // Cities & Knights: the barbarians on the board
   };
   const topbar = h('header', { class: 'topbar' },
     h('div', { class: 'brand' }, 'Kaakataaan'),
@@ -48,7 +49,7 @@ export function gameScreen(root) {
       h('button', { class: 'btn sm', title: t('Ayuda'), onclick: () => showHelp({ seafarers: Sea.hasShips(App.state || {}) }) }, '❔'),
       h('button', { class: 'btn sm', title: t('Menú'), onclick: () => openMenu() }, '☰')));
   els.topView = h('button', { class: 'btn', title: t('Vista desde arriba'), onclick: () => toggleTopView() }, '🗺️');
-  boardWrap.append(els.banner, els.offer, els.rolls,
+  boardWrap.append(els.banner, els.offer, els.rolls, els.barb,
     h('div', { class: 'zoom-ctrl' },
       els.topView,
       h('button', { class: 'btn', title: t('Acercar'), onclick: () => ui.board && ui.board.setZoom(ui.board.zoom * 1.25) }, '+'),
@@ -273,6 +274,9 @@ function handleFx(st) {
         break;
       case 'monopoly':
         f.from.forEach(([o, n], i) => flyCards(Array(n).fill(f.res), o, f.pid, v, { delay: i * 200 }));
+        break;
+      case 'barbarians': // Cities & Knights: the ship landed
+        if (f.attack) toast(CK.attackSummary(st), st.barbarians.last && st.barbarians.last.won ? 'good' : 'error', 6000);
         break;
       case 'progressDraw': // Cities & Knights
         if (f.pid === v) toast(t('📜 Robaste: {icon} {card}', { icon: CK_PROGRESS[f.id].icon, card: t(CK_PROGRESS[f.id].name) }), 'good');
@@ -610,7 +614,7 @@ function renderTop(st) {
   clear(e.dice);
   if (st.dice) {
     const sum = st.dice[0] + st.dice[1];
-    e.dice.append(dieFace(st.dice[0]), dieFace(st.dice[1], true), CK.eventDieBadge(st, h) || '', h('div', { class: 'dice-sum' + (sum === 7 ? ' seven' : '') }, sum));
+    e.dice.append(dieFace(st.dice[0]), dieFace(st.dice[1], true), CK.eventDieBadge(st, h, { toast }) || '', h('div', { class: 'dice-sum' + (sum === 7 ? ' seven' : '') }, sum));
     if (ui.diceAnim) {
       e.dice.classList.remove('rolling');
       void e.dice.offsetWidth;
@@ -781,7 +785,8 @@ function renderPlayers(st, v) {
     box.append(card);
   }
   clear(ui.els.bank).append(h('span', null, '🏦'), ...CK.cardList(st).map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), ...(CK.hasCK(st) ? CK.progressDecks(st, h) : [h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`)]),
-    h('span', { title: t('Meta') },`🏆 ${st.config.rules.vpTarget}`), CK.barbarianTrack(st, h) || '');
+    h('span', { title: t('Meta') },`🏆 ${st.config.rules.vpTarget}`));
+  sync(ui.els.barb, CK.barbarianHud(st, h) || ''); // Cities & Knights
 }
 
 function renderLog(st) {
@@ -837,7 +842,7 @@ function fillActions(bar, st, v, locked) {
       }, info.icon, h('b', null, `×${cards.length}`));
     })));
 
-  const acts = h('div', { class: 'actions' });
+  const acts = h('div', { class: 'actions' + (CK.hasCK(st) ? ' ck' : '') });
   bar.append(acts);
   const myTurn = st.current === v;
   if (st.phase === 'gameOver') {
@@ -1150,7 +1155,7 @@ let modalSeq = 0;
 // Cities & Knights progress cards in your hand
 function openProgress(v) {
   openModal(() => CK.progressModal(App.state, v, {
-    h, close: closeModal, playable: G.playableProgress(App.state, v),
+    h, close: closeModal, playable: G.playableProgress(App.state, v), reason: id => G.progressReason(App.state, v, id),
     play: id => {
       closeModal();
       CK.startProgress(App.state, v, id, ui, { dispatch: a => App.dispatch(a), rerender: () => render(App.state), openDice: () => openAlchemist(v), openCard: () => openTradeCard(v) });
@@ -1173,7 +1178,7 @@ function openKnights(v) {
 
 // Cities & Knights improvements panel (refreshes with the state while open)
 function openImprove(v) {
-  openModal(() => CK.improveModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, rerender: () => render(App.state), canAfford: G.canAfford }));
+  openModal(() => CK.improveModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, rerender: () => render(App.state), canAfford: G.canAfford, costIcons }));
 }
 
 function openModal(fn) {

@@ -1105,6 +1105,7 @@ export function playableProgress(s, pid) {
 }
 
 // why a card can't be played now ('' = it can, given a target)
+export const progressReason = (s, pid, id) => progressBlock(s, pid, id);
 function progressBlock(s, pid, id) {
   const p = s.players[pid];
   const when = id === 'alchemist' ? 'roll' : 'main';

@@ -19,10 +19,23 @@ export const cardList = st => (st ? cardsOf(st) : RES);
 export const blankHand = st => Object.fromEntries(cardList(st).map(r => [r, 0]));
 
 // the event die next to the number dice (red die = the second number die)
-export function eventDieBadge(st, h) {
+export function eventDieBadge(st, h, { toast } = {}) {
   if (!st.eventDie) return null;
   const g = GATE_INFO[st.eventDie];
-  return h('div', { class: 'event-die face-' + st.eventDie, title: t(g.name), 'data-testid': 'event-die' }, g.icon);
+  const why = eventDieText(st);
+  return h('div', { class: 'event-die face-' + st.eventDie, title: why, 'data-testid': 'event-die', onclick: () => toast && toast(why, 'info', 5000) }, g.icon);
+}
+
+// what the event die just meant, in one line
+export function eventDieText(st) {
+  const face = st.eventDie;
+  if (face === 'ship') return t('⛵ Barco: los bárbaros avanzan una casilla ({n}/{t}).', { n: st.barbarians ? st.barbarians.pos : 0, t: st.barbarians ? st.barbarians.track : 7 });
+  const red = st.dice ? st.dice[1] : 0;
+  const who = st.players.filter(p => !p.retired && p.improve && p.improve[face] > 0 && red <= p.improve[face] + 1).map(p => p.name);
+  return t('{icon} Puerta de {track} con el rojo en {red}: roba carta quien tenga nivel {min} o más. {who}', {
+    icon: GATE_INFO[face].icon, track: t(Improve.TRACK_INFO[face].name), red, min: Math.max(1, red - 1),
+    who: who.length ? t('Roban: {names}.', { names: who.join(', ') }) : t('Nadie roba.'),
+  });
 }
 
 // ---------- improvements, metropolis, walls, aqueduct ----------
@@ -60,23 +73,23 @@ export function ckBanner(st, ui, inter) {
 // main-phase buttons: improvements (opens the panel) and city walls
 export function ckButtons(st, v, ui, { h, rerender, costIcons, canAfford, openImprove }) {
   if (!hasCK(st)) return [];
-  const p = st.players[v];
-  const canWall = Improve.legalWalls(st, v).length > 0 && canAfford(p.res, Improve.WALL_COST);
+  // one button for the city: improvements, metropolises and walls live in its panel
   return [
-    h('button', { class: 'btn', 'data-testid': 'improve', onclick: e => { e.stopPropagation(); openImprove(); } },
+    h('button', { class: 'btn' + (ui.pick === 'wall' || (ui.pick || '').startsWith('metro:') ? ' active' : ''), 'data-testid': 'improve', title: t('Mejoras de ciudad y murallas'), onclick: e => { e.stopPropagation(); openImprove(); } },
       h('span', { class: 'bicon' }, '🏛️'), h('span', null, t('Mejoras'))),
-    h('button', {
-      class: 'btn' + (ui.pick === 'wall' ? ' active' : ''), disabled: !canWall, 'data-testid': 'build-wall',
-      title: t('Muralla — cuesta {cost} (quedan {left}): +2 cartas al límite del 7', { cost: costIcons(Improve.WALL_COST), left: p.wallsLeft }),
-      onclick: e => { e.stopPropagation(); ui.pick = ui.pick === 'wall' ? null : 'wall'; rerender(); },
-    }, h('span', { class: 'bicon' }, '🧱'), h('span', null, t('Muralla'), h('span', { class: 'cost' }, costIcons(Improve.WALL_COST)))),
   ];
 }
 
 // the improvements panel: three tracks, their level, the next cost and the level-3 ability
-export function improveModal(st, v, ui, { h, dispatch, close, rerender, canAfford }) {
+export function improveModal(st, v, ui, { h, dispatch, close, rerender, canAfford, costIcons }) {
   const p = st.players[v];
   const mine = st.current === v && st.phase === 'main';
+  const canWall = mine && Improve.legalWalls(st, v).length > 0 && canAfford(p.res, Improve.WALL_COST);
+  const wallRow = h('div', { class: 'ck-wall' },
+    h('span', { class: 'bicon' }, '🧱'),
+    h('span', null, h('b', null, t('Muralla')), h('small', null, t('+2 cartas al límite del 7 · quedan {left}', { left: p.wallsLeft }))),
+    h('button', { class: 'btn sm' + (canWall ? ' primary' : ''), disabled: !canWall, 'data-testid': 'build-wall', onclick: () => { ui.pick = 'wall'; close(); rerender(); } },
+      t('Construir · {cost}', { cost: costIcons ? costIcons(Improve.WALL_COST) : '🧱🧱' })));
   const row = tr => {
     const info = Improve.TRACK_INFO[tr];
     const lvl = p.improve[tr];
@@ -107,6 +120,7 @@ export function improveModal(st, v, ui, { h, dispatch, close, rerender, canAffor
     h('h2', null, t('🏛️ Mejoras de ciudad')),
     h('p', null, t('Cada nivel cuesta tantas mercancías como su número. Necesitas al menos una ciudad.')),
     h('div', { class: 'ck-tracks' }, Improve.TRACKS.map(row)),
+    wallRow,
     h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: close }, t('Cerrar'))));
 }
 
@@ -244,6 +258,33 @@ export function knightStats(st, p, { h }) {
 // ---------- barbarians ----------
 
 // the barbarian ship on its way: step track, plus barbarian strength vs. active knights
+export function barbarianHud(st, h) {
+  if (!hasCK(st) || !st.barbarians) return null;
+  const b = st.barbarians;
+  const barb = Barb.barbarianStrength(st), catan = Barb.catanStrength(st);
+  const left = b.track - b.pos;
+  const ok = catan >= barb;
+  return h('div', { class: 'barb-hud' + (left <= 2 ? ' near' : ''), 'data-testid': 'barbarians', title: t('Bárbaros {n}/{t} · fuerza bárbara {b} (ciudades) contra caballeros activos {c}', { n: b.pos, t: b.track, b: barb, c: catan }) },
+    h('div', { class: 'barb-title' }, h('span', null, '🏴‍☠️ ' + t('Bárbaros')), h('b', null, left === 1 ? t('¡Atacan en el próximo barco!') : t('Faltan {n} barcos', { n: left }))),
+    h('div', { class: 'barb-steps' }, Array.from({ length: b.track }, (_, i) => h('i', { class: 'barb-step' + (i < b.pos ? ' done' : '') + (i === b.track - 1 ? ' land' : '') }))),
+    h('div', { class: 'barb-vs ' + (ok ? 'ok' : 'bad') }, h('span', { title: t('Fuerza bárbara: una por ciudad') }, `🏰 ${barb}`), h('span', null, ok ? '≤' : '>'), h('span', { title: t('Caballeros activos de todos') }, `⚔️ ${catan}`),
+      h('small', null, ok ? t('Catan resistiría') : t('Catan perdería'))),
+    b.attacks ? null : h('small', { class: 'barb-sleep' }, t('😴 El ladrón duerme hasta el primer ataque')));
+}
+
+// one line telling how the last attack went (shown when the ship lands)
+export function attackSummary(st) {
+  const r = st.barbarians && st.barbarians.last;
+  if (!r) return '';
+  const name = pid => st.players[pid].name;
+  if (r.won) {
+    if (r.defender >= 0) return t('🛡️ ¡Catan resiste ({c} contra {b})! {name} es Defensor de Catan.', { c: r.catan, b: r.barb, name: name(r.defender) });
+    if (r.tied.length) return t('🛡️ ¡Catan resiste ({c} contra {b})! Empate: {names} roban carta de progreso.', { c: r.catan, b: r.barb, names: r.tied.map(name).join(', ') });
+    return t('🛡️ ¡Catan resiste ({c} contra {b})!', { c: r.catan, b: r.barb });
+  }
+  return r.losers.length ? t('🔥 Los bárbaros ganan ({b} contra {c}): {names} pierden una ciudad.', { c: r.catan, b: r.barb, names: r.losers.map(name).join(', ') }) : t('🔥 Los bárbaros ganan ({b} contra {c}), pero no hay ciudades que saquear.', { c: r.catan, b: r.barb });
+}
+
 export function barbarianTrack(st, h) {
   if (!hasCK(st) || !st.barbarians) return null;
   const b = st.barbarians;
@@ -283,24 +324,29 @@ export function progressHand(st, v, h, { open, playable = [] }) {
 }
 
 // the list of your progress cards with what each one does
-export function progressModal(st, v, { h, close, playable = [], play }) {
+export function progressModal(st, v, { h, close, playable = [], play, reason = () => '' }) {
   const p = st.players[v];
+  const groups = Progress.PROGRESS_TRACKS.map(tr => [tr, p.progress.filter(id => Progress.PROGRESS_CARDS[id].track === tr)]).filter(([, ids]) => ids.length);
   return h('div', null,
     h('h2', null, t('📜 Cartas de progreso')),
     h('p', null, t('Máximo {n} en la mano. Las cartas de punto se revelan al robarlas.', { n: Progress.PROGRESS_HAND })),
-    h('div', { class: 'ck-kopts' }, p.progress.map((id, i) => progressCard(id, h, {
-      disabled: !playable.includes(id), 'data-testid': 'pplay-' + id,
-      title: playable.includes(id) ? t('Jugar') : id === 'alchemist' ? t('El alquimista se juega antes de tirar.') : t('Ahora no se puede jugar.'),
-      onclick: () => play(id),
-    }))),
+    ...groups.map(([tr, ids]) => h('div', { class: 'pgroup' },
+      h('div', { class: 'pgroup-head', style: { color: PROGRESS_COLOR[tr] } }, `${Improve.TRACK_INFO[tr].icon} ${trackName(tr)}`),
+      h('div', { class: 'ck-kopts' }, [...new Set(ids)].map(id => {
+        const can = playable.includes(id);
+        const n = ids.filter(x => x === id).length;
+        const why = can ? '' : st.current !== v ? t('No es tu turno.') : reason(id) ? t(reason(id)) : t('Ahora no se puede jugar.');
+        return progressCard(id, h, { disabled: !can, 'data-testid': 'pplay-' + id, title: can ? t('Jugar') : why, onclick: () => play(id) }, { n, why });
+      })))),
+    p.progress.length ? null : h('p', { class: 'muted' }, t('No tienes cartas de progreso.')),
     p.progressVP ? h('p', null, t('🏆 Puntos por cartas reveladas: {n}', { n: p.progressVP })) : null,
     h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: close }, t('Cerrar'))));
 }
 
-const progressCard = (id, h, attrs = {}) => {
+const progressCard = (id, h, attrs = {}, { n = 1, why = '' } = {}) => {
   const c = Progress.PROGRESS_CARDS[id];
   return h('button', { class: 'btn ck-kopt pcard-opt', style: { boxShadow: `inset 6px 0 0 ${PROGRESS_COLOR[c.track]}` }, ...attrs },
-    h('span', { class: 'bicon' }, c.icon), h('span', null, h('b', null, t(c.name)), h('small', null, `${trackName(c.track)} · ${t(c.desc)}`)));
+    h('span', { class: 'bicon' }, c.icon), h('span', null, h('b', null, t(c.name) + (n > 1 ? ` ×${n}` : '')), h('small', null, `${trackName(c.track)} · ${t(c.desc)}`), why ? h('small', { class: 'pwhy' }, '⛔ ' + why) : null));
 };
 
 // forced choices: tied defenders pick a deck; players over the limit drop a card
