@@ -548,3 +548,21 @@ img.flag-img.wave { animation: flagWave 1.2s steps(4) infinite; transform-origin
   .map-card:hover { transform: none; }
   .emote-btn:hover { transform: none; }
 }
+
+/* ---- menu: PDV mascot next to the title, music button next to the language ---- */
+.menu-top { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 3; display: flex; align-items: center; gap: 10px; }
+.menu-top .lang-pick { position: static; }
+.music-toggle[aria-pressed="true"] { background: var(--green, #38b764); }
+.logo .t1 { display: flex; align-items: center; justify-content: center; gap: .12em; }
+.menu-mascot { display: inline-block; width: .82em; height: 1.02em; flex: none; transform-origin: 50% 90%; animation: mascot-bob 2.6s ease-in-out infinite; }
+.menu-mascot svg { display: block; overflow: visible; }
+.menu-mascot .mascot-eyes { transform-origin: 0 -5px; animation: mascot-blink 4.5s infinite; }
+@keyframes mascot-bob { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-.06em) rotate(-4deg); } }
+@keyframes mascot-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@media (prefers-reduced-motion: reduce) { .menu-mascot, .menu-mascot .mascot-eyes { animation: none; } }
+@media (max-width: 600px) {
+  /* mascot + 10 letters must fit a portrait phone */
+  .logo .t1 { font-size: clamp(26px, 10.5vw, 64px); letter-spacing: 1px; }
+  .menu-top { gap: 6px; }
+  .music-toggle { padding: 6px 8px; font-size: 12px; }
+}

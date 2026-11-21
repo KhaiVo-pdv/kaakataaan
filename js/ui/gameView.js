@@ -7,6 +7,7 @@ import * as G from '../engine/game.js';
 import { hint } from '../engine/bot.js';
 import { play } from './sfx.js';
 import { showHelp } from './help.js';
+import { toggleMusic } from './music.js';
 import { flagImg } from './flag.js';
 import { iconSet, setIconSet, ICON_SETS, pxIcon, pixelize } from './pixel.js';
 import { mountAdhd, updateAdhd, adhdButton, celebrate, disposeAdhd } from './adhd.js';
@@ -1318,6 +1319,7 @@ function openMenu() {
         ICON_SETS.map(k => [k, { render: t('🧊 3D (Blender)'), pico: t('🆕 Pixel PICO'), classic: t('🕹️ Clásicos') }[k]]).map(([k, l]) => h('button', { class: 'chip' + (iconSet() === k ? ' on' : ''), onclick: () => { setIconSet(k); if (ui.board3d) ui.board3d.staticKey = ''; render(App.state); } }, l)))),
       h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state) }); } }, t('📖 Cómo se juega')),
       h('button', { class: 'btn', onclick: () => { const on = App.toggleSound(); toast(on ? t('🔊 Sonido activado') : t('🔇 Sonido desactivado')); } }, t('🔊 Sonido on/off')),
+      h('button', { class: 'btn', onclick: () => { const on = toggleMusic(); toast(on ? t('🎵 Música activada') : t('🎵 Música desactivada')); } }, t('🎵 Música on/off')),
       h('div', null, h('div', { class: 'section-label' }, t('Velocidad de los bots')), speedControl()),
       h('div', { class: 'section-label' }, t('Partida')),
       h('div', { class: 'pill' }, t('Semilla: {seed}', { seed: App.state.config.seed })),

@@ -1143,4 +1143,10 @@ export default {
   "📖 Reglas de Ciudades y Caballeros": "📖 Cities & Knights rules",
   "😴 El ladrón no se mueve hasta el primer ataque (el 7 sí obliga a descartar).": "😴 The robber doesn't move until the first attack (a 7 still makes people discard).",
   "🧱 Muralla ({cost}, hasta {n}): bajo una ciudad, +2 cartas al límite del 7. Está en el mismo panel.": "🧱 Wall ({cost}, up to {n}): under a city, +2 cards to the 7 limit. It's in the same panel.",
+  "Música de fondo": "Background music",
+  "🎵 Música activada": "🎵 Music on",
+  "🎵 Música desactivada": "🎵 Music off",
+  "🎵 Música on/off": "🎵 Music on/off",
+  "🔇 Música": "🔇 Music",
+  "🔊 Música": "🔊 Music",
 };

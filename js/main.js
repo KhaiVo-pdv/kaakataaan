@@ -8,6 +8,8 @@ import { Net, HOST_SESSION, GUEST_SESSION, DEFAULT_CAPACITY, ONLINE_MAX, roomCod
 import { openFlagEditor, flagImg, myKingdom, saveMyKingdom, patternFlag } from './ui/flag.js';
 import { autoPixelize } from './ui/pixel.js';
 import { t, LANGS, lang, setLang } from './i18n.js';
+import { mascotSvg } from './ui/mascot.js';
+import { music, toggleMusic } from './ui/music.js';
 
 // A full-screen WebGL canvas behind the menu steals taps AND mouse clicks
 // (GPU compositor layer + touch-action:none). pointer-events:none on the parent
@@ -83,6 +85,18 @@ function langPicker() {
   return h('label', { class: 'lang-pick', title: t('Idioma') }, '🌐', sel);
 }
 
+// top-right corner of the menu: background music on/off, then the language
+function menuTop() {
+  const btn = h('button', { class: 'btn sm music-toggle', 'data-testid': 'music', title: t('Música de fondo'), 'aria-pressed': String(music.on) });
+  const draw = () => {
+    btn.textContent = music.on ? t('🔊 Música') : t('🔇 Música');
+    btn.setAttribute('aria-pressed', String(music.on));
+  };
+  btn.onclick = () => { toggleMusic(); draw(); };
+  draw();
+  return h('div', { class: 'menu-top' }, btn, langPicker());
+}
+
 function kingdomPanel() {
   const box = h('div', { class: 'menu-kingdom' });
   const draw = () => {
@@ -118,9 +132,9 @@ function menuScreen(root) {
     class: 'fhex', style: { left: ((i * 37) % 100) + '%', top: ((i * 53) % 100) + '%', animationDelay: -(i * 0.7) + 's', fontSize: 26 + ((i * 7) % 30) + 'px' },
   }, icons[i % icons.length])));
   const dio = h('div', { class: 'menu-bg3d' });
-  root.append(h('div', { class: 'menu screen' }, bg, dio, langPicker(),
+  root.append(h('div', { class: 'menu screen' }, bg, dio, menuTop(),
     h('div', { class: 'logo' },
-      h('div', { class: 't1 jit' }, h('span', { class: 't1b' }, 'KAAKATAAAN')),
+      h('div', { class: 't1 jit' }, mascotSvg('menu-mascot'), h('span', { class: 't1b' }, 'KAAKATAAAN')),
       h('div', { class: 'sub' }, t('Colonos, caos y modos que no existen en la caja.'))),
     kingdomPanel(),
     h('div', { class: 'menu-buttons' },

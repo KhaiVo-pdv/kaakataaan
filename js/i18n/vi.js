@@ -1142,4 +1142,10 @@ export default {
   "📖 Reglas de Ciudades y Caballeros": "📖 Luật Thành phố & Hiệp sĩ",
   "😴 El ladrón no se mueve hasta el primer ataque (el 7 sí obliga a descartar).": "😴 Kẻ cướp không di chuyển cho tới trận đầu tiên (ra 7 vẫn phải bỏ bài).",
   "🧱 Muralla ({cost}, hasta {n}): bajo una ciudad, +2 cartas al límite del 7. Está en el mismo panel.": "🧱 Tường thành ({cost}, tối đa {n}): xây dưới thành phố, +2 lá vào giới hạn khi ra 7. Nằm trong cùng bảng Nâng cấp.",
+  "Música de fondo": "Nhạc nền",
+  "🎵 Música activada": "🎵 Đã bật nhạc nền",
+  "🎵 Música desactivada": "🎵 Đã tắt nhạc nền",
+  "🎵 Música on/off": "🎵 Bật/tắt nhạc nền",
+  "🔇 Música": "🔇 Nhạc",
+  "🔊 Música": "🔊 Nhạc",
 };
