@@ -24,7 +24,7 @@ export const EXPANSIONS = [
   },
   {
     id: 'citiesKnights', icon: '🏰', name: 'Ciudades y Caballeros',
-    desc: 'Mercancías, mejoras de ciudad, caballeros, bárbaros y cartas de progreso. Se juega a 13 puntos. (En construcción)',
+    desc: 'Mercancías, mejoras de ciudad, caballeros, bárbaros y cartas de progreso. Se juega a 13 puntos.',
     get: c => !!(c.expansions && c.expansions.citiesKnights),
     set: (c, v) => {
       const ex = normalizeExpansions(c);

@@ -155,7 +155,7 @@ export function createGame(configIn) {
   if (M.blindfold) log(s, '🤫 Casas secretas: nadie ve dónde pones hasta la revelación.');
   if (M.fog) log(s, '🌑 Niebla de guerra: solo ves lo que rodea a tus piezas.');
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
-  if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada (en construcción).');
+  if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
   return s;
 }
 

@@ -2,9 +2,10 @@ import { App } from '../app.js';
 import { h, s as S, clear, storage, toast } from './dom.js';
 import { BoardView } from './boardView.js';
 import { defaultConfig, MODES, PRESETS, PLAYER_COLORS, BOT_NAMES } from '../engine/config.js';
-import { EXPANSIONS, seafarersOn } from '../engine/expansions.js';
+import { EXPANSIONS, seafarersOn, citiesKnightsOn } from '../engine/expansions.js';
 import { SCENARIOS } from '../engine/seafarers/scenarios.js';
 import { showSeafarersHelp } from './seafarersHelp.js';
+import { showCitiesKnightsHelp } from './citiesKnightsHelp.js';
 import { SHAPES, generateBoard } from '../engine/board.js';
 import { DEV_DECKS, TILE_INFO } from '../engine/constants.js';
 import { createGame } from '../engine/game.js';
@@ -314,6 +315,7 @@ export function lobbyScreen(root, opts = {}) {
         t('Para {a}-{b} jugadores · {vp} puntos para ganar', { a: sc.players[0], b: sc.players[1], vp: sc.vp }),
         cfg.players.length > sc.players[1] ? h('b', { style: { color: 'var(--warn, #ef7d57)' } }, ' · ' + t('⚠️ Demasiados jugadores para este escenario')) : null) : null,
       sf ? h('button', { class: 'btn sm', 'data-testid': 'seafarers-rules', onclick: () => showSeafarersHelp() }, t('📖 Reglas de Navegantes')) : null,
+      citiesKnightsOn(cfg) ? h('button', { class: 'btn sm', 'data-testid': 'ck-rules', onclick: () => showCitiesKnightsHelp() }, t('📖 Reglas de Ciudades y Caballeros')) : null,
       h('div', { class: 'opt-grid' },
         !sf && (SHAPES[m.shape] || {}).random ? h('div', null, h('label', null, t('Tamaño: {n} hexágonos', { n: m.size })), h('input', { type: 'range', min: 12, max: 60, value: m.size, onchange: e => { m.size = +e.target.value; refresh(); } })) : null,
         h('div', null, h('label', null, t('Recursos')), sel('resources', [['balanced', t('Equilibrados')], ['chaos', t('Caóticos')]])),
