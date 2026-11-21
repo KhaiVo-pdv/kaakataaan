@@ -99,6 +99,22 @@ function check(s, where) {
       if (tot !== COMMODITY_BANK) errs.push(`conservación ${c}: ${tot}`);
       if (s.bank[c] < 0 || s.players.some(p => p.res[c] < 0)) errs.push(`${c} negativo`);
     }
+  // Cities & Knights improvements: levels 0-5, metropolises and walls on their owners' cities
+  if (s.metropolis) {
+    for (const p of s.players) for (const tr in p.improve) if (p.improve[tr] < 0 || p.improve[tr] > 5) errs.push(`nivel ${tr} ${p.id}`);
+    for (const tr in s.metropolis) {
+      const m = s.metropolis[tr];
+      if (!m) continue;
+      const b = s.buildings[m.at];
+      if (!b || b.owner !== m.owner || b.type !== 'city') errs.push(`metrópolis ${tr} fuera de una ciudad suya`);
+      if (s.players[m.owner].improve[tr] < 4) errs.push(`metrópolis ${tr} sin nivel 4`);
+    }
+    for (const k in s.walls) {
+      const b = s.buildings[k];
+      if (!b || b.owner !== s.walls[k] || b.type !== 'city') errs.push(`muralla ${k} fuera de una ciudad suya`);
+    }
+    for (const p of s.players) if (Object.values(s.walls).filter(o => o === p.id).length + p.wallsLeft !== 3) errs.push(`murallas ${p.id}`);
+  }
   // Seafarers ships: counted, on water, never sharing an edge with a road, linked to the network
   if (s.ships)
     for (const p of s.players) {

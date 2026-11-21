@@ -17,7 +17,7 @@ let ui = null;
 
 const PHASE_TEXT = {
   setup: tk('Colocación inicial'), roll: tk('Tirar dados'), main: tk('Construir y comerciar'), discard: tk('Descartar'),
-  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'),
+  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'),
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -624,6 +624,8 @@ function interaction(real, v) {
   // Seafarers moments (ships); undefined when it's not one of them
   const sea = Sea.seaInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (sea !== undefined) return sea;
+  const ck = CK.ckInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a) }); // Cities & Knights: wall / metropolis city
+  if (ck !== undefined) return ck;
   if (st.phase === 'setup') {
     if (G.pendingActors(st)[0] !== v) return null;
     if (st.setup.step === 'settlement') return mk('settlement', G.legalSetupSettlements(st, v), vid => App.dispatch({ type: 'placeSettlement', pid: v, vid }));
@@ -679,6 +681,7 @@ function bannerText(st, v, inter) {
     if (inter && inter.kind === 'ship') return `${blind}${Sea.seaBanner(st, v, ui, inter)}`; // Seafarers
     return `${blind}${st.setup.step === 'settlement' ? (st.config.rules.setupCity && st.setup.queue[st.setup.idx].round === st.setup.lastRound ? t('Coloca tu ciudad') : t('Coloca tu poblado')) : t('Coloca tu camino')}`;
   }
+  if (st.phase === 'aqueduct') return st.pendingAqueduct[v] ? t('🟩 Acueducto: elige 1 recurso') : t('🟩 Esperando el acueducto...');
   if (st.phase === 'discard') {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
@@ -688,7 +691,7 @@ function bannerText(st, v, inter) {
   if (st.phase === 'roadBuilding' && inter && inter.kind === 'ship') return Sea.seaBanner(st, v, ui, inter);
   if (st.phase === 'roadBuilding') return st.freeRoads > 1 ? t('🛤️ Coloca {n} caminos gratis', { n: st.freeRoads }) : t('🛤️ Coloca {n} camino gratis', { n: st.freeRoads });
   if (st.phase === 'roll') return t('🎲 ¡Tu turno! Tira los dados');
-  const seaTxt = Sea.seaBanner(st, v, ui, inter);
+  const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter);
   if (seaTxt) return seaTxt;
   if (inter) return { road: t('Elige dónde construir el camino (Esc para cancelar)'), settlement: t('Elige dónde construir el poblado (Esc para cancelar)'), city: t('Elige qué poblado mejorar (Esc para cancelar)') }[inter.kind];
   return '';
@@ -751,6 +754,7 @@ function renderPlayers(st, v) {
         h('span', { title: t('Caballeros jugados') }, `⚔️ ${p.knights}`),
         h('span', { title: t('Camino más largo propio') }, `🛣️ ${p.roadLen}`),
         ...Sea.seaStats(st, p, { h }), // Seafarers: ships left, island bonus
+        ...CK.ckStats(st, p, { h }), // Cities & Knights: improvements, metropolises, walls
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
         st.pendingDiscards[p.id] ? h('span', { style: { color: 'var(--red)' } }, `🗑️ ${st.pendingDiscards[p.id]}`) : null));
@@ -822,6 +826,12 @@ function fillActions(bar, st, v, locked) {
     acts.append(h('button', { class: 'btn primary', onclick: () => openGameOver(App.state) }, t('🏆 Ver resultados')));
     return;
   }
+  if (st.phase === 'aqueduct') {
+    acts.append(st.pendingAqueduct[v]
+      ? h('button', { class: 'btn green', onclick: () => render(App.state) }, t('🟩 Elige tu recurso'))
+      : h('div', { class: 'waiting' }, t('🟩 Esperando el acueducto...')));
+    return;
+  }
   if (st.phase === 'setup' || !myTurn) {
     if (st.phase === 'discard' && st.pendingDiscards[v]) acts.append(h('button', { class: 'btn pink', onclick: () => render(App.state) }, t('🗑️ Descarta {n}', { n: st.pendingDiscards[v] })));
     else {
@@ -868,6 +878,7 @@ function fillActions(bar, st, v, locked) {
     buildBtn('settlement', t('Poblado'), '🏠', p.settlementsLeft, () => G.legalSettlements(st, v)),
     buildBtn('city', t('Ciudad'), '🏰', p.citiesLeft, () => G.legalCities(st, v)),
     ...Sea.seaButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }),
+    ...CK.ckButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openImprove: () => openImprove(v) }),
     h('button', {
       class: 'btn', disabled: !st.devDeck.length || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
@@ -909,7 +920,7 @@ function speedControl() {
 
 function describe(a, st) {
   if (!a) return t('Nada que hacer ahora.');
-  const sea = Sea.seaDescribe(a); // Seafarers moves
+  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a); // expansion moves
   if (sea) return sea;
   switch (a.type) {
     case 'roll': return t('Tira los dados.');
@@ -928,6 +939,11 @@ function showHint(st, v) {
   toast('💡 ' + describe(a, st), 'info', 3500);
   if (a && a.type === 'build') {
     ui.pick = a.what;
+    render(App.state);
+  } else if (a && a.type === 'improve') {
+    openImprove(v); // Cities & Knights
+  } else if (a && a.type === 'buildWall') {
+    ui.pick = 'wall';
     render(App.state);
   } else if (a && a.type === 'movePirate') {
     ui.pirateMode = true; // Seafarers: show the sea tiles
@@ -1086,6 +1102,11 @@ function offerPanel(st, v, locked) {
 
 // ---------------- modals ----------------
 let modalSeq = 0;
+// Cities & Knights improvements panel (refreshes with the state while open)
+function openImprove(v) {
+  openModal(() => CK.improveModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, rerender: () => render(App.state), canAfford: G.canAfford }));
+}
+
 function openModal(fn) {
   ui.modal = fn;
   ui.modalId = ++modalSeq;
@@ -1143,6 +1164,8 @@ function modalContent(st, v) {
     return { kind: 'discard' + v, body: discardModal(st, v) };
   }
   ui.discard = null;
+  if (st.phase === 'aqueduct' && st.pendingAqueduct[v] && localHumans(st).includes(v))
+    return { kind: 'aqueduct' + v, body: CK.aqueductModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'gameOver' && !ui.lastWinnerShown) {
     ui.lastWinnerShown = true;
     // a rematch may have started in the meantime: only show it for the game that ended

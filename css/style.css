@@ -379,3 +379,14 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 .offer.needs-me { animation: modalIn .25s, mineGlow 1.1s ease-in-out .25s infinite; }
 .offer .offer-timer { display: block; height: 4px; margin-top: 8px; border-radius: 4px; background: var(--gold); transform-origin: left; animation-name: offerTimer; animation-timing-function: linear; animation-fill-mode: both; }
 @keyframes offerTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* Cities & Knights improvements panel */
+.ck-tracks { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 10px 0; }
+.ck-track { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,.05); border-left: 6px solid var(--line); }
+.ck-track.ck-trade { border-left-color: #f2c94c; } .ck-track.ck-politics { border-left-color: #3b7dd8; } .ck-track.ck-science { border-left-color: #43a047; }
+.ck-head { display: flex; justify-content: space-between; align-items: center; }
+.ck-levels { display: flex; gap: 4px; }
+.ck-pip { width: 26px; height: 26px; display: grid; place-items: center; font-size: 13px; font-weight: 800; border-radius: 6px; background: rgba(0,0,0,.35); color: var(--muted); }
+.ck-pip.ab { outline: 2px dashed rgba(255,255,255,.35); } .ck-pip.mt { box-shadow: inset 0 -3px 0 #ffcd75; }
+.ck-pip.on { background: #ffcd75; color: #1a1c2c; }
+.ck-ability { color: var(--muted); } .ck-ability.got { color: #a7f070; }

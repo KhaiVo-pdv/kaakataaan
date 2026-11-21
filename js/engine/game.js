@@ -8,6 +8,7 @@ import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
 import { COMMODITIES, EVENT_FACES, cardsOf, initCommodities, cityYield } from './citiesKnights/commodities.js';
+import * as Improve from './citiesKnights/improvements.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
 // every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
@@ -108,7 +109,10 @@ export function createGame(configIn) {
     Ships.initShips(s);
     Islands.initIslands(s);
   }
-  if (citiesKnightsOn(s)) initCommodities(s);
+  if (citiesKnightsOn(s)) {
+    initCommodities(s);
+    Improve.initImprovements(s);
+  }
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -216,11 +220,14 @@ export function victoryPoints(s, pid, hidden = true) {
   if (s.largestArmy.owner === pid) vp += 2;
   if (hidden) vp += s.players[pid].dev.filter(c => c.type === 'vp').length;
   vp += s.players[pid].islandVP || 0; // Seafarers island bonus (absent in the base game)
+  vp += Improve.metropolisVP(s, pid); // Cities & Knights metropolises (none in the base game)
   return vp;
 }
 
 export function tradeRatio(s, pid, res) {
   let best = 4;
+  // Cities & Knights trading house (trade level 3): commodities 2:1
+  if (COMMODITIES.includes(res) && Improve.commodityRatio(s, pid)) best = Improve.commodityRatio(s, pid);
   if (s.event && s.event.id === 'fairTrade') best = 3;
   if (s.event && s.event.id === 'blackMarket' && s.event.res === res) best = 2;
   for (const k in s.buildings) {
@@ -356,6 +363,7 @@ export function pendingActors(s) {
   if (s.phase === 'gameOver') return [];
   if (s.phase === 'setup') return [s.setup.queue[s.setup.idx].pid];
   if (s.phase === 'discard') return Object.keys(s.pendingDiscards).map(Number).filter(pid => !s.players[pid].retired);
+  if (s.phase === 'aqueduct') return Object.keys(s.pendingAqueduct).map(Number).filter(pid => !s.players[pid].retired);
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -548,6 +556,7 @@ function produce(s, sum) {
     })
     .filter(Boolean);
   if (summary.length) log(s, '📦 ' + summary.join(' · ')); // only icons and numbers: nothing to translate
+  return gains;
 }
 
 function rollDice(s) {
@@ -928,8 +937,10 @@ H.roll = (s, a) => {
   s.fx.push({ kind: 'dice', dice: d, power });
   log(s, msg('🎲 @{p} saca {n}.', { p: a.pid, n: sum }), a.pid);
   if (sum !== 7) {
-    produce(s, sum);
+    const gains = produce(s, sum);
     s.phase = 'main';
+    // Cities & Knights Aqueduct: whoever got nothing picks a resource first
+    if (s.pendingAqueduct && Improve.aqueductAfterRoll(s, gains)) s.phase = 'aqueduct';
     return;
   }
   const R = s.config.rules;
@@ -941,7 +952,7 @@ H.roll = (s, a) => {
   s.pendingDiscards = {};
   for (const p of s.players) {
     const n = handSize(p.res);
-    if (n > R.handLimit && !p.retired) s.pendingDiscards[p.id] = Math.floor(n / 2);
+    if (n > R.handLimit + Improve.wallBonus(s, p.id) && !p.retired) s.pendingDiscards[p.id] = Math.floor(n / 2); // C&K walls: +2 each
   }
   s.robberReturn = 'main';
   if (Object.keys(s.pendingDiscards).length) s.phase = 'discard';
@@ -1012,6 +1023,46 @@ H.movePirate = (s, a) => {
     log(s, msg('🫳 @{p} le roba una carta a @{v}.', { p: a.pid, v: victim }), a.pid);
   }
   s.phase = s.robberReturn;
+};
+
+// ---- Cities & Knights: improvements, city walls, Aqueduct ----
+const ckOnly = s => {
+  if (!s.metropolis) fail('Esta partida no usa Ciudades y Caballeros.');
+};
+
+H.improve = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  const r = Improve.improve(s, a.pid, a.track, a.at, { fail, pay: cost => pay(s, a.pid, cost), canAfford });
+  const info = Improve.TRACK_INFO[a.track];
+  log(s, msg('{icon} @{p} mejora {track} a nivel {n}.', { icon: info.icon, p: a.pid, track: info.name, n: r.level }), a.pid);
+  s.fx.push({ kind: 'improve', pid: a.pid, track: a.track, level: r.level });
+  if (r.metro != null) {
+    log(s, r.from != null ? msg('🏙️ @{p} le quita la metrópolis de {track} a @{q}.', { p: a.pid, q: r.from, track: info.name }) : msg('🏙️ @{p} levanta la metrópolis de {track}.', { p: a.pid, track: info.name }), a.pid);
+    s.fx.push({ kind: 'metropolis', pid: a.pid, track: a.track, at: r.metro, from: r.from });
+  }
+};
+
+H.buildWall = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  if (!Improve.canBuildWall(s, a.pid, a.at)) fail('La muralla va bajo una de tus ciudades sin muralla.');
+  if (!canAfford(s.players[a.pid].res, Improve.WALL_COST)) fail('Te faltan recursos.');
+  pay(s, a.pid, Improve.WALL_COST);
+  s.players[a.pid].wallsLeft--;
+  s.walls[a.at] = a.pid;
+  log(s, msg('🧱 @{p} construye una muralla.', { p: a.pid }), a.pid);
+  s.fx.push({ kind: 'build', what: 'wall', pid: a.pid, at: a.at });
+};
+
+H.aqueductPick = (s, a) => {
+  if (s.phase !== 'aqueduct' || !s.pendingAqueduct[a.pid]) fail('No tienes que elegir recurso.');
+  if (!RES.includes(a.res)) fail('Elige un recurso.');
+  const g = giveFromBank(s, a.pid, a.res, 1);
+  delete s.pendingAqueduct[a.pid];
+  if (g) s.fx.push({ kind: 'gain', pid: a.pid, res: a.res, n: g, tiles: [] });
+  log(s, msg('🟩 @{p} usa el acueducto: {r}.', { p: a.pid, r: resName(a.res) }), a.pid);
+  if (!Object.keys(s.pendingAqueduct).length) s.phase = 'main';
 };
 
 function assertMain(s, a) {
@@ -1313,6 +1364,10 @@ H.retirePlayer = (s, a) => {
   s.fx.push({ kind: 'retired', pid });
   // keep the game flowing
   delete s.pendingDiscards[pid];
+  if (s.pendingAqueduct) {
+    delete s.pendingAqueduct[pid];
+    if (s.phase === 'aqueduct' && !Object.keys(s.pendingAqueduct).length) s.phase = 'main';
+  }
   if (s.phase === 'setup') {
     const st = s.setup;
     const cur = st.queue[st.idx];

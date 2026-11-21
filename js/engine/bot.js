@@ -10,6 +10,7 @@ import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
 import { cardsOf } from './citiesKnights/commodities.js';
+import * as Improve from './citiesKnights/improvements.js';
 
 const LEVELS = {
   easy: { noise: 1.6, trade: 0.2, dev: 0.4 },
@@ -156,6 +157,15 @@ function bestShip(s, pid) {
   return bd2 < Infinity ? bi : null;
 }
 
+// ---------- Cities & Knights ----------
+// the improvement worth buying now: a metropolis first, then the level-3 abilities, then the cheapest
+function bestImprovement(s, pid) {
+  if (!s.metropolis) return null;
+  const p = s.players[pid];
+  const opts = Improve.TRACKS.filter(tr => !Improve.improveBlock(s, pid, tr) && canAfford(p.res, Improve.improveCost(s, pid, tr)));
+  return best(opts, tr => (Improve.winsMetropolis(s, pid, tr) ? 10 : 0) + (p.improve[tr] + 1 === Improve.ABILITY_LEVEL ? 3 : 0) - p.improve[tr] + noise(s, tr.length) * 0.3);
+}
+
 // ---------- main helpers ----------
 function missing(res, cost) {
   const m = {};
@@ -275,6 +285,14 @@ function mainAction(s, pid) {
     const prod = production(s, pid);
     return { type: 'build', pid, what: 'settlement', at: best(spots, v => vertexScore(s, pid, v, prod) + noise(s, v) * L.noise) };
   }
+  // Cities & Knights: spend commodities on improvements; a wall when the hand gets big
+  if (s.metropolis) {
+    const tr = bestImprovement(s, pid);
+    if (tr) return { type: 'improve', pid, track: tr };
+    const walls = Improve.legalWalls(s, pid);
+    if (walls.length && canAfford(p.res, Improve.WALL_COST) && handSize(p.res) >= s.config.rules.handLimit + Improve.wallBonus(s, pid) - 1)
+      return { type: 'buildWall', pid, at: walls[0] };
+  }
   // Seafarers: nowhere to settle (or wood and wool to spare) -> sail to a new island / into the fog
   const spareShip = p.res.wood >= 2 && p.res.sheep >= 2;
   if (seafarersOn(s) && (!spots.length || spareShip) && p.settlementsLeft > 0 && p.shipsLeft > 0 && canAfford(p.res, SHIP_COST)) {
@@ -393,6 +411,12 @@ export function botAct(real, pid) {
   const s = viewFor(real, pid); // in fog mode bots only know what they can see
   if (!pendingActors(s).includes(pid)) return null;
   if (s.phase === 'discard') return s.pendingDiscards[pid] ? discard(s, pid) : null;
+  if (s.phase === 'aqueduct') {
+    // Cities & Knights Aqueduct: take the resource it has least of
+    if (!s.pendingAqueduct[pid]) return null;
+    const p = s.players[pid];
+    return { type: 'aqueductPick', pid, res: best(RES.filter(r => s.bank[r] > 0), r => -p.res[r] + noise(s, r.length) * 0.1) || RES[0] };
+  }
   if (s.trade && s.trade.from !== pid && s.trade.responses[pid] == null) return respond(s, pid);
   if (s.phase === 'setup') {
     if (s.setup.queue[s.setup.idx].pid !== pid) return null;

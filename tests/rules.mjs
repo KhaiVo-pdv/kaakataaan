@@ -6,6 +6,7 @@ import { seafarersOn, citiesKnightsOn, EXPANSIONS } from '../js/engine/expansion
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
+import * as Improve from '../js/engine/citiesKnights/improvements.js';
 import { seaTileEdges } from '../js/engine/seafarers/pirate.js';
 
 let pass = 0, failN = 0;
@@ -948,6 +949,109 @@ t('Ciudades y Caballeros: el ladrón también roba mercancías', () => {
   s.robberReturn = 'main';
   ok(act(s, { type: 'moveRobber', pid: 0, tile: tile.id, victim: 1 }).ok);
   eq(s.players[0].res.coin, 1, 'robó la moneda');
+});
+
+// ---------- Cities & Knights: improvements, metropolis, walls, aqueduct ----------
+t('Ciudades y Caballeros: mejorar cuesta nivel × mercancía y necesita una ciudad', () => {
+  const s = ckMain();
+  give(s, 0, { cloth: 6 });
+  ok(!act(s, { type: 'improve', pid: 0, track: 'trade' }).ok, 'sin ciudad no');
+  s.buildings[cornerOf(s, 'wheat')] = { owner: 0, type: 'city' };
+  ok(act(s, { type: 'improve', pid: 0, track: 'trade' }).ok, 'nivel 1');
+  ok(act(s, { type: 'improve', pid: 0, track: 'trade' }).ok, 'nivel 2');
+  ok(act(s, { type: 'improve', pid: 0, track: 'trade' }).ok, 'nivel 3');
+  eq(s.players[0].improve.trade, 3);
+  eq(s.players[0].res.cloth, 0, 'pagó 1+2+3 telas');
+  ok(!act(s, { type: 'improve', pid: 0, track: 'trade' }).ok, 'sin telas no hay nivel 4');
+  ok(!act(s, { type: 'improve', pid: 0, track: 'politics' }).ok, 'política paga con monedas');
+  ok(!fresh().metropolis && !act(fresh(), { type: 'improve', pid: 0, track: 'trade' }).ok, 'base: no existe');
+});
+
+t('Ciudades y Caballeros: comercio nivel 3 cambia mercancías 2:1', () => {
+  const s = ckMain();
+  s.buildings[cornerOf(s, 'wheat')] = { owner: 0, type: 'city' };
+  eq(G.tradeRatio(s, 0, 'coin'), 4);
+  s.players[0].improve.trade = 3;
+  eq(G.tradeRatio(s, 0, 'coin'), 2, 'casa de comercio');
+  eq(G.tradeRatio(s, 0, 'ore'), 4, 'los recursos no cambian');
+});
+
+t('Ciudades y Caballeros: el primero en nivel 4 levanta la metrópolis (+2) y el nivel 5 se la quita', () => {
+  const s = ckMain();
+  const v0 = cornerOf(s, 'wheat'), v1 = cornerOf(s, 'ore');
+  s.buildings[v0] = { owner: 0, type: 'city' };
+  s.buildings[v1] = { owner: 1, type: 'city' };
+  s.players[0].improve.science = 3;
+  s.players[1].improve.science = 4;
+  give(s, 0, { paper: 9 });
+  const vp = G.victoryPoints(s, 0);
+  ok(act(s, { type: 'improve', pid: 0, track: 'science' }).ok, 'nivel 4');
+  eq(s.metropolis.science, { owner: 0, at: v0 }, 'metrópolis');
+  eq(G.victoryPoints(s, 0), vp + 2, '+2 puntos');
+  // player 1 was already on 4 but had no metropolis: reaching 5 takes it
+  s.current = 1;
+  give(s, 1, { paper: 5 });
+  ok(act(s, { type: 'improve', pid: 1, track: 'science' }).ok, 'nivel 5');
+  eq(s.metropolis.science, { owner: 1, at: v1 }, 'cambió de dueño');
+  eq(G.victoryPoints(s, 0), vp, 'perdió los 2 puntos');
+});
+
+t('Ciudades y Caballeros: nivel 4 necesita una ciudad sin metrópolis', () => {
+  const s = ckMain();
+  const v0 = cornerOf(s, 'wheat');
+  s.buildings[v0] = { owner: 0, type: 'city' };
+  s.metropolis.trade = { owner: 0, at: v0 };
+  s.players[0].improve.trade = 4;
+  s.players[0].improve.politics = 3;
+  give(s, 0, { coin: 4 });
+  ok(!act(s, { type: 'improve', pid: 0, track: 'politics' }).ok, 'su única ciudad ya tiene metrópolis');
+});
+
+t('Ciudades y Caballeros: la muralla cuesta 2 arcillas y sube el límite del 7', () => {
+  const s = ckMain();
+  const v0 = cornerOf(s, 'wheat');
+  s.buildings[v0] = { owner: 0, type: 'city' };
+  give(s, 0, { brick: 2 });
+  ok(act(s, { type: 'buildWall', pid: 0, at: v0 }).ok, 'muralla');
+  eq(s.walls[v0], 0);
+  eq(s.players[0].wallsLeft, 2);
+  ok(!act(s, { type: 'buildWall', pid: 0, at: v0 }).ok, 'una por ciudad');
+  // 9 cards with one wall (limit 7 + 2): no discard
+  give(s, 0, { wheat: 9 });
+  let tries = 0;
+  do {
+    s.phase = 'roll';
+    s.current = 0;
+    s.pendingDiscards = {};
+    act(s, { type: 'roll', pid: 0 });
+  } while (s.dice[0] + s.dice[1] !== 7 && ++tries < 300);
+  ok(!s.pendingDiscards[0], 'con 9 cartas y muralla no descarta');
+});
+
+t('Ciudades y Caballeros: acueducto: si la tirada no te da nada eliges un recurso', () => {
+  const s = ckMain();
+  s.buildings[cornerOf(s, 'wheat')] = { owner: 0, type: 'city' };
+  s.players[0].improve.science = 3;
+  let tries = 0, hit = false;
+  while (++tries < 300) {
+    s.phase = 'roll';
+    s.current = 0;
+    s.pendingDiscards = {};
+    const before = G.handSize(s.players[0].res);
+    act(s, { type: 'roll', pid: 0 });
+    if (s.dice[0] + s.dice[1] === 7) continue;
+    if (G.handSize(s.players[0].res) === before) {
+      hit = true;
+      break;
+    }
+  }
+  ok(hit, 'hubo una tirada sin producción');
+  eq(s.phase, 'aqueduct');
+  eq(G.pendingActors(s), [0]);
+  const ore = s.players[0].res.ore;
+  ok(act(s, { type: 'aqueductPick', pid: 0, res: 'ore' }).ok);
+  eq(s.players[0].res.ore, ore + 1);
+  eq(s.phase, 'main');
 });
 
 console.log(`\n${pass} ok, ${failN} fallos`);
