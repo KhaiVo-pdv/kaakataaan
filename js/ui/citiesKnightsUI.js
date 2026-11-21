@@ -4,6 +4,7 @@ import { RES, TILE_INFO } from '../engine/constants.js';
 import * as Improve from '../engine/citiesKnights/improvements.js';
 import * as Knights from '../engine/citiesKnights/knights.js';
 import * as Barb from '../engine/citiesKnights/barbarians.js';
+import * as Progress from '../engine/citiesKnights/progress.js';
 import { COMMODITIES, GATE_INFO, cardsOf } from '../engine/citiesKnights/commodities.js';
 import { t } from '../i18n.js';
 
@@ -259,4 +260,91 @@ export function pillageWaiting(st, v, h) {
   if (st.pillage[v]) return h('div', { class: 'waiting your-turn' }, t('🔥 Toca la ciudad que pierdes'));
   const names = Object.keys(st.pillage).map(pid => st.players[pid].name).join(', ');
   return h('div', { class: 'waiting' }, t('🔥 {names} eligen qué ciudad pierden...', { names }));
+}
+
+// ---------- progress cards ----------
+export const PROGRESS_COLOR = { trade: '#e8c547', politics: '#4a8fe0', science: '#4fb36a' };
+
+export const progressName = id => t(Progress.PROGRESS_CARDS[id].name);
+const trackName = tr => t(Improve.TRACK_INFO[tr].name);
+
+// the cards in your hand, next to the resource cards (they can't be played yet: steps 5b-5d)
+export function progressHand(st, v, h, { open }) {
+  if (!hasCK(st) || !st.progress) return null;
+  const p = st.players[v];
+  if (!p.progress.length) return null;
+  return h('div', { class: 'devcards progress-hand', 'data-testid': 'progress-hand' }, p.progress.map(id => {
+    const c = Progress.PROGRESS_CARDS[id];
+    return h('div', { class: 'dcard pcard', style: { boxShadow: `inset 0 -6px 0 ${PROGRESS_COLOR[c.track]}` }, title: `${t(c.name)}: ${t(c.desc)}`, onclick: () => open() }, c.icon);
+  }));
+}
+
+// the list of your progress cards with what each one does
+export function progressModal(st, v, { h, close }) {
+  const p = st.players[v];
+  return h('div', null,
+    h('h2', null, t('📜 Cartas de progreso')),
+    h('p', null, t('Máximo {n} en la mano. Las cartas de punto se revelan al robarlas.', { n: Progress.PROGRESS_HAND })),
+    h('div', { class: 'ck-kopts' }, p.progress.map(id => progressCard(id, h))),
+    p.progressVP ? h('p', null, t('🏆 Puntos por cartas reveladas: {n}', { n: p.progressVP })) : null,
+    h('p', { class: 'muted' }, t('Pronto se podrán jugar.')),
+    h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: close }, t('Cerrar'))));
+}
+
+const progressCard = (id, h, attrs = {}) => {
+  const c = Progress.PROGRESS_CARDS[id];
+  return h('button', { class: 'btn ck-kopt pcard-opt', style: { boxShadow: `inset 6px 0 0 ${PROGRESS_COLOR[c.track]}` }, ...attrs },
+    h('span', { class: 'bicon' }, c.icon), h('span', null, h('b', null, t(c.name)), h('small', null, `${trackName(c.track)} · ${t(c.desc)}`)));
+};
+
+// forced choices: tied defenders pick a deck; players over the limit drop a card
+export function progressPickModal(st, v, { h, dispatch }) {
+  return h('div', null,
+    h('h2', null, t('🛡️ Defensor empatado')),
+    h('p', null, t('Elige de qué mazo robas una carta de progreso.')),
+    h('div', { class: 'ck-kopts' }, Progress.PROGRESS_TRACKS.map(tr => h('button', {
+      class: 'btn ck-kopt', disabled: !st.progress[tr].length, style: { boxShadow: `inset 6px 0 0 ${PROGRESS_COLOR[tr]}` }, 'data-testid': 'pick-' + tr,
+      onclick: () => dispatch({ type: 'progressPick', pid: v, track: tr }),
+    }, h('span', { class: 'bicon' }, Improve.TRACK_INFO[tr].icon || '📜'), h('span', null, h('b', null, trackName(tr)), h('small', null, t('{n} cartas', { n: st.progress[tr].length })))))));
+}
+
+export function progressDiscardModal(st, v, { h, dispatch }) {
+  const p = st.players[v];
+  return h('div', null,
+    h('h2', null, t('🗑️ Demasiadas cartas de progreso')),
+    h('p', null, t('Solo puedes tener {n}: descarta una (vuelve bajo su mazo).', { n: Progress.PROGRESS_HAND })),
+    h('div', { class: 'ck-kopts' }, p.progress.map((id, i) => progressCard(id, h, { 'data-testid': 'pdrop-' + i, onclick: () => dispatch({ type: 'progressDiscard', pid: v, card: id }) }))));
+}
+
+export function progressWaiting(st, v, h) {
+  if (st.phase === 'progressPick') {
+    const mine = st.progressPick && st.progressPick.includes(v);
+    return h('div', { class: 'waiting' + (mine ? ' your-turn' : '') }, mine ? t('🛡️ Elige un mazo de progreso') : t('🛡️ Los defensores empatados eligen carta...'));
+  }
+  if (st.phase === 'progressDiscard') {
+    const mine = st.progressDiscard && st.progressDiscard[v];
+    return h('div', { class: 'waiting' + (mine ? ' your-turn' : '') }, mine ? t('🗑️ Descarta una carta de progreso') : t('🗑️ Esperando descartes de progreso...'));
+  }
+  return null;
+}
+
+// player card: progress cards in hand (count only) and revealed VP
+export function progressStats(st, p, { h }) {
+  if (!hasCK(st) || !st.progress) return [];
+  const out = [h('span', { title: t('Cartas de progreso') }, `📜 ${p.progress.length}`)];
+  if (p.progressVP) out.push(h('span', { class: 'award', title: t('Cartas de punto reveladas') }, `🏆×${p.progressVP}`));
+  return out;
+}
+
+// bank row: what is left in each deck
+export function progressDecks(st, h) {
+  if (!hasCK(st) || !st.progress) return [];
+  return Progress.PROGRESS_TRACKS.map(tr => h('span', { class: 'pdeck', style: { color: PROGRESS_COLOR[tr] }, title: t('Mazo de progreso: {track}', { track: trackName(tr) }) }, `📜${st.progress[tr].length}`));
+}
+
+export function progressDescribe(a) {
+  if (!a) return undefined;
+  if (a.type === 'progressPick') return t('📜 Roba del mazo {track}.', { track: trackName(a.track) });
+  if (a.type === 'progressDiscard') return t('🗑️ Descarta {card}.', { card: progressName(a.card) });
+  return undefined;
 }

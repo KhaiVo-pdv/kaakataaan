@@ -407,3 +407,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 .barb-vs.bad { color: #ff8a6a; }
 .barb-sleep { opacity: .7; font-size: 12px; }
 @keyframes barb-pulse { 50% { box-shadow: 0 0 8px #e0533a; } }
+
+/* Cities & Knights progress cards */
+.btn.pcard-opt { padding-left: 14px; }
+.pdeck { font-weight: 700; }

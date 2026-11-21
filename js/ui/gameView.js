@@ -2,6 +2,7 @@ import { App, TRADE_WAIT } from '../app.js';
 import { h, clear, rich, toast, sync } from './dom.js';
 import { BoardView } from './boardView.js';
 import { RES, TILE_INFO, COSTS, DEV_INFO, EVENTS } from '../engine/constants.js';
+import { PROGRESS_CARDS as CK_PROGRESS } from '../engine/citiesKnights/progress.js';
 import * as G from '../engine/game.js';
 import { hint } from '../engine/bot.js';
 import { play } from './sfx.js';
@@ -17,7 +18,7 @@ let ui = null;
 
 const PHASE_TEXT = {
   setup: tk('Colocación inicial'), roll: tk('Tirar dados'), main: tk('Construir y comerciar'), discard: tk('Descartar'),
-  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), displace: tk('Recolocar caballero'),
+  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), displace: tk('Recolocar caballero'),
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -272,6 +273,9 @@ function handleFx(st) {
         break;
       case 'monopoly':
         f.from.forEach(([o, n], i) => flyCards(Array(n).fill(f.res), o, f.pid, v, { delay: i * 200 }));
+        break;
+      case 'progressDraw': // Cities & Knights
+        if (f.pid === v) toast(t('📜 Robaste: {icon} {card}', { icon: CK_PROGRESS[f.id].icon, card: t(CK_PROGRESS[f.id].name) }), 'good');
         break;
       case 'devBought':
         if (f.pid === v) toast(t('🃏 Compraste: {icon} {card}', { icon: DEV_INFO[f.type].icon, card: t(DEV_INFO[f.type].name) }), 'good');
@@ -685,6 +689,8 @@ function bannerText(st, v, inter) {
   if (st.phase === 'aqueduct') return st.pendingAqueduct[v] ? t('🟩 Acueducto: elige 1 recurso') : t('🟩 Esperando el acueducto...');
   if (st.phase === 'displace') return t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name });
   if (st.phase === 'pillage') return (inter && CK.ckBanner(st, ui, inter)) || t('🔥 Los bárbaros saquean: esperando a los perdedores...');
+  if (st.phase === 'progressPick') return t('🛡️ Los defensores empatados eligen carta...');
+  if (st.phase === 'progressDiscard') return t('🗑️ Esperando descartes de progreso...');
   if (st.phase === 'discard') {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
@@ -753,8 +759,9 @@ function renderPlayers(st, v) {
         h('div', { class: 'vp', title: t('Puntos de victoria') }, pub, (me || st.phase === 'gameOver') && all > pub ? h('small', null, ` +${all - pub}`) : null)),
       h('div', { class: 'stats' },
         h('span', { title: t('Cartas de recurso') }, `🂠 ${G.handSize(p.res)}`),
-        h('span', { title: t('Cartas de desarrollo') }, `🃏 ${p.dev.length}`),
-        h('span', { title: t('Caballeros jugados') }, `⚔️ ${p.knights}`),
+        ...(CK.hasCK(st) ? CK.progressStats(st, p, { h }) : [ // Cities & Knights: progress cards instead of development cards
+          h('span', { title: t('Cartas de desarrollo') }, `🃏 ${p.dev.length}`),
+          h('span', { title: t('Caballeros jugados') }, `⚔️ ${p.knights}`)]),
         h('span', { title: t('Camino más largo propio') }, `🛣️ ${p.roadLen}`),
         ...Sea.seaStats(st, p, { h }), // Seafarers: ships left, island bonus
         ...CK.ckStats(st, p, { h }), // Cities & Knights: improvements, metropolises, walls
@@ -768,7 +775,7 @@ function renderPlayers(st, v) {
     if (said) card.append(h('div', { class: 'pc-emote' + (ONLY_EMOJI.test(said.e) ? ' big' : ''), style: { animationDelay: `-${now - said.at}ms` } }, said.e));
     box.append(card);
   }
-  clear(ui.els.bank).append(h('span', null, '🏦'), ...CK.cardList(st).map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`),
+  clear(ui.els.bank).append(h('span', null, '🏦'), ...CK.cardList(st).map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), ...(CK.hasCK(st) ? CK.progressDecks(st, h) : [h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`)]),
     h('span', { title: t('Meta') },`🏆 ${st.config.rules.vpTarget}`), CK.barbarianTrack(st, h) || '');
 }
 
@@ -807,6 +814,8 @@ function fillActions(bar, st, v, locked) {
   bar.append(h('div', { class: 'hand' }, CK.cardList(st).map(r => resCard(r, p.res[r], bump.has(r)))));
   bar.append(h('button', { class: 'btn emote-toggle', title: t('Reaccionar con un emoji'), onclick: e => { e.stopPropagation(); toggleEmotes(e.currentTarget); } }, '😀'));
   bar.append(adhdButton());
+  const ph = CK.progressHand(st, v, h, { open: () => openProgress(v) }); // Cities & Knights
+  if (ph) bar.append(ph);
 
   const playable = new Set(st.current === v ? G.playableDev(st, v) : []);
   const groups = {};
@@ -836,6 +845,10 @@ function fillActions(bar, st, v, locked) {
   }
   if (st.phase === 'pillage') {
     acts.append(CK.pillageWaiting(st, v, h));
+    return;
+  }
+  if (st.phase === 'progressPick' || st.phase === 'progressDiscard') {
+    acts.append(CK.progressWaiting(st, v, h));
     return;
   }
   if (st.phase === 'aqueduct') {
@@ -892,7 +905,7 @@ function fillActions(bar, st, v, locked) {
     ...Sea.seaButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }),
     ...CK.ckButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openImprove: () => openImprove(v) }),
     ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a) }),
-    h('button', {
+    CK.hasCK(st) ? '' : h('button', {
       class: 'btn', disabled: !st.devDeck.length || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
     }, h('span', { class: 'bicon' }, '🃏'), h('span', null, t('Carta'), h('span', { class: 'cost' }, costIcons(COSTS.dev)))),
@@ -909,7 +922,7 @@ function affordPreview(real, v) {
     ['road', '🛤️', t('Camino'), p.roadsLeft > 0 && G.legalRoads(st, v).length > 0],
     ['settlement', '🏠', t('Poblado'), p.settlementsLeft > 0 && G.legalSettlements(st, v).length > 0],
     ['city', '🏰', t('Ciudad'), p.citiesLeft > 0 && G.legalCities(st, v).length > 0],
-    ['dev', '🃏', t('Carta'), st.devDeck.length > 0],
+    ...(CK.hasCK(st) ? [] : [['dev', '🃏', t('Carta'), st.devDeck.length > 0]]),
     ...Sea.seaAfford(st, v), // Seafarers: ships (their entry carries its own cost)
   ];
   return h('div', { class: 'afford' }, items.map(([what, icon, label, room, cost = COSTS[what]]) => {
@@ -933,7 +946,7 @@ function speedControl() {
 
 function describe(a, st) {
   if (!a) return t('Nada que hacer ahora.');
-  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a); // expansion moves
+  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a); // expansion moves
   if (sea) return sea;
   switch (a.type) {
     case 'roll': return t('Tira los dados.');
@@ -1120,6 +1133,11 @@ function offerPanel(st, v, locked) {
 // ---------------- modals ----------------
 let modalSeq = 0;
 // Cities & Knights knights panel
+// Cities & Knights progress cards in your hand
+function openProgress(v) {
+  openModal(() => CK.progressModal(App.state, v, { h, close: closeModal }));
+}
+
 function openKnights(v) {
   openModal(() => CK.knightsModal(App.state, v, ui, { h, close: closeModal, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }));
 }
@@ -1186,6 +1204,10 @@ function modalContent(st, v) {
     return { kind: 'discard' + v, body: discardModal(st, v) };
   }
   ui.discard = null;
+  if (st.phase === 'progressPick' && st.progressPick && st.progressPick.includes(v) && localHumans(st).includes(v))
+    return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
+  if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
+    return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'aqueduct' && st.pendingAqueduct[v] && localHumans(st).includes(v))
     return { kind: 'aqueduct' + v, body: CK.aqueductModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'gameOver' && !ui.lastWinnerShown) {

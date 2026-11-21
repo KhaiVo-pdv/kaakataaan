@@ -11,6 +11,7 @@ import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
 import { cardsOf } from './citiesKnights/commodities.js';
 import * as Improve from './citiesKnights/improvements.js';
+import { PROGRESS_TRACKS } from './citiesKnights/progress.js';
 import * as Knights from './citiesKnights/knights.js';
 
 const LEVELS = {
@@ -438,6 +439,17 @@ export function botAct(real, pid) {
     if (!s.displaced || s.displaced.pid !== pid) return null;
     const near = v => s.board.vertices[v].adj.filter(u => s.buildings[u] && s.buildings[u].owner === pid).length;
     return { type: 'placeDisplaced', pid, at: best(s.displaced.options, near) };
+  }
+  if (s.phase === 'progressPick') {
+    // tied Defender of Catan: draw from the track we improved most
+    if (!s.progressPick || !s.progressPick.includes(pid)) return null;
+    const open = PROGRESS_TRACKS.filter(tr => s.progress[tr].length);
+    return { type: 'progressPick', pid, track: best(open, tr => s.players[pid].improve[tr] + noise(s, tr.length) * 0.1) };
+  }
+  if (s.phase === 'progressDiscard') {
+    // over the hand limit: drop the oldest card (cards can't be played yet)
+    if (!s.progressDiscard || !s.progressDiscard[pid]) return null;
+    return { type: 'progressDiscard', pid, card: s.players[pid].progress[0] };
   }
   if (s.phase === 'pillage') {
     // Cities & Knights barbarians: give up the city that produces least

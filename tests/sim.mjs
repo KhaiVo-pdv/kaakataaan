@@ -126,6 +126,12 @@ function check(s, where) {
     const b = s.barbarians;
     if (b.pos < 0 || b.pos >= b.track) errs.push(`bárbaros fuera del recorrido ${b.pos}`);
     if (s.phase === 'pillage' && !s.pillage) errs.push('fase de saqueo sin saqueo');
+    // progress cards: all 54 are in a deck, in a hand or revealed (VP); at most 4 in hand outside the discard step
+    const inDecks = Object.values(s.progress).reduce((n, d) => n + d.length, 0);
+    const inHands = s.players.reduce((n, p) => n + p.progress.length + p.progressVP, 0);
+    if (inDecks + inHands !== 54) errs.push(`cartas de progreso ${inDecks}+${inHands}`);
+    for (const p of s.players) if (!p.retired && p.progress.length > 4 && !(s.progressDiscard && s.progressDiscard[p.id])) errs.push(`mano de progreso ${p.id}: ${p.progress.length}`);
+    if (s.devDeck.length) errs.push('cartas de desarrollo en Ciudades y Caballeros');
     if (!b.attacks && s.phase === 'robber' && !s.robberReturn) errs.push('ladrón despierto antes del primer ataque');
     if (s.phase !== 'setup') for (const p of s.players) { // (blind setup hides pieces until it ends)
       const cities = Object.values(s.buildings).filter(x => x.owner === p.id && x.type === 'city').length;
@@ -213,6 +219,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
     if (s.barbarians) {
       summary.attacks = (summary.attacks || 0) + s.barbarians.attacks;
       summary.defenders = (summary.defenders || 0) + s.players.reduce((t, p) => t + p.defenderVP, 0);
+      summary.progress = (summary.progress || 0) + 54 - Object.values(s.progress).reduce((n, d) => n + d.length, 0);
     }
     if (s.config.expansions.citiesKnights) summary.commodities = (summary.commodities || 0) + s.players.reduce((a, p) => a + COMMODITIES.reduce((b, c) => b + p.res[c], 0), 0) + (s.ckProduced || 0);
     const sh = (summary.byShape[label.startsWith('ck:') ? 'ck' : cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
@@ -232,7 +239,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
     if (summary.errors > 5) break;
   }
 }
-if (summary.attacks != null) console.log(`🏴‍☠️ ataques bárbaros: ${summary.attacks} · puntos de Defensor de Catan: ${summary.defenders}`);
+if (summary.attacks != null) console.log(`🏴‍☠️ ataques bárbaros: ${summary.attacks} · puntos de Defensor de Catan: ${summary.defenders} · cartas de progreso robadas: ${summary.progress}`);
 if (summary.knights != null) console.log(`⚔️ caballeros en el tablero al final de las partidas de Ciudades y Caballeros: ${summary.knights}`);
 if (summary.ships != null) console.log(`\n⛵ barcos en el mar al final de las partidas de Navegantes: ${summary.ships} · 🏴‍☠️ movimientos del pirata: ${summary.pirate || 0} · 🏝️ puntos por islas nuevas: ${summary.islandVP || 0} · 🌫️ niebla descubierta: ${summary.fogSeen || 0}/${summary.fogAll || 0}`);
 console.log(`\nPartidas: ${summary.games}, terminadas: ${summary.finished}, errores: ${summary.errors}, turnos medios: ${(summary.turns / Math.max(1, summary.games)).toFixed(1)}`);

@@ -8,6 +8,7 @@ import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
 import * as Knights from '../js/engine/citiesKnights/knights.js';
+import * as Progress from '../js/engine/citiesKnights/progress.js';
 import { seaTileEdges } from '../js/engine/seafarers/pirate.js';
 
 let pass = 0, failN = 0;
@@ -1025,9 +1026,11 @@ t('Ciudades y Caballeros: la muralla cuesta 2 arcillas y sube el límite del 7',
     s.phase = 'roll';
     s.current = 0;
     s.pendingDiscards = {};
+    s.barbarians.pos = 0; // no attack (it would take the walled city)
+    for (const r in s.players[0].res) s.players[0].res[r] = r === 'wheat' ? 9 : 0; // production must not grow the hand
     act(s, { type: 'roll', pid: 0 });
   } while (s.dice[0] + s.dice[1] !== 7 && ++tries < 300);
-  ok(!s.pendingDiscards[0], 'con 9 cartas y muralla no descarta');
+  ok(!s.pendingDiscards[0], 'con 9 cartas y muralla no descarta' + JSON.stringify([s.dice, tries, s.phase, s.pendingDiscards, G.handSize(s.players[0].res), s.walls]));
 });
 
 t('Ciudades y Caballeros: acueducto: si la tirada no te da nada eliges un recurso', () => {
@@ -1265,6 +1268,97 @@ t('Bárbaros: con varias ciudades el perdedor elige cuál cae; la metrópolis es
   eq(s.buildings[b].type, 'settlement');
   ok(s.phase !== 'pillage', 'la tirada sigue: ' + s.phase);
 });
+
+// ---- Cities & Knights progress cards ----
+t('Progreso: 54 cartas, 18 por mazo; sin cartas de desarrollo; sin la expansión no existen', () => {
+  const s = ckMain();
+  eq(Object.values(s.progress).map(d => d.length), [18, 18, 18]);
+  eq(Object.values(Progress.PROGRESS_CARDS).reduce((n, c) => n + c.n, 0), 54);
+  eq(s.devDeck.length, 0);
+  ok(!act(s, { type: 'buyDev', pid: 0 }).ok, 'no se compran cartas de desarrollo');
+  const b = fresh();
+  eq(b.progress, undefined);
+  eq(b.players[0].progress, undefined);
+});
+
+t('Progreso: se roba con la puerta del dado de evento si el dado rojo ≤ nivel + 1', () => {
+  const s = ckMain();
+  s.players[0].improve.science = 1;
+  ok(Progress.drawsOn(s, 0, 'science', 2) && !Progress.drawsOn(s, 0, 'science', 3), 'nivel 1: rojo 1-2');
+  ok(!Progress.drawsOn(s, 1, 'science', 1), 'sin mejora no se roba');
+  s.players[0].improve.science = 5;
+  ok(Progress.drawsOn(s, 0, 'science', 6), 'nivel 5: cualquier rojo');
+  s.players[0].improve.science = 1;
+  // only science gates with red 1-2 draw for us: the cards in our hand all came from those rolls
+  let drawn = 0;
+  for (let i = 0; i < 400; i++) {
+    s.phase = 'roll';
+    s.current = 0;
+    s.pendingDiscards = {};
+    s.barbarians.pos = 0;
+    s.players[0].progress = [];
+    s.progressDiscard = null;
+    const n = s.progress.science.length;
+    act(s, { type: 'roll', pid: 0 });
+    const expect = s.eventDie === 'science' && s.dice[1] <= 2 ? 1 : 0;
+    eq(n - s.progress.science.length, expect, `ciencia ${s.eventDie} rojo ${s.dice[1]}`);
+    drawn += expect;
+    if (drawn >= 3) break;
+  }
+  ok(drawn >= 3, 'se robó varias veces');
+});
+
+t('Progreso: las cartas de punto se revelan al robarlas', () => {
+  const s = ckMain();
+  s.progress.politics.push('constitution');
+  const vp = G.victoryPoints(s, 0);
+  Progress.draw(s, 0, 'politics');
+  eq(s.players[0].progress, []);
+  eq(s.players[0].progressVP, 1);
+  eq(G.victoryPoints(s, 0), vp + 1);
+});
+
+t('Progreso: más de 4 cartas obliga a descartar (la carta vuelve bajo su mazo)', () => {
+  const s = ckMain();
+  s.players[0].improve.trade = 5;
+  s.players[0].progress = ['merchant', 'merchant', 'wedding', 'smith'];
+  s.progress.trade.push('tradeMonopoly');
+  for (let i = 0; i < 3000 && s.phase !== 'progressDiscard'; i++) {
+    s.phase = 'roll';
+    s.barbarians.pos = 0;
+    s.pendingDiscards = {};
+    act(s, { type: 'roll', pid: 0 });
+  }
+  eq(s.phase, 'progressDiscard');
+  eq(G.pendingActors(s), [0]);
+  ok(!act(s, { type: 'progressDiscard', pid: 0, card: 'bishop' }).ok, 'solo cartas que tienes');
+  ok(act(s, { type: 'progressDiscard', pid: 0, card: 'wedding' }).ok);
+  eq(s.players[0].progress.length, 4);
+  eq(s.progress.politics[0], 'wedding', 'bajo su mazo');
+  ok(s.phase !== 'progressDiscard', 'la tirada sigue: ' + s.phase);
+});
+
+t('Progreso: empate de defensores: cada uno elige un mazo y roba', () => {
+  const s = ckMain();
+  const { path } = ckRoads(s);
+  const { path: p1 } = ckRoads(s, 1);
+  Knights.recruit(s, 0, path[2]);
+  Knights.activate(s, path[2]);
+  Knights.recruit(s, 1, p1[3]);
+  Knights.activate(s, p1[3]);
+  s.barbarians.pos = s.barbarians.track - 1;
+  shipRoll(s);
+  ok(s.barbarians.last.won, 'Catan gana');
+  eq(s.barbarians.last.tied.sort(), [0, 1]);
+  eq(s.phase, 'progressPick');
+  ok(act(s, { type: 'progressPick', pid: 1, track: 'trade' }).ok);
+  eq(s.phase, 'progressPick', 'falta el otro');
+  ok(act(s, { type: 'progressPick', pid: 0, track: 'science' }).ok);
+  eq(s.players[0].progress.length + s.players[0].progressVP, 1);
+  eq(s.players[1].progress.length + s.players[1].progressVP, 1);
+  ok(s.phase !== 'progressPick', 'la tirada sigue');
+});
+
 
 
 console.log(`\n${pass} ok, ${failN} fallos`);

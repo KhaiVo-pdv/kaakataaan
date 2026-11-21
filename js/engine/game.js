@@ -11,6 +11,7 @@ import { COMMODITIES, EVENT_FACES, cardsOf, initCommodities, cityYield } from '.
 import * as Improve from './citiesKnights/improvements.js';
 import * as Knights from './citiesKnights/knights.js';
 import * as Barb from './citiesKnights/barbarians.js';
+import * as Progress from './citiesKnights/progress.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
 // every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
@@ -116,6 +117,9 @@ export function createGame(configIn) {
     Improve.initImprovements(s);
     Knights.initKnights(s);
     Barb.initBarbarians(s);
+    Progress.initProgress(s);
+    s.devDeck = []; // progress cards replace the development cards
+    s.devTotal = 0;
   }
 
   if (M.flipped) {
@@ -226,6 +230,7 @@ export function victoryPoints(s, pid, hidden = true) {
   vp += s.players[pid].islandVP || 0; // Seafarers island bonus (absent in the base game)
   vp += Improve.metropolisVP(s, pid); // Cities & Knights metropolises (none in the base game)
   vp += s.players[pid].defenderVP || 0; // Cities & Knights Defender of Catan (absent in the base game)
+  vp += s.players[pid].progressVP || 0; // Cities & Knights printer / constitution
   return vp;
 }
 
@@ -371,6 +376,8 @@ export function pendingActors(s) {
   if (s.phase === 'discard') return Object.keys(s.pendingDiscards).map(Number).filter(pid => !s.players[pid].retired);
   if (s.phase === 'aqueduct') return Object.keys(s.pendingAqueduct).map(Number).filter(pid => !s.players[pid].retired);
   if (s.phase === 'displace') return s.displaced ? [s.displaced.pid] : [];
+  if (s.phase === 'progressPick') return (s.progressPick || []).filter(pid => !s.players[pid].retired);
+  if (s.phase === 'progressDiscard') return s.progressDiscard ? Object.keys(s.progressDiscard).map(Number).filter(pid => !s.players[pid].retired) : [];
   if (s.phase === 'pillage') return s.pillage ? Object.keys(s.pillage).map(Number).filter(pid => !s.players[pid].retired) : [];
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
@@ -945,14 +952,41 @@ H.roll = (s, a) => {
   const power = Math.round(Math.min(1, Math.max(0, +a.power || 0)) * 100) / 100;
   s.fx.push({ kind: 'dice', dice: d, power });
   log(s, msg('🎲 @{p} saca {n}.', { p: a.pid, n: sum }), a.pid);
-  // Cities & Knights: the ship face moves the barbarians first; an attack is fought before production
-  if (s.barbarians && s.eventDie === 'ship' && barbariansSail(s)) {
-    s.pillageRoll = sum;
-    s.phase = 'pillage';
+  // Cities & Knights: the event die is resolved before production. The ship moves the barbarians
+  // (an attack may need choices); a gate lets players draw progress cards.
+  if (s.barbarians) {
+    if (s.eventDie === 'ship') barbariansSail(s);
+    else gateDraws(s, s.eventDie, d[1]);
+    s.heldRoll = sum;
+    resumeRoll(s);
     return;
   }
   afterRoll(s, sum);
 };
+
+// C&K: wait for every choice the event die left pending, then finish the roll
+function resumeRoll(s) {
+  if (s.pillage) s.phase = 'pillage';
+  else if (s.progressPick && s.progressPick.length) s.phase = 'progressPick';
+  else if (s.progressDiscard) s.phase = 'progressDiscard';
+  else {
+    s.progressPick = null;
+    const sum = s.heldRoll;
+    s.heldRoll = null;
+    afterRoll(s, sum);
+  }
+}
+
+function gateDraws(s, track, red) {
+  for (const { pid, id } of Progress.drawForGate(s, track, red)) progressDrawn(s, pid, id);
+}
+
+function progressDrawn(s, pid, id) {
+  const c = Progress.PROGRESS_CARDS[id];
+  s.fx.push({ kind: 'progressDraw', pid, track: c.track, id });
+  if (c.vp) log(s, msg('🏆 @{p} revela {card}: +1 punto.', { p: pid, card: c.name }), pid);
+  else log(s, msg('📜 @{p} roba una carta de progreso ({track}).', { p: pid, track: Improve.TRACK_INFO[c.track].name }), pid);
+}
 
 function afterRoll(s, sum) {
   if (sum !== 7) {
@@ -993,7 +1027,10 @@ function barbariansSail(s) {
   log(s, msg('🏴‍☠️ ¡Atacan los bárbaros! Bárbaros {b} contra caballeros {c}.', { b: r.barb, c: r.catan }));
   if (r.won) {
     if (r.defender >= 0) log(s, msg('🛡️ ¡Catan resiste! @{p} es Defensor de Catan (+1 punto).', { p: r.defender }), r.defender);
-    else if (r.tied.length) log(s, msg('🛡️ ¡Catan resiste! Empate entre los mejores defensores: nadie recibe el punto.'));
+    else if (r.tied.length) {
+      log(s, msg('🛡️ ¡Catan resiste! Empate entre los mejores defensores: cada uno roba una carta de progreso.'));
+      s.progressPick = Progress.openDecks(s).length ? [...r.tied] : null;
+    }
     else log(s, msg('🛡️ ¡Catan resiste!'));
   } else {
     for (const pid of r.losers) log(s, msg('🔥 Los bárbaros saquean una ciudad de @{p}.', { p: pid }), pid);
@@ -1011,7 +1048,27 @@ H.pillageCity = (s, a) => {
   log(s, msg('🏚️ La ciudad de @{p} vuelve a ser un poblado.', { p: a.pid }), a.pid);
   if (Object.keys(s.pillage).some(pid => !s.players[pid].retired)) return;
   s.pillage = null;
-  afterRoll(s, s.pillageRoll);
+  resumeRoll(s);
+};
+
+H.progressPick = (s, a) => {
+  if (s.phase !== 'progressPick' || !s.progressPick || !s.progressPick.includes(a.pid)) fail('No tienes que elegir carta de progreso.');
+  if (!Progress.openDecks(s).includes(a.track)) fail('Ese mazo de progreso está vacío.');
+  s.progressPick = s.progressPick.filter(pid => pid !== a.pid);
+  const id = Progress.draw(s, a.pid, a.track);
+  progressDrawn(s, a.pid, id);
+  if (!Progress.openDecks(s).length) s.progressPick = [];
+  if (s.progressPick.some(pid => !s.players[pid].retired)) return;
+  resumeRoll(s);
+};
+
+H.progressDiscard = (s, a) => {
+  if (s.phase !== 'progressDiscard' || !s.progressDiscard || !s.progressDiscard[a.pid]) fail('No tienes que descartar cartas de progreso.');
+  if (!Progress.discard(s, a.pid, a.card)) fail('No tienes esa carta.');
+  log(s, msg('🗑️ @{p} descarta una carta de progreso.', { p: a.pid }), a.pid);
+  if (s.progressDiscard && Object.keys(s.progressDiscard).some(pid => !s.players[pid].retired)) return;
+  s.progressDiscard = null;
+  resumeRoll(s);
 };
 
 H.discard = (s, a) => {
@@ -1296,6 +1353,7 @@ H.endRoadBuilding = (s, a) => {
 
 H.buyDev = (s, a) => {
   assertMain(s, a);
+  if (s.progress) fail('En Ciudades y Caballeros no hay cartas de desarrollo.');
   const p = s.players[a.pid];
   if (!s.devDeck.length) fail('No quedan cartas de desarrollo.');
   if (!canAfford(p.res, COSTS.dev)) fail('Te faltan recursos.');
@@ -1514,11 +1572,14 @@ H.retirePlayer = (s, a) => {
   delete s.pendingDiscards[pid];
   if (s.pillage && s.pillage[pid]) {
     delete s.pillage[pid];
-    if (s.phase === 'pillage' && !Object.keys(s.pillage).length) {
-      s.pillage = null;
-      afterRoll(s, s.pillageRoll);
-    }
+    if (!Object.keys(s.pillage).length) s.pillage = null;
   }
+  if (s.progressPick) s.progressPick = s.progressPick.filter(q => q !== pid);
+  if (s.progressDiscard && s.progressDiscard[pid]) {
+    delete s.progressDiscard[pid];
+    if (!Object.keys(s.progressDiscard).length) s.progressDiscard = null;
+  }
+  if (['pillage', 'progressPick', 'progressDiscard'].includes(s.phase)) resumeRoll(s);
   if (s.displaced && s.displaced.pid === pid) {
     s.players[pid].knightsLeft[s.displaced.level]++;
     s.displaced = null;
