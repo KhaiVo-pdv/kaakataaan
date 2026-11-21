@@ -9,6 +9,7 @@ import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
 import { COMMODITIES, EVENT_FACES, cardsOf, initCommodities, cityYield } from './citiesKnights/commodities.js';
 import * as Improve from './citiesKnights/improvements.js';
+import * as Knights from './citiesKnights/knights.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
 // every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
@@ -112,6 +113,7 @@ export function createGame(configIn) {
   if (citiesKnightsOn(s)) {
     initCommodities(s);
     Improve.initImprovements(s);
+    Knights.initKnights(s);
   }
 
   if (M.flipped) {
@@ -253,7 +255,7 @@ const landEdge = (s, e) => s.board.edges[e].hexes.length > 0;
 const hasShip = (s, e) => !!s.ships && s.ships[e] !== undefined; // Seafarers only
 
 function vertexOpen(s, v) {
-  if (s.buildings[v] || !onLand(s, v)) return false;
+  if (s.buildings[v] || !onLand(s, v) || (s.knights && s.knights[v])) return false; // C&K: no building on a knight
   return !s.board.vertices[v].adj.some(u => s.buildings[u]);
 }
 
@@ -281,6 +283,7 @@ export function canBuildRoad(s, pid, e) {
     const b = s.buildings[v];
     if (b && b.owner === pid) return true;
     if (b) continue; // opponent building blocks continuing through this vertex
+    if (s.knights && s.knights[v] && s.knights[v].owner !== pid) continue; // C&K: so does a rival knight
     if (s.board.vertices[v].edges.some(x => x !== e && s.roads[x] === pid)) return true;
   }
   return false;
@@ -364,6 +367,7 @@ export function pendingActors(s) {
   if (s.phase === 'setup') return [s.setup.queue[s.setup.idx].pid];
   if (s.phase === 'discard') return Object.keys(s.pendingDiscards).map(Number).filter(pid => !s.players[pid].retired);
   if (s.phase === 'aqueduct') return Object.keys(s.pendingAqueduct).map(Number).filter(pid => !s.players[pid].retired);
+  if (s.phase === 'displace') return s.displaced ? [s.displaced.pid] : [];
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -428,6 +432,7 @@ function roadLength(s, pid) {
   const used = new Set();
   const blocked = v => {
     const b = s.buildings[v];
+    if (s.knights && s.knights[v] && s.knights[v].owner !== pid) return true; // C&K: rival knights cut it too
     return b && b.owner !== pid;
   };
   const ownHere = v => s.buildings[v] && s.buildings[v].owner === pid;
@@ -1065,6 +1070,99 @@ H.aqueductPick = (s, a) => {
   if (!Object.keys(s.pendingAqueduct).length) s.phase = 'main';
 };
 
+// ---- Cities & Knights: knights ----
+const ownKnight = (s, a, v) => {
+  const k = s.knights && s.knights[v];
+  if (!k || k.owner !== a.pid) fail('Ese caballero no es tuyo.');
+  return k;
+};
+
+H.recruitKnight = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  if (s.players[a.pid].knightsLeft[1] <= 0) fail('No te quedan caballeros básicos.');
+  if (!Knights.canRecruit(s, a.pid, a.at)) fail('El caballero va en un cruce libre junto a tu camino.');
+  if (!canAfford(s.players[a.pid].res, Knights.KNIGHT_COST)) fail('Te faltan recursos.');
+  pay(s, a.pid, Knights.KNIGHT_COST);
+  Knights.recruit(s, a.pid, a.at);
+  log(s, msg('⚔️ @{p} recluta un caballero.', { p: a.pid }), a.pid);
+  s.fx.push({ kind: 'build', what: 'knight', pid: a.pid, at: a.at });
+  updateLongestRoad(s);
+};
+
+H.promoteKnight = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  ownKnight(s, a, a.at);
+  const block = Knights.promoteBlock(s, a.pid, a.at);
+  if (block) fail(block);
+  if (!canAfford(s.players[a.pid].res, Knights.KNIGHT_COST)) fail('Te faltan recursos.');
+  pay(s, a.pid, Knights.KNIGHT_COST);
+  Knights.promote(s, a.pid, a.at);
+  log(s, msg('⬆️ @{p} asciende un caballero: {name}.', { p: a.pid, name: Knights.KNIGHT_NAMES[s.knights[a.at].level] }), a.pid);
+  s.fx.push({ kind: 'knight', pid: a.pid, at: a.at });
+};
+
+H.activateKnight = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  const k = ownKnight(s, a, a.at);
+  if (k.active) fail('Ese caballero ya está activo.');
+  if (!canAfford(s.players[a.pid].res, Knights.ACTIVATE_COST)) fail('Te faltan recursos.');
+  pay(s, a.pid, Knights.ACTIVATE_COST);
+  Knights.activate(s, a.at);
+  log(s, msg('🔥 @{p} activa un caballero.', { p: a.pid }), a.pid);
+  s.fx.push({ kind: 'knight', pid: a.pid, at: a.at });
+};
+
+H.knightMove = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  ownKnight(s, a, a.from);
+  if (!Knights.knightTargets(s, a.pid, a.from).move.includes(a.to)) fail('El caballero no puede ir ahí.');
+  Knights.move(s, a.pid, a.from, a.to);
+  log(s, msg('🐎 @{p} mueve un caballero.', { p: a.pid }), a.pid);
+  s.fx.push({ kind: 'knightMove', pid: a.pid, from: a.from, to: a.to });
+  updateLongestRoad(s);
+};
+
+H.knightDisplace = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  ownKnight(s, a, a.from);
+  if (!Knights.knightTargets(s, a.pid, a.from).displace.includes(a.to)) fail('Solo puedes expulsar a un caballero más débil que tus caminos alcancen.');
+  const r = Knights.displace(s, a.pid, a.from, a.to);
+  log(s, msg('🤺 @{p} expulsa al caballero de @{q}.', { p: a.pid, q: r.victim.owner }), a.pid);
+  s.fx.push({ kind: 'knightMove', pid: a.pid, from: a.from, to: a.to });
+  if (r.removed) log(s, msg('🏳️ El caballero de @{q} no tiene adónde ir y vuelve a su reserva.', { q: r.victim.owner }));
+  else {
+    s.displacedReturn = s.phase;
+    s.phase = 'displace';
+  }
+  updateLongestRoad(s);
+};
+
+H.placeDisplaced = (s, a) => {
+  if (s.phase !== 'displace' || !s.displaced || s.displaced.pid !== a.pid) fail('No tienes que recolocar ningún caballero.');
+  if (!s.displaced.options.includes(a.at)) fail('El caballero debe ir a un cruce libre por tus caminos.');
+  Knights.placeDisplaced(s, a.at);
+  log(s, msg('🐎 @{p} recoloca su caballero.', { p: a.pid }), a.pid);
+  s.fx.push({ kind: 'knightMove', pid: a.pid, to: a.at });
+  s.phase = s.displacedReturn || 'main';
+  updateLongestRoad(s);
+};
+
+H.knightChase = (s, a) => {
+  ckOnly(s);
+  assertMain(s, a);
+  ownKnight(s, a, a.from);
+  if (!Knights.canChase(s, a.pid, a.from)) fail('El caballero debe estar activo junto al ladrón.');
+  Knights.chase(s, a.from);
+  log(s, msg('🛡️ @{p} expulsa al ladrón con un caballero.', { p: a.pid }), a.pid);
+  s.robberReturn = s.phase;
+  s.phase = 'robber';
+};
+
 function assertMain(s, a) {
   if (a.pid !== s.current) fail('No es tu turno.');
   if (s.phase !== 'main') fail(s.phase === 'roll' ? 'Primero tira los dados.' : 'Termina la acción pendiente.');
@@ -1364,6 +1462,11 @@ H.retirePlayer = (s, a) => {
   s.fx.push({ kind: 'retired', pid });
   // keep the game flowing
   delete s.pendingDiscards[pid];
+  if (s.displaced && s.displaced.pid === pid) {
+    s.players[pid].knightsLeft[s.displaced.level]++;
+    s.displaced = null;
+    if (s.phase === 'displace') s.phase = s.displacedReturn || 'main';
+  }
   if (s.pendingAqueduct) {
     delete s.pendingAqueduct[pid];
     if (s.phase === 'aqueduct' && !Object.keys(s.pendingAqueduct).length) s.phase = 'main';

@@ -114,6 +114,14 @@ function check(s, where) {
       if (!b || b.owner !== s.walls[k] || b.type !== 'city') errs.push(`muralla ${k} fuera de una ciudad suya`);
     }
     for (const p of s.players) if (Object.values(s.walls).filter(o => o === p.id).length + p.wallsLeft !== 3) errs.push(`murallas ${p.id}`);
+    // knights: 2 pieces per level (on the board, in the box or waiting to be put back), never on a building
+    for (const p of s.players)
+      for (const lvl of [1, 2, 3]) {
+        const onBoard = Object.values(s.knights).filter(k => k.owner === p.id && k.level === lvl).length;
+        const waiting = s.displaced && s.displaced.pid === p.id && s.displaced.level === lvl ? 1 : 0;
+        if (onBoard + waiting + p.knightsLeft[lvl] !== 2) errs.push(`caballeros ${p.id} nivel ${lvl}`);
+      }
+    for (const k in s.knights) if (s.buildings[k]) errs.push(`caballero bajo un edificio ${k}`);
   }
   // Seafarers ships: counted, on water, never sharing an edge with a road, linked to the network
   if (s.ships)
@@ -192,6 +200,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
       summary.fogAll = (summary.fogAll || 0) + s.board.tiles.filter(t => t.fog).length + s.board.sea.filter(t => t.fog).length;
     }
     summary.turns += s.turn;
+    if (s.knights) summary.knights = (summary.knights || 0) + Object.keys(s.knights).length;
     if (s.config.expansions.citiesKnights) summary.commodities = (summary.commodities || 0) + s.players.reduce((a, p) => a + COMMODITIES.reduce((b, c) => b + p.res[c], 0), 0) + (s.ckProduced || 0);
     const sh = (summary.byShape[label.startsWith('ck:') ? 'ck' : cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
     sh.n++;
@@ -210,6 +219,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
     if (summary.errors > 5) break;
   }
 }
+if (summary.knights != null) console.log(`⚔️ caballeros en el tablero al final de las partidas de Ciudades y Caballeros: ${summary.knights}`);
 if (summary.ships != null) console.log(`\n⛵ barcos en el mar al final de las partidas de Navegantes: ${summary.ships} · 🏴‍☠️ movimientos del pirata: ${summary.pirate || 0} · 🏝️ puntos por islas nuevas: ${summary.islandVP || 0} · 🌫️ niebla descubierta: ${summary.fogSeen || 0}/${summary.fogAll || 0}`);
 console.log(`\nPartidas: ${summary.games}, terminadas: ${summary.finished}, errores: ${summary.errors}, turnos medios: ${(summary.turns / Math.max(1, summary.games)).toFixed(1)}`);
 for (const [k, v] of Object.entries(summary.byShape)) console.log(`  ${k.padEnd(9)} ${v.done}/${v.n} terminadas, ${(v.turns / v.n).toFixed(0)} turnos`);

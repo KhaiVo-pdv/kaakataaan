@@ -2,6 +2,7 @@
 // when the game has the expansion on.
 import { RES, TILE_INFO } from '../engine/constants.js';
 import * as Improve from '../engine/citiesKnights/improvements.js';
+import * as Knights from '../engine/citiesKnights/knights.js';
 import { COMMODITIES, GATE_INFO, cardsOf } from '../engine/citiesKnights/commodities.js';
 import { t } from '../i18n.js';
 
@@ -127,4 +128,105 @@ export function ckDescribe(a) {
   if (a.type === 'buildWall') return t('🧱 Construye una muralla.');
   if (a.type === 'aqueductPick') return t('🟩 Elige un recurso con el acueducto.');
   return undefined;
+}
+
+// ---------- knights ----------
+// ui.pick: 'knight' (recruit) | 'promote' | 'activate' | 'knightAct' (then ui.knightFrom = the knight)
+export function knightInteraction(st, v, ui, { mk, dispatch, rerender, canAfford, liveRes }) {
+  if (!hasCK(st)) return undefined;
+  // a knight of ours was pushed away: put it back
+  if (st.phase === 'displace') return st.displaced && st.displaced.pid === v ? mk('settlement', st.displaced.options, at => dispatch({ type: 'placeDisplaced', pid: v, at })) : undefined;
+  if (st.current !== v || st.phase !== 'main' || !ui.pick) return undefined;
+  if (ui.pick !== 'knightAct') ui.knightFrom = null;
+  const again = (cost, a) => {
+    if (dispatch(a) && !canAfford(liveRes(), cost)) ui.pick = null;
+    rerender();
+  };
+  if (ui.pick === 'knight') return mk('settlement', Knights.legalRecruits(st, v), at => again(Knights.KNIGHT_COST, { type: 'recruitKnight', pid: v, at }));
+  if (ui.pick === 'promote') return mk('settlement', Knights.legalPromotions(st, v), at => again(Knights.KNIGHT_COST, { type: 'promoteKnight', pid: v, at }));
+  if (ui.pick === 'activate') return mk('settlement', Knights.legalActivations(st, v), at => again(Knights.ACTIVATE_COST, { type: 'activateKnight', pid: v, at }));
+  if (ui.pick === 'knightAct') {
+    if (ui.knightFrom == null)
+      return mk('settlement', Knights.actors(st, v), k => {
+        ui.knightFrom = k;
+        rerender();
+      });
+    const from = ui.knightFrom;
+    const tg = Knights.knightTargets(st, v, from);
+    return mk('settlement', [...tg.move, ...tg.displace], to => {
+      ui.pick = null;
+      ui.knightFrom = null;
+      dispatch({ type: tg.displace.includes(to) ? 'knightDisplace' : 'knightMove', pid: v, from, to });
+    });
+  }
+  return undefined;
+}
+
+export function knightBanner(st, v, ui, inter) {
+  if (!hasCK(st) || !inter || inter.kind !== 'settlement') return '';
+  if (st.phase === 'displace') return t('🐎 Tu caballero fue expulsado: elige adónde va');
+  const txt = {
+    knight: t('⚔️ Elige dónde reclutar el caballero (Esc para cancelar)'),
+    promote: t('⬆️ Elige qué caballero asciende (Esc para cancelar)'),
+    activate: t('🔥 Elige qué caballero activas (Esc para cancelar)'),
+    knightAct: ui.knightFrom == null ? t('🐎 Elige qué caballero actúa (Esc para cancelar)') : t('🐎 Elige adónde va (resaltado) o expulsa al ladrón'),
+  }[ui.pick];
+  return txt || '';
+}
+
+// the knights button and, while a knight is chosen next to the robber, the "chase the robber" button
+export function knightButtons(st, v, ui, { h, openKnights, dispatch }) {
+  if (!hasCK(st)) return [];
+  const out = [h('button', { class: 'btn' + (['knight', 'promote', 'activate', 'knightAct'].includes(ui.pick) ? ' active' : ''), 'data-testid': 'knights', onclick: e => { e.stopPropagation(); openKnights(); } },
+    h('span', { class: 'bicon' }, '⚔️'), h('span', null, t('Caballeros')))];
+  if (ui.pick === 'knightAct' && ui.knightFrom != null && Knights.canChase(st, v, ui.knightFrom))
+    out.push(h('button', { class: 'btn pink', 'data-testid': 'knight-chase', onclick: e => {
+      e.stopPropagation();
+      const from = ui.knightFrom;
+      ui.pick = null;
+      ui.knightFrom = null;
+      dispatch({ type: 'knightChase', pid: v, from });
+    } }, t('🛡️ Expulsar al ladrón')));
+  return out;
+}
+
+// the knights panel: what you can do, with costs and how many pieces are left
+export function knightsModal(st, v, ui, { h, close, rerender, costIcons, canAfford }) {
+  const p = st.players[v];
+  const mine = st.current === v && st.phase === 'main';
+  const opt = (pick, icon, label, desc, cost, list) => {
+    const can = mine && list.length > 0 && (!cost || canAfford(p.res, cost));
+    return h('button', { class: 'btn ck-kopt', disabled: !can, 'data-testid': 'k-' + pick, onclick: () => { ui.pick = pick; ui.knightFrom = null; close(); rerender(); } },
+      h('span', { class: 'bicon' }, icon), h('span', null, h('b', null, label), cost ? h('span', { class: 'cost' }, costIcons(cost)) : null, h('small', null, desc)));
+  };
+  const left = p.knightsLeft;
+  return h('div', null,
+    h('h2', null, t('⚔️ Caballeros')),
+    h('p', null, t('Reserva: básicos {a} · fuertes {b} · poderosos {c} · fuerza activa {f}', { a: left[1], b: left[2], c: left[3], f: Knights.activeStrength(st, v) })),
+    h('div', { class: 'ck-kopts' },
+      opt('knight', '⚔️', t('Reclutar'), t('Un caballero básico, inactivo, en un cruce libre junto a tu camino.'), Knights.KNIGHT_COST, Knights.legalRecruits(st, v)),
+      opt('promote', '⬆️', t('Ascender'), t('Básico → fuerte → poderoso (poderoso: política nivel 3). Uno por caballero y turno.'), Knights.KNIGHT_COST, Knights.legalPromotions(st, v)),
+      opt('activate', '🔥', t('Activar'), t('Un caballero activo defiende de los bárbaros y puede actuar desde el turno siguiente.'), Knights.ACTIVATE_COST, Knights.legalActivations(st, v)),
+      opt('knightAct', '🐎', t('Actuar'), t('Mover por tus caminos, expulsar a un caballero más débil o al ladrón. Después queda inactivo.'), null, Knights.actors(st, v))),
+    h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: close }, t('Cerrar'))));
+}
+
+export function knightDescribe(a) {
+  if (!a) return undefined;
+  return {
+    recruitKnight: t('⚔️ Recluta un caballero (resaltado).'),
+    promoteKnight: t('⬆️ Asciende un caballero.'),
+    activateKnight: t('🔥 Activa un caballero.'),
+    knightMove: t('🐎 Mueve un caballero.'),
+    knightDisplace: t('🤺 Expulsa a un caballero rival.'),
+    knightChase: t('🛡️ Expulsa al ladrón con un caballero.'),
+    placeDisplaced: t('🐎 Recoloca tu caballero.'),
+  }[a.type];
+}
+
+export function knightStats(st, p, { h }) {
+  if (!hasCK(st)) return [];
+  const n = Knights.knightsOf(st, p.id).length;
+  if (!n) return [];
+  return [h('span', { title: t('Caballeros (fuerza activa)') }, `⚔️${n} (${Knights.activeStrength(st, p.id)})`)];
 }

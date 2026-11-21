@@ -624,7 +624,8 @@ function interaction(real, v) {
   // Seafarers moments (ships); undefined when it's not one of them
   const sea = Sea.seaInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (sea !== undefined) return sea;
-  const ck = CK.ckInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a) }); // Cities & Knights: wall / metropolis city
+  const ck = CK.ckInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a) }) // Cities & Knights: wall / metropolis city
+    ?? CK.knightInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (ck !== undefined) return ck;
   if (st.phase === 'setup') {
     if (G.pendingActors(st)[0] !== v) return null;
@@ -682,6 +683,7 @@ function bannerText(st, v, inter) {
     return `${blind}${st.setup.step === 'settlement' ? (st.config.rules.setupCity && st.setup.queue[st.setup.idx].round === st.setup.lastRound ? t('Coloca tu ciudad') : t('Coloca tu poblado')) : t('Coloca tu camino')}`;
   }
   if (st.phase === 'aqueduct') return st.pendingAqueduct[v] ? t('🟩 Acueducto: elige 1 recurso') : t('🟩 Esperando el acueducto...');
+  if (st.phase === 'displace') return t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name });
   if (st.phase === 'discard') {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
@@ -691,7 +693,7 @@ function bannerText(st, v, inter) {
   if (st.phase === 'roadBuilding' && inter && inter.kind === 'ship') return Sea.seaBanner(st, v, ui, inter);
   if (st.phase === 'roadBuilding') return st.freeRoads > 1 ? t('🛤️ Coloca {n} caminos gratis', { n: st.freeRoads }) : t('🛤️ Coloca {n} camino gratis', { n: st.freeRoads });
   if (st.phase === 'roll') return t('🎲 ¡Tu turno! Tira los dados');
-  const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter);
+  const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter) || CK.knightBanner(st, v, ui, inter);
   if (seaTxt) return seaTxt;
   if (inter) return { road: t('Elige dónde construir el camino (Esc para cancelar)'), settlement: t('Elige dónde construir el poblado (Esc para cancelar)'), city: t('Elige qué poblado mejorar (Esc para cancelar)') }[inter.kind];
   return '';
@@ -755,6 +757,7 @@ function renderPlayers(st, v) {
         h('span', { title: t('Camino más largo propio') }, `🛣️ ${p.roadLen}`),
         ...Sea.seaStats(st, p, { h }), // Seafarers: ships left, island bonus
         ...CK.ckStats(st, p, { h }), // Cities & Knights: improvements, metropolises, walls
+        ...CK.knightStats(st, p, { h }),
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
         st.pendingDiscards[p.id] ? h('span', { style: { color: 'var(--red)' } }, `🗑️ ${st.pendingDiscards[p.id]}`) : null));
@@ -826,6 +829,10 @@ function fillActions(bar, st, v, locked) {
     acts.append(h('button', { class: 'btn primary', onclick: () => openGameOver(App.state) }, t('🏆 Ver resultados')));
     return;
   }
+  if (st.phase === 'displace') {
+    acts.append(h('div', { class: 'waiting' + (st.displaced.pid === v ? ' your-turn' : '') }, st.displaced.pid === v ? t('🐎 Toca dónde recolocar tu caballero') : t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name })));
+    return;
+  }
   if (st.phase === 'aqueduct') {
     acts.append(st.pendingAqueduct[v]
       ? h('button', { class: 'btn green', onclick: () => render(App.state) }, t('🟩 Elige tu recurso'))
@@ -879,6 +886,7 @@ function fillActions(bar, st, v, locked) {
     buildBtn('city', t('Ciudad'), '🏰', p.citiesLeft, () => G.legalCities(st, v)),
     ...Sea.seaButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }),
     ...CK.ckButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openImprove: () => openImprove(v) }),
+    ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a) }),
     h('button', {
       class: 'btn', disabled: !st.devDeck.length || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
@@ -920,7 +928,7 @@ function speedControl() {
 
 function describe(a, st) {
   if (!a) return t('Nada que hacer ahora.');
-  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a); // expansion moves
+  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a); // expansion moves
   if (sea) return sea;
   switch (a.type) {
     case 'roll': return t('Tira los dados.');
@@ -942,6 +950,10 @@ function showHint(st, v) {
     render(App.state);
   } else if (a && a.type === 'improve') {
     openImprove(v); // Cities & Knights
+  } else if (a && ['recruitKnight', 'promoteKnight', 'activateKnight', 'knightMove', 'knightDisplace', 'knightChase'].includes(a.type)) {
+    ui.pick = { recruitKnight: 'knight', promoteKnight: 'promote', activateKnight: 'activate' }[a.type] || 'knightAct';
+    ui.knightFrom = null;
+    render(App.state);
   } else if (a && a.type === 'buildWall') {
     ui.pick = 'wall';
     render(App.state);
@@ -1102,6 +1114,11 @@ function offerPanel(st, v, locked) {
 
 // ---------------- modals ----------------
 let modalSeq = 0;
+// Cities & Knights knights panel
+function openKnights(v) {
+  openModal(() => CK.knightsModal(App.state, v, ui, { h, close: closeModal, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }));
+}
+
 // Cities & Knights improvements panel (refreshes with the state while open)
 function openImprove(v) {
   openModal(() => CK.improveModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, rerender: () => render(App.state), canAfford: G.canAfford }));

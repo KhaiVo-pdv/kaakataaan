@@ -7,6 +7,7 @@ import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
+import * as Knights from '../js/engine/citiesKnights/knights.js';
 import { seaTileEdges } from '../js/engine/seafarers/pirate.js';
 
 let pass = 0, failN = 0;
@@ -1052,6 +1053,115 @@ t('Ciudades y Caballeros: acueducto: si la tirada no te da nada eliges un recurs
   ok(act(s, { type: 'aqueductPick', pid: 0, res: 'ore' }).ok);
   eq(s.players[0].res.ore, ore + 1);
   eq(s.phase, 'main');
+});
+
+// ---------- Cities & Knights: knights ----------
+// a little road network for player 0: settlement at a, roads a-b-c-d (returns the corners)
+function ckRoads(s, pid = 0) {
+  const bd = s.board;
+  const a = bd.tiles.find(t => t.num).verts[0];
+  const path = [a];
+  const roads = [];
+  while (path.length < 4) {
+    const v = path[path.length - 1];
+    const e = bd.vertices[v].edges.find(x => !roads.includes(x) && !path.includes(bd.edges[x].a === v ? bd.edges[x].b : bd.edges[x].a) && bd.edges[x].hexes.length);
+    roads.push(e);
+    path.push(bd.edges[e].a === v ? bd.edges[e].b : bd.edges[e].a);
+  }
+  s.buildings[a] = { owner: pid, type: 'settlement' };
+  for (const e of roads) s.roads[e] = pid;
+  return { path, roads };
+}
+
+t('Ciudades y Caballeros: reclutar cuesta lana + mineral y va junto a tu camino', () => {
+  const s = ckMain();
+  const { path } = ckRoads(s);
+  ok(!act(s, { type: 'recruitKnight', pid: 0, at: path[2] }).ok, 'sin recursos no');
+  give(s, 0, { sheep: 1, ore: 1 });
+  ok(!act(s, { type: 'recruitKnight', pid: 0, at: path[0] }).ok, 'no sobre un edificio');
+  ok(act(s, { type: 'recruitKnight', pid: 0, at: path[2] }).ok, 'recluta');
+  eq(s.knights[path[2]].level, 1);
+  ok(!s.knights[path[2]].active, 'empieza inactivo');
+  eq(s.players[0].knightsLeft[1], 1);
+  ok(!G.canBuildSettlement(s, 0, path[2]), 'no se construye encima de un caballero');
+  ok(!fresh().knights && !act(fresh(), { type: 'recruitKnight', pid: 0, at: 0 }).ok, 'base: no existe');
+});
+
+t('Ciudades y Caballeros: ascender; poderoso necesita política 3', () => {
+  const s = ckMain();
+  const { path } = ckRoads(s);
+  Knights.recruit(s, 0, path[2]);
+  give(s, 0, { sheep: 3, ore: 3 });
+  ok(act(s, { type: 'promoteKnight', pid: 0, at: path[2] }).ok, 'a fuerte');
+  eq(s.knights[path[2]].level, 2);
+  ok(!act(s, { type: 'promoteKnight', pid: 0, at: path[2] }).ok, 'una vez por turno');
+  s.turn++;
+  ok(!act(s, { type: 'promoteKnight', pid: 0, at: path[2] }).ok, 'sin fortaleza no hay poderoso');
+  s.players[0].improve.politics = 3;
+  ok(act(s, { type: 'promoteKnight', pid: 0, at: path[2] }).ok, 'con fortaleza sí');
+  eq(s.knights[path[2]].level, 3);
+  eq(s.players[0].knightsLeft, { 1: 2, 2: 2, 3: 1 }, 'las piezas vuelven a la reserva');
+});
+
+t('Ciudades y Caballeros: activar con cereal; actúa a partir del turno siguiente y una vez', () => {
+  const s = ckMain();
+  const { path } = ckRoads(s);
+  Knights.recruit(s, 0, path[1]);
+  give(s, 0, { wheat: 1 });
+  ok(act(s, { type: 'activateKnight', pid: 0, at: path[1] }).ok, 'activa');
+  ok(s.knights[path[1]].active);
+  eq(Knights.activeStrength(s, 0), 1, 'fuerza activa');
+  ok(!act(s, { type: 'knightMove', pid: 0, from: path[1], to: path[3] }).ok, 'recién activado no actúa');
+  s.turn++;
+  ok(act(s, { type: 'knightMove', pid: 0, from: path[1], to: path[3] }).ok, 'se mueve por tus caminos');
+  ok(s.knights[path[3]] && !s.knights[path[1]], 'cambió de sitio');
+  ok(!s.knights[path[3]].active, 'tras actuar queda inactivo');
+});
+
+t('Ciudades y Caballeros: expulsar a un caballero más débil; su dueño lo recoloca', () => {
+  const s = ckMain();
+  const { path } = ckRoads(s);
+  // player 1 has a basic knight at the end of player 0's roads, and a road of its own to retreat along
+  Knights.recruit(s, 0, path[1]);
+  Knights.promote(s, 0, path[1]);
+  Knights.activate(s, path[1]);
+  s.turn++;
+  Knights.recruit(s, 1, path[3]);
+  const bd = s.board;
+  const out = bd.vertices[path[3]].edges.find(e => s.roads[e] === undefined && bd.edges[e].hexes.length);
+  s.roads[out] = 1;
+  ok(act(s, { type: 'knightDisplace', pid: 0, from: path[1], to: path[3] }).ok, 'expulsa');
+  eq(s.knights[path[3]].owner, 0, 'ocupa el cruce');
+  eq(s.phase, 'displace');
+  eq(G.pendingActors(s), [1], 'decide el dueño expulsado');
+  const dest = s.displaced.options[0];
+  ok(act(s, { type: 'placeDisplaced', pid: 1, at: dest }).ok, 'recoloca');
+  eq(s.knights[dest].owner, 1);
+  eq(s.phase, 'main');
+});
+
+t('Ciudades y Caballeros: el caballero rival corta tus caminos', () => {
+  const s = ckMain();
+  const { path, roads } = ckRoads(s);
+  const bd = s.board;
+  const next = bd.vertices[path[3]].edges.find(e => !roads.includes(e) && bd.edges[e].hexes.length && s.roads[e] === undefined);
+  ok(G.canBuildRoad(s, 0, next), 'antes se puede seguir');
+  Knights.recruit(s, 1, path[3]);
+  ok(!G.canBuildRoad(s, 0, next), 'un caballero rival bloquea el cruce');
+});
+
+t('Ciudades y Caballeros: un caballero activo junto al ladrón lo expulsa', () => {
+  const s = ckMain();
+  const tile = s.board.tiles.find(t => t.res !== 'desert' && t.num);
+  s.board.robber = tile.id;
+  const v = tile.verts[2];
+  s.roads[s.board.vertices[v].edges[0]] = 0;
+  Knights.recruit(s, 0, v);
+  Knights.activate(s, v);
+  s.turn++;
+  ok(act(s, { type: 'knightChase', pid: 0, from: v }).ok, 'expulsa al ladrón');
+  eq(s.phase, 'robber');
+  ok(!s.knights[v].active, 'el caballero queda inactivo');
 });
 
 console.log(`\n${pass} ok, ${failN} fallos`);

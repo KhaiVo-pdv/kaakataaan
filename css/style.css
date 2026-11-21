@@ -390,3 +390,8 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 .ck-pip.ab { outline: 2px dashed rgba(255,255,255,.35); } .ck-pip.mt { box-shadow: inset 0 -3px 0 #ffcd75; }
 .ck-pip.on { background: #ffcd75; color: #1a1c2c; }
 .ck-ability { color: var(--muted); } .ck-ability.got { color: #a7f070; }
+.ck-kopts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin: 10px 0; }
+.btn.ck-kopt { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 10px; height: auto; min-height: 64px; white-space: normal; line-height: 1.25; }
+.btn.ck-kopt > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.btn.ck-kopt .cost { position: static; display: block; }
+.btn.ck-kopt small { display: block; color: var(--muted); font-weight: 400; white-space: normal; }

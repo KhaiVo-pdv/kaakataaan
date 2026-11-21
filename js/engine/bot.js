@@ -11,6 +11,7 @@ import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
 import { cardsOf } from './citiesKnights/commodities.js';
 import * as Improve from './citiesKnights/improvements.js';
+import * as Knights from './citiesKnights/knights.js';
 
 const LEVELS = {
   easy: { noise: 1.6, trade: 0.2, dev: 0.4 },
@@ -289,6 +290,25 @@ function mainAction(s, pid) {
   if (s.metropolis) {
     const tr = bestImprovement(s, pid);
     if (tr) return { type: 'improve', pid, track: tr };
+    // knights: chase the robber off our tiles, recruit near our buildings, activate, promote
+    const robberHurtsUs = s.board.robber >= 0 && s.board.tiles[s.board.robber].verts.some(v => s.buildings[v] && s.buildings[v].owner === pid);
+    if (robberHurtsUs) {
+      const k = Knights.actors(s, pid).find(v => Knights.canChase(s, pid, v));
+      if (k !== undefined) return { type: 'knightChase', pid, from: k };
+    }
+    const mine = Knights.knightsOf(s, pid);
+    const cities = Object.values(s.buildings).filter(b => b.owner === pid && b.type === 'city').length;
+    if (mine.length < cities + 1 && canAfford(p.res, Knights.KNIGHT_COST)) {
+      const spotsK = Knights.legalRecruits(s, pid);
+      if (spotsK.length) {
+        const near = v => s.board.vertices[v].adj.filter(u => s.buildings[u] && s.buildings[u].owner === pid).length;
+        return { type: 'recruitKnight', pid, at: best(spotsK, v => near(v) + noise(s, v) * 0.5) };
+      }
+    }
+    const idle = Knights.legalActivations(s, pid);
+    if (idle.length && p.res.wheat >= 2) return { type: 'activateKnight', pid, at: idle[0] };
+    const promo = Knights.legalPromotions(s, pid);
+    if (promo.length && p.res.sheep >= 2 && p.res.ore >= 2) return { type: 'promoteKnight', pid, at: promo[0] };
     const walls = Improve.legalWalls(s, pid);
     if (walls.length && canAfford(p.res, Improve.WALL_COST) && handSize(p.res) >= s.config.rules.handLimit + Improve.wallBonus(s, pid) - 1)
       return { type: 'buildWall', pid, at: walls[0] };
@@ -411,6 +431,12 @@ export function botAct(real, pid) {
   const s = viewFor(real, pid); // in fog mode bots only know what they can see
   if (!pendingActors(s).includes(pid)) return null;
   if (s.phase === 'discard') return s.pendingDiscards[pid] ? discard(s, pid) : null;
+  if (s.phase === 'displace') {
+    // Cities & Knights: our knight was pushed away: put it back next to our buildings if we can
+    if (!s.displaced || s.displaced.pid !== pid) return null;
+    const near = v => s.board.vertices[v].adj.filter(u => s.buildings[u] && s.buildings[u].owner === pid).length;
+    return { type: 'placeDisplaced', pid, at: best(s.displaced.options, near) };
+  }
   if (s.phase === 'aqueduct') {
     // Cities & Knights Aqueduct: take the resource it has least of
     if (!s.pendingAqueduct[pid]) return null;
