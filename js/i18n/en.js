@@ -764,4 +764,7 @@ export default {
   "Antes: el barco llega junto a la niebla": "Before: the ship reaches the fog",
   "Después: la casilla se voltea, recibes 1 carta": "After: the tile turns over, you get 1 card",
   "📖 Reglas de Navegantes": "📖 Seafarers rules",
+  "Ciudades y Caballeros": "Cities & Knights",
+  "Mercancías, mejoras de ciudad, caballeros, bárbaros y cartas de progreso. Se juega a 13 puntos. (En construcción)": "Commodities, city improvements, knights, barbarians and progress cards. Played to 13 points. (Work in progress)",
+  "🏰 Expansión Ciudades y Caballeros activada (en construcción).": "🏰 Cities & Knights expansion on (work in progress).",
 };

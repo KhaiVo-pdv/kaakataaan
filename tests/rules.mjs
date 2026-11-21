@@ -2,7 +2,7 @@
 import * as G from '../js/engine/game.js';
 import { defaultConfig } from '../js/engine/config.js';
 import { botAct } from '../js/engine/bot.js';
-import { seafarersOn } from '../js/engine/expansions.js';
+import { seafarersOn, citiesKnightsOn, EXPANSIONS } from '../js/engine/expansions.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
@@ -430,7 +430,7 @@ function botGame(mut) {
 }
 
 t('expansiones: todas apagadas por defecto', () => {
-  eq(defaultConfig().expansions, { seafarers: false, scenario: 'newShores' });
+  eq(defaultConfig().expansions, { seafarers: false, citiesKnights: false, scenario: 'newShores' });
   ok(!seafarersOn(G.createGame(defaultConfig())), 'Navegantes apagado');
 });
 
@@ -439,7 +439,7 @@ t('expansiones: config antigua (sin bloque) = expansiones apagadas, partida idé
   const off = botGame(c => (c.expansions = { seafarers: false }));
   eq(off, legacy, 'misma partida');
   const s = G.createGame((() => { const c = defaultConfig(); delete c.expansions; return c; })());
-  eq(s.config.expansions, { seafarers: false, scenario: 'newShores' }, 'se rellena el bloque');
+  eq(s.config.expansions, { seafarers: false, citiesKnights: false, scenario: 'newShores' }, 'se rellena el bloque');
 });
 
 t('Navegantes: el interruptor llega al estado', () => {
@@ -824,6 +824,32 @@ t('Navegantes: Blindfold no levanta la niebla al voltear el tablero', () => {
   ok(s.phase !== 'setup', 'terminó la colocación');
   ok(s.board.tiles.filter(t => !t.fog).every(t => t.revealed), 'el resto se volteó');
   ok(s.board.tiles.some(t => t.fog && !t.revealed), 'la niebla sigue');
+});
+
+// ---------- Cities & Knights: switch ----------
+t('Ciudades y Caballeros: el interruptor llega al estado y propone 13 puntos', () => {
+  const c = defaultConfig();
+  EXPANSIONS.find(x => x.id === 'citiesKnights').set(c, true);
+  eq(c.rules.vpTarget, 13);
+  const s = G.createGame(c);
+  ok(citiesKnightsOn(s) && !seafarersOn(s), 'solo Ciudades y Caballeros');
+  ok(s.log.some(l => JSON.stringify(l).includes('Ciudades y Caballeros')), 'aviso en el historial');
+  EXPANSIONS.find(x => x.id === 'citiesKnights').set(c, false);
+  eq(c.rules.vpTarget, 10, 'apagado vuelve a 10');
+});
+
+t('expansiones: solo una a la vez', () => {
+  const c = defaultConfig();
+  const sf = EXPANSIONS.find(x => x.id === 'seafarers'), ck = EXPANSIONS.find(x => x.id === 'citiesKnights');
+  sf.set(c, true);
+  ck.set(c, true);
+  ok(c.expansions.citiesKnights && !c.expansions.seafarers, 'encender una apaga la otra');
+  sf.set(c, true);
+  ok(c.expansions.seafarers && !c.expansions.citiesKnights, 'y al revés');
+  const both = defaultConfig();
+  both.expansions = { seafarers: true, citiesKnights: true, scenario: 'newShores' };
+  const s = G.createGame(both);
+  ok(seafarersOn(s) && !citiesKnightsOn(s), 'una config con las dos se queda con Navegantes');
 });
 
 console.log(`\n${pass} ok, ${failN} fallos`);

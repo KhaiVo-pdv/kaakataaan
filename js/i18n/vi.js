@@ -763,4 +763,7 @@ export default {
   "Antes: el barco llega junto a la niebla": "Trước: tàu tới cạnh vùng sương",
   "Después: la casilla se voltea, recibes 1 carta": "Sau: ô lật lên, nhận 1 lá",
   "📖 Reglas de Navegantes": "📖 Luật Navegantes",
+  "Ciudades y Caballeros": "Thành phố & Hiệp sĩ",
+  "Mercancías, mejoras de ciudad, caballeros, bárbaros y cartas de progreso. Se juega a 13 puntos. (En construcción)": "Hàng hoá, nâng cấp thành phố, hiệp sĩ, quân man rợ và thẻ tiến bộ. Chơi tới 13 điểm. (Đang xây dựng)",
+  "🏰 Expansión Ciudades y Caballeros activada (en construcción).": "🏰 Đã bật bản mở rộng Thành phố & Hiệp sĩ (đang xây dựng).",
 };

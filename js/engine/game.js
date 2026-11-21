@@ -3,7 +3,7 @@
 import { RES, COSTS, DEV_DECKS, EVENTS, TILE_INFO, DEV_INFO } from './constants.js';
 import { rand, randInt, shuffle, pick } from './rng.js';
 import { generateBoard } from './board.js';
-import { normalizeExpansions, seafarersOn } from './expansions.js';
+import { normalizeExpansions, seafarersOn, citiesKnightsOn } from './expansions.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -133,6 +133,7 @@ export function createGame(configIn) {
   if (M.blindfold) log(s, '🤫 Casas secretas: nadie ve dónde pones hasta la revelación.');
   if (M.fog) log(s, '🌑 Niebla de guerra: solo ves lo que rodea a tus piezas.');
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
+  if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada (en construcción).');
   return s;
 }
 
