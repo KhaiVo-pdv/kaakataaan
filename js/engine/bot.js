@@ -4,7 +4,7 @@ import { RES, COSTS, pips } from './constants.js';
 import {
   canAfford, handSize, victoryPoints, tradeRatio, playableDev, pendingActors,
   legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities,
-  legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets,
+  legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets, playableProgress,
 } from './game.js';
 import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
@@ -13,6 +13,7 @@ import { cardsOf } from './citiesKnights/commodities.js';
 import * as Improve from './citiesKnights/improvements.js';
 import { PROGRESS_TRACKS } from './citiesKnights/progress.js';
 import * as Knights from './citiesKnights/knights.js';
+import * as Science from './citiesKnights/science.js';
 
 const LEVELS = {
   easy: { noise: 1.6, trade: 0.2, dev: 0.4 },
@@ -262,6 +263,64 @@ function tryDevPlay(s, pid) {
   return null;
 }
 
+// ---- Cities & Knights science progress cards ----
+// how much a roll of `sum` gives us (cities count double)
+function sumValue(s, pid, sum) {
+  let v = 0;
+  for (const k in s.buildings) {
+    const b = s.buildings[k];
+    if (b.owner !== pid) continue;
+    for (const h of s.board.vertices[k].hexes) {
+      const t = s.board.tiles[h];
+      if (t.num === sum && t.id !== s.board.robber) v += (b.type === 'city' ? 2 : 1) * (RES_W[t.res] || 1);
+    }
+  }
+  return v;
+}
+
+function alchemist(s, pid) {
+  const p = s.players[pid];
+  if (!p.progress || !p.progress.includes('alchemist')) return null;
+  const sums = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
+  const sum = best(sums, n => sumValue(s, pid, n) + noise(s, n) * 0.1);
+  if (!sum || sumValue(s, pid, sum) < 2) return null;
+  const red = Math.max(1, Math.min(6, sum - 1)); // a high red die gives the rivals fewer progress cards
+  return { type: 'playProgress', pid, card: 'alchemist', dice: [sum - red, red] };
+}
+
+function tryProgressPlay(s, pid) {
+  const p = s.players[pid];
+  if (!p.progress || !p.progress.length) return null;
+  const can = new Set(playableProgress(s, pid));
+  const play = (card, extra = {}) => ({ type: 'playProgress', pid, card, ...extra });
+  for (const card of ['irrigation', 'mining']) if (can.has(card) && Science.harvestGain(s, pid, card) >= 2) return play(card);
+  if (can.has('engineer')) return play('engineer', { at: Science.engineerSpots(s, pid)[0] });
+  if (can.has('medicine')) {
+    const prod = production(s, pid);
+    return play('medicine', { at: best(legalCities(s, pid), v => vertexScore(s, pid, v, prod)) });
+  }
+  if (can.has('smith')) {
+    const list = Knights.legalPromotions(s, pid).slice(0, 2);
+    const two = list.length === 2 && !Science.smithBlock(s, pid, list);
+    return play('smith', { knights: two ? list : list.slice(0, 1) });
+  }
+  if (can.has('roadBuilding') && p.roadsLeft >= 2) return play('roadBuilding');
+  if (can.has('crane') && !Improve.craneOn(s, pid)) {
+    // only when the discount makes an improvement affordable now
+    const helps = Improve.TRACKS.some(tr => !Improve.improveBlock(s, pid, tr) && !canAfford(p.res, Improve.improveCost(s, pid, tr)) && (p.res[Improve.TRACK_COMMODITY[tr]] || 0) >= p.improve[tr]);
+    if (helps) return play('crane');
+  }
+  if (can.has('inventor')) {
+    // give our best spot a better number: swap our weakest swappable token with the best one nobody of us has
+    const ok = Science.inventorTiles(s);
+    const ours = t => s.board.tiles[t].verts.some(v => s.buildings[v] && s.buildings[v].owner === pid);
+    const mine = ok.filter(ours), other = ok.filter(t => !ours(t));
+    const lo = best(mine, t => -pips(s.board.tiles[t].num)), hi = best(other, t => pips(s.board.tiles[t].num));
+    if (lo != null && hi != null && pips(s.board.tiles[hi].num) > pips(s.board.tiles[lo].num)) return play('inventor', { tiles: [lo, hi] });
+  }
+  return null;
+}
+
 function mainAction(s, pid) {
   const p = s.players[pid];
   const L = lvl(s, pid);
@@ -276,6 +335,8 @@ function mainAction(s, pid) {
 
   const dev = tryDevPlay(s, pid);
   if (dev) return dev;
+  const prog = tryProgressPlay(s, pid); // Cities & Knights
+  if (prog) return prog;
 
   if (p.citiesLeft > 0 && canAfford(p.res, COSTS.city)) {
     const prod = production(s, pid);
@@ -480,6 +541,8 @@ export function botAct(real, pid) {
   if (s.current !== pid) return null;
   switch (s.phase) {
     case 'roll': {
+      const alch = alchemist(s, pid); // C&K: choose our best number
+      if (alch) return alch;
       const dev = tryDevPlay(s, pid);
       return dev && dev.card === 'knight' ? dev : { type: 'roll', pid };
     }

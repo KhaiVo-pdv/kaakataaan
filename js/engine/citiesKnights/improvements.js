@@ -49,7 +49,9 @@ const citiesOf = (s, pid) => Object.keys(s.buildings).map(Number).filter(v => s.
 const metroAt = (s, v) => TRACKS.some(t => s.metropolis[t] && s.metropolis[t].at === v);
 export const freeCities = (s, pid) => citiesOf(s, pid).filter(v => !metroAt(s, v));
 export const hasAbility = (s, pid, track) => !!(s.players[pid].improve && s.players[pid].improve[track] >= ABILITY_LEVEL);
-export const improveCost = (s, pid, track) => ({ [TRACK_COMMODITY[track]]: s.players[pid].improve[track] + 1 });
+// Crane (science progress card): this turn's next improvement costs 1 commodity less
+export const craneOn = (s, pid) => s.players[pid].craneTurn === s.turn;
+export const improveCost = (s, pid, track) => ({ [TRACK_COMMODITY[track]]: Math.max(0, s.players[pid].improve[track] + 1 - (craneOn(s, pid) ? 1 : 0)) });
 
 // Why `pid` can't buy the next level of `track` ('' = they can, apart from paying)
 export function improveBlock(s, pid, track) {

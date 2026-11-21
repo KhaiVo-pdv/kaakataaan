@@ -629,6 +629,7 @@ function interaction(real, v) {
   const sea = Sea.seaInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (sea !== undefined) return sea;
   const ck = CK.ckInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a) }) // Cities & Knights: wall / metropolis city
+    ?? CK.progressInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), legalCities: G.legalCities })
     ?? CK.knightInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (ck !== undefined) return ck;
   if (st.phase === 'setup') {
@@ -700,7 +701,7 @@ function bannerText(st, v, inter) {
   if (st.phase === 'roadBuilding' && inter && inter.kind === 'ship') return Sea.seaBanner(st, v, ui, inter);
   if (st.phase === 'roadBuilding') return st.freeRoads > 1 ? t('🛤️ Coloca {n} caminos gratis', { n: st.freeRoads }) : t('🛤️ Coloca {n} camino gratis', { n: st.freeRoads });
   if (st.phase === 'roll') return t('🎲 ¡Tu turno! Tira los dados');
-  const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter) || CK.knightBanner(st, v, ui, inter);
+  const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter) || CK.progressBanner(st, ui, inter) || CK.knightBanner(st, v, ui, inter);
   if (seaTxt) return seaTxt;
   if (inter) return { road: t('Elige dónde construir el camino (Esc para cancelar)'), settlement: t('Elige dónde construir el poblado (Esc para cancelar)'), city: t('Elige qué poblado mejorar (Esc para cancelar)') }[inter.kind];
   return '';
@@ -814,7 +815,7 @@ function fillActions(bar, st, v, locked) {
   bar.append(h('div', { class: 'hand' }, CK.cardList(st).map(r => resCard(r, p.res[r], bump.has(r)))));
   bar.append(h('button', { class: 'btn emote-toggle', title: t('Reaccionar con un emoji'), onclick: e => { e.stopPropagation(); toggleEmotes(e.currentTarget); } }, '😀'));
   bar.append(adhdButton());
-  const ph = CK.progressHand(st, v, h, { open: () => openProgress(v) }); // Cities & Knights
+  const ph = CK.progressHand(st, v, h, { open: () => openProgress(v), playable: G.playableProgress(st, v) }); // Cities & Knights
   if (ph) bar.append(ph);
 
   const playable = new Set(st.current === v ? G.playableDev(st, v) : []);
@@ -905,6 +906,7 @@ function fillActions(bar, st, v, locked) {
     ...Sea.seaButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }),
     ...CK.ckButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openImprove: () => openImprove(v) }),
     ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a) }),
+    ...CK.progressButtons(st, v, ui, { h, dispatch: a => App.dispatch(a) }),
     CK.hasCK(st) ? '' : h('button', {
       class: 'btn', disabled: !st.devDeck.length || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
@@ -1135,7 +1137,18 @@ let modalSeq = 0;
 // Cities & Knights knights panel
 // Cities & Knights progress cards in your hand
 function openProgress(v) {
-  openModal(() => CK.progressModal(App.state, v, { h, close: closeModal }));
+  openModal(() => CK.progressModal(App.state, v, {
+    h, close: closeModal, playable: G.playableProgress(App.state, v),
+    play: id => {
+      closeModal();
+      CK.startProgress(App.state, v, id, ui, { dispatch: a => App.dispatch(a), rerender: () => render(App.state), openDice: () => openAlchemist(v) });
+    },
+  }));
+}
+
+function openAlchemist(v) {
+  ui.alch = null;
+  openModal(() => CK.alchemistModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, rerender: () => render(App.state) }));
 }
 
 function openKnights(v) {

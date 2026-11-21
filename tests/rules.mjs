@@ -9,6 +9,7 @@ import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
 import * as Knights from '../js/engine/citiesKnights/knights.js';
 import * as Progress from '../js/engine/citiesKnights/progress.js';
+import * as Science from '../js/engine/citiesKnights/science.js';
 import { seaTileEdges } from '../js/engine/seafarers/pirate.js';
 
 let pass = 0, failN = 0;
@@ -1358,6 +1359,116 @@ t('Progreso: empate de defensores: cada uno elige un mazo y roba', () => {
   eq(s.players[1].progress.length + s.players[1].progressVP, 1);
   ok(s.phase !== 'progressPick', 'la tirada sigue');
 });
+
+// ---- Cities & Knights science progress cards ----
+const handSizeOf = (s, pid) => G.handSize(s.players[pid].res);
+const withCard = (s, id, pid = 0) => {
+  s.players[pid].progress.push(id);
+  return s;
+};
+const played = (s, id, pid = 0) => !s.players[pid].progress.includes(id) && s.progress[Progress.PROGRESS_CARDS[id].track][0] === id;
+
+t('Ciencia: alquimista antes de tirar elige los dados de números', () => {
+  const s = withCard(ckMain(), 'alchemist');
+  s.phase = 'main';
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'alchemist', dice: [3, 5] }).ok, 'después de tirar no');
+  s.phase = 'roll';
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'alchemist', dice: [0, 5] }).ok, 'dados del 1 al 6');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'alchemist', dice: [3, 5] }).ok);
+  eq(s.dice, [3, 5]);
+  ok(played(s, 'alchemist'), 'vuelve bajo su mazo');
+  ok(s.phase !== 'roll', 'la tirada ya está hecha');
+});
+
+t('Ciencia: inventor intercambia dos fichas (ni 2, 12, 6 ni 8)', () => {
+  const s = withCard(ckMain(), 'inventor');
+  const [a, b] = s.board.tiles.filter(t => [3, 4, 5, 9, 10, 11].includes(t.num) && t.num !== 0);
+  const six = s.board.tiles.find(t => t.num === 6);
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'inventor', tiles: [a.id, six.id] }).ok, 'el 6 no se mueve');
+  eq(s.players[0].progress, ['inventor'], 'un fallo no gasta la carta');
+  const na = a.num, nb = b.num;
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'inventor', tiles: [a.id, b.id] }).ok);
+  eq([a.num, b.num], [nb, na]);
+});
+
+t('Ciencia: grúa abarata en 1 mercancía la siguiente mejora de este turno', () => {
+  const s = withCard(ckMain(), 'crane');
+  const v = cornerOf(s, 'wheat');
+  s.buildings[v] = { owner: 0, type: 'city' };
+  s.players[0].improve.science = 1;
+  eq(Improve.improveCost(s, 0, 'science'), { paper: 2 });
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'crane' }).ok);
+  eq(Improve.improveCost(s, 0, 'science'), { paper: 1 });
+  give(s, 0, { paper: 1 });
+  ok(act(s, { type: 'improve', pid: 0, track: 'science' }).ok);
+  eq(s.players[0].res.paper, 0);
+  eq(Improve.improveCost(s, 0, 'science'), { paper: 3 }, 'solo una vez');
+});
+
+t('Ciencia: ingeniero construye una muralla gratis', () => {
+  const s = withCard(ckMain(), 'engineer');
+  ok(!G.playableProgress(s, 0).includes('engineer'), 'sin ciudad no se puede');
+  const v = cornerOf(s, 'wheat');
+  s.buildings[v] = { owner: 0, type: 'city' };
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'engineer', at: v }).ok);
+  eq(s.walls[v], 0);
+  eq(s.players[0].wallsLeft, 2);
+});
+
+t('Ciencia: irrigación y minería dan 2 por cada casilla junto a ti', () => {
+  for (const [card, res] of [['irrigation', 'wheat'], ['mining', 'ore']]) {
+    const s = withCard(ckMain(), card);
+    const tile = s.board.tiles.find(t => t.res === res);
+    s.buildings[tile.verts[0]] = { owner: 0, type: 'settlement' };
+    s.buildings[tile.verts[3]] = { owner: 0, type: 'city' }; // same tile twice still counts once
+    const n = Science.tilesNextToYou(s, 0, res).length;
+    ok(n >= 1);
+    const before = s.players[0].res[res];
+    ok(act(s, { type: 'playProgress', pid: 0, card }).ok, card);
+    eq(s.players[0].res[res] - before, 2 * n, card);
+  }
+});
+
+t('Ciencia: medicina mejora a ciudad por 2 minerales y 1 cereal', () => {
+  const s = withCard(ckMain(), 'medicine');
+  const v = cornerOf(s, 'wheat');
+  s.buildings[v] = { owner: 0, type: 'settlement' };
+  s.players[0].settlementsLeft--;
+  give(s, 0, { ore: 2, wheat: 1 });
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'medicine', at: v }).ok);
+  eq(s.buildings[v].type, 'city');
+  eq(s.players[0].res.ore + s.players[0].res.wheat, 0);
+});
+
+t('Ciencia: construcción de caminos da 2 caminos gratis', () => {
+  const s = withCard(ckMain(), 'roadBuilding');
+  ckRoads(s);
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'roadBuilding' }).ok);
+  eq(s.phase, 'roadBuilding');
+  eq(s.freeRoads, 2);
+});
+
+t('Ciencia: herrero asciende gratis hasta 2 caballeros', () => {
+  const s = withCard(ckMain(), 'smith');
+  const { path } = ckRoads(s);
+  Knights.recruit(s, 0, path[1]);
+  Knights.recruit(s, 0, path[3]);
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'smith', knights: [path[1], path[1]] }).ok, 'distintos');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'smith', knights: [path[1], path[3]] }).ok);
+  eq([s.knights[path[1]].level, s.knights[path[3]].level], [2, 2]);
+  eq(handSizeOf(s, 0), 0, 'gratis');
+});
+
+t('Progreso: no se juega fuera de tu turno ni antes de tirar (salvo el alquimista)', () => {
+  const s = withCard(ckMain(), 'crane');
+  s.phase = 'roll';
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'crane' }).ok, 'antes de tirar no');
+  s.phase = 'main';
+  s.players[1].progress.push('crane');
+  ok(!act(s, { type: 'playProgress', pid: 1, card: 'crane' }).ok, 'fuera de turno no');
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'bishop' }).ok, 'solo cartas de tu mano');
+});
+
 
 
 

@@ -208,7 +208,7 @@ export class BoardView {
       const gR = S('g', { class: 'hot-tiles' });
       for (const id of legal) {
         const t = bd.tiles[id];
-        gR.append(S('polygon', { points: hexPoints(t.x * U, t.y * U, U * 0.9), class: 'hot-tile', onclick: e => pick(id, e) }));
+        gR.append(S('polygon', { points: hexPoints(t.x * U, t.y * U, U * 0.9), class: 'hot-tile', 'data-spot': 't' + id, onclick: e => pick(id, e) }));
       }
       svg.append(gR);
     }

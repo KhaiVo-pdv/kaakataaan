@@ -12,6 +12,7 @@ import * as Improve from './citiesKnights/improvements.js';
 import * as Knights from './citiesKnights/knights.js';
 import * as Barb from './citiesKnights/barbarians.js';
 import * as Progress from './citiesKnights/progress.js';
+import * as Science from './citiesKnights/science.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
 // every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
@@ -937,7 +938,8 @@ H.moveShip = (s, a) => {
 H.roll = (s, a) => {
   if (s.phase !== 'roll') fail('Ahora no se tiran dados.');
   if (a.pid !== s.current) fail('No es tu turno.');
-  const d = rollDice(s);
+  const d = s.alchemy || rollDice(s); // C&K Alchemist: the player chose the number dice
+  delete s.alchemy;
   const sum = d[0] + d[1];
   s.dice = d;
   // Cities & Knights: the event die rolls along (its effects come with barbarians / progress cards)
@@ -1071,6 +1073,112 @@ H.progressDiscard = (s, a) => {
   resumeRoll(s);
 };
 
+// ---- Cities & Knights progress cards: playing them ----
+// marks a text for the translation extractor (tools/i18n.mjs); fail() translates it where it is shown
+const tk = x => x;
+// which cards in a hand can be played right now (each needs a legal target)
+export function playableProgress(s, pid) {
+  const p = s.players[pid];
+  if (!p.progress || pid !== s.current) return [];
+  return [...new Set(p.progress)].filter(id => !progressBlock(s, pid, id));
+}
+
+// why a card can't be played now ('' = it can, given a target)
+function progressBlock(s, pid, id) {
+  const p = s.players[pid];
+  const when = id === 'alchemist' ? 'roll' : 'main';
+  if (s.phase !== when) return id === 'alchemist' ? tk('El alquimista se juega antes de tirar.') : tk('Las cartas de progreso se juegan después de tirar.');
+  switch (id) {
+    case 'alchemist': case 'crane': return '';
+    case 'inventor': return Science.inventorTiles(s).length >= 2 ? '' : tk('No hay fichas que intercambiar.');
+    case 'engineer': return Science.engineerSpots(s, pid).length ? '' : tk('No tienes ciudades sin muralla.');
+    case 'irrigation': case 'mining': return Science.harvestGain(s, pid, id) ? '' : tk('No ganarías nada.');
+    case 'medicine': return p.citiesLeft > 0 && legalCities(s, pid).length && canAfford(p.res, Science.MEDICINE_COST) ? '' : tk('Necesitas un poblado, una ciudad libre, 2 minerales y 1 cereal.');
+    case 'roadBuilding': return p.roadsLeft > 0 && legalRoads(s, pid).length ? '' : tk('No puedes construir caminos.');
+    case 'smith': return Knights.legalPromotions(s, pid).length ? '' : tk('No tienes caballeros que ascender.');
+    default: return tk('Esta carta aún no se puede jugar.');
+  }
+}
+
+H.playProgress = (s, a) => {
+  if (!s.progress) fail('Esta partida no usa cartas de progreso.');
+  if (a.pid !== s.current) fail('No es tu turno.');
+  const p = s.players[a.pid];
+  const id = a.card;
+  if (!p.progress.includes(id)) fail('No tienes esa carta.');
+  const block = progressBlock(s, a.pid, id);
+  if (block) fail(block);
+  const c = Progress.PROGRESS_CARDS[id];
+  // 1) check the targets (nothing changes until everything is valid)
+  const dice = id === 'alchemist' ? (a.dice || []).map(Number) : null;
+  if (dice && (dice.length !== 2 || !dice.every(n => Number.isInteger(n) && n >= 1 && n <= 6))) fail('Elige dos dados del 1 al 6.');
+  if (id === 'inventor') {
+    const ok = Science.inventorTiles(s);
+    if (!Array.isArray(a.tiles) || a.tiles.length !== 2 || a.tiles[0] === a.tiles[1] || !a.tiles.every(t => ok.includes(t))) fail('Elige dos fichas distintas (ni 2, 12, 6 ni 8).');
+  }
+  if (id === 'engineer' && !Science.engineerSpots(s, a.pid).includes(a.at)) fail('La muralla va bajo una de tus ciudades sin muralla.');
+  if (id === 'medicine' && !canBuildCity(s, a.pid, a.at)) fail('Solo puedes mejorar tus poblados.');
+  if (id === 'smith') {
+    const why = Science.smithBlock(s, a.pid, a.knights);
+    if (why) fail(why);
+  }
+  // 2) the card leaves the hand and goes under its deck
+  p.progress.splice(p.progress.indexOf(id), 1);
+  s.progress[c.track].unshift(id);
+  log(s, msg('{icon} @{p} juega {card}.', { icon: c.icon, p: a.pid, card: c.name }), a.pid);
+  s.fx.push({ kind: 'progressPlay', pid: a.pid, id });
+  s.progressPlayed = (s.progressPlayed || 0) + 1;
+  // 3) the effect
+  switch (id) {
+    case 'alchemist':
+      s.alchemy = dice;
+      H.roll(s, { type: 'roll', pid: a.pid });
+      break;
+    case 'inventor': {
+      const [x, y] = a.tiles.map(t => s.board.tiles[t]);
+      [x.num, y.num] = [y.num, x.num];
+      [x.numRevealed, y.numRevealed] = [y.numRevealed, x.numRevealed];
+      log(s, msg('💡 Se intercambian el {a} y el {b}.', { a: y.num, b: x.num }));
+      s.fx.push({ kind: 'inventor', tiles: a.tiles });
+      break;
+    }
+    case 'crane':
+      p.craneTurn = s.turn;
+      break;
+    case 'engineer':
+      s.walls[a.at] = a.pid;
+      p.wallsLeft--;
+      s.fx.push({ kind: 'build', what: 'wall', pid: a.pid, at: a.at });
+      break;
+    case 'irrigation':
+    case 'mining': {
+      const res = Science.HARVEST[id];
+      const n = Science.harvestGain(s, a.pid, id);
+      giveFromBank(s, a.pid, res, n);
+      s.fx.push({ kind: 'fromBank', pid: a.pid, res: Array(n).fill(res) });
+      log(s, msg('{icon} @{p} recibe {n} {res}.', { icon: c.icon, p: a.pid, n, res: TILE_INFO[res].name }), a.pid);
+      break;
+    }
+    case 'medicine':
+      pay(s, a.pid, Science.MEDICINE_COST);
+      p.citiesLeft--;
+      p.settlementsLeft++;
+      s.buildings[a.at].type = 'city';
+      s.fx.push({ kind: 'build', what: 'city', pid: a.pid, at: a.at });
+      break;
+    case 'roadBuilding':
+      s.freeRoads = Math.min(2, p.roadsLeft);
+      s.phase = 'roadBuilding';
+      break;
+    case 'smith':
+      for (const v of a.knights) {
+        Knights.promote(s, a.pid, v);
+        s.fx.push({ kind: 'knight', pid: a.pid, at: v });
+      }
+      break;
+  }
+};
+
 H.discard = (s, a) => {
   if (s.phase !== 'discard') fail('No hay descartes pendientes.');
   const need = s.pendingDiscards[a.pid];
@@ -1146,6 +1254,7 @@ H.improve = (s, a) => {
   ckOnly(s);
   assertMain(s, a);
   const r = Improve.improve(s, a.pid, a.track, a.at, { fail, pay: cost => pay(s, a.pid, cost), canAfford });
+  if (Improve.craneOn(s, a.pid)) s.players[a.pid].craneTurn = -1; // the crane discount is used up
   const info = Improve.TRACK_INFO[a.track];
   log(s, msg('{icon} @{p} mejora {track} a nivel {n}.', { icon: info.icon, p: a.pid, track: info.name, n: r.level }), a.pid);
   s.fx.push({ kind: 'improve', pid: a.pid, track: a.track, level: r.level });

@@ -411,3 +411,6 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 /* Cities & Knights progress cards */
 .btn.pcard-opt { padding-left: 14px; }
 .pdeck { font-weight: 700; }
+.alch-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.alch-row b { min-width: 110px; }
+.dcard.progcard.playable { outline: 3px solid #ffd36a; }

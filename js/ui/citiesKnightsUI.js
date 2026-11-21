@@ -5,6 +5,7 @@ import * as Improve from '../engine/citiesKnights/improvements.js';
 import * as Knights from '../engine/citiesKnights/knights.js';
 import * as Barb from '../engine/citiesKnights/barbarians.js';
 import * as Progress from '../engine/citiesKnights/progress.js';
+import * as Science from '../engine/citiesKnights/science.js';
 import { COMMODITIES, GATE_INFO, cardsOf } from '../engine/citiesKnights/commodities.js';
 import { t } from '../i18n.js';
 
@@ -269,25 +270,30 @@ export const progressName = id => t(Progress.PROGRESS_CARDS[id].name);
 const trackName = tr => t(Improve.TRACK_INFO[tr].name);
 
 // the cards in your hand, next to the resource cards (they can't be played yet: steps 5b-5d)
-export function progressHand(st, v, h, { open }) {
+export function progressHand(st, v, h, { open, playable = [] }) {
   if (!hasCK(st) || !st.progress) return null;
   const p = st.players[v];
   if (!p.progress.length) return null;
   return h('div', { class: 'devcards progress-hand', 'data-testid': 'progress-hand' }, p.progress.map(id => {
     const c = Progress.PROGRESS_CARDS[id];
-    return h('div', { class: 'dcard pcard', style: { boxShadow: `inset 0 -6px 0 ${PROGRESS_COLOR[c.track]}` }, title: `${t(c.name)}: ${t(c.desc)}`, onclick: () => open() }, c.icon);
+    return h('div', { class: 'dcard progcard' + (playable.includes(id) ? ' playable' : ''), style: { boxShadow: `inset 0 -6px 0 ${PROGRESS_COLOR[c.track]}` }, title: `${t(c.name)}: ${t(c.desc)}`, onclick: () => open() }, c.icon);
   }));
 }
 
 // the list of your progress cards with what each one does
-export function progressModal(st, v, { h, close }) {
+export function progressModal(st, v, { h, close, playable = [], play }) {
   const p = st.players[v];
+  const soon = id => Progress.PROGRESS_CARDS[id].track !== 'science';
   return h('div', null,
     h('h2', null, t('📜 Cartas de progreso')),
     h('p', null, t('Máximo {n} en la mano. Las cartas de punto se revelan al robarlas.', { n: Progress.PROGRESS_HAND })),
-    h('div', { class: 'ck-kopts' }, p.progress.map(id => progressCard(id, h))),
+    h('div', { class: 'ck-kopts' }, p.progress.map((id, i) => progressCard(id, h, {
+      disabled: !playable.includes(id), 'data-testid': 'pplay-' + id,
+      title: playable.includes(id) ? t('Jugar') : soon(id) ? t('Pronto se podrán jugar.') : id === 'alchemist' ? t('El alquimista se juega antes de tirar.') : t('Ahora no se puede jugar.'),
+      onclick: () => play(id),
+    }))),
     p.progressVP ? h('p', null, t('🏆 Puntos por cartas reveladas: {n}', { n: p.progressVP })) : null,
-    h('p', { class: 'muted' }, t('Pronto se podrán jugar.')),
+    p.progress.some(soon) ? h('p', { class: 'muted' }, t('Las cartas de comercio y política se podrán jugar pronto.')) : null,
     h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: close }, t('Cerrar'))));
 }
 
@@ -344,7 +350,88 @@ export function progressDecks(st, h) {
 
 export function progressDescribe(a) {
   if (!a) return undefined;
+  if (a.type === 'playProgress') return t('{icon} Juega {card}.', { icon: Progress.PROGRESS_CARDS[a.card].icon, card: progressName(a.card) });
   if (a.type === 'progressPick') return t('📜 Roba del mazo {track}.', { track: trackName(a.track) });
   if (a.type === 'progressDiscard') return t('🗑️ Descarta {card}.', { card: progressName(a.card) });
   return undefined;
+}
+
+// ---------- playing progress cards (science) ----------
+// ui.pick: 'prog:inventor' | 'prog:engineer' | 'prog:medicine' | 'prog:smith'; ui.progSel = chosen ids
+const PICK_CARDS = ['inventor', 'engineer', 'medicine', 'smith'];
+
+// start playing a card: direct ones go at once, the others ask for a target first
+export function startProgress(st, v, id, ui, { dispatch, rerender, openDice }) {
+  if (id === 'alchemist') return openDice();
+  if (PICK_CARDS.includes(id)) {
+    ui.pick = 'prog:' + id;
+    ui.progSel = [];
+    return rerender();
+  }
+  dispatch({ type: 'playProgress', pid: v, card: id });
+}
+
+export function progressInteraction(st, v, ui, { mk, dispatch, rerender, legalCities }) {
+  if (!hasCK(st) || st.current !== v || st.phase !== 'main' || !ui.pick || !ui.pick.startsWith('prog:')) return undefined;
+  const id = ui.pick.slice(5);
+  const sel = (ui.progSel ||= []);
+  const done = a => {
+    ui.pick = null;
+    ui.progSel = [];
+    dispatch({ type: 'playProgress', pid: v, card: id, ...a });
+  };
+  if (id === 'inventor')
+    return mk('robber', Science.inventorTiles(st).filter(x => !sel.includes(x)), tile => {
+      sel.push(tile);
+      if (sel.length === 2) done({ tiles: [...sel] });
+      else rerender();
+    });
+  if (id === 'engineer') return mk('city', Science.engineerSpots(st, v), at => done({ at }));
+  if (id === 'medicine') return mk('city', legalCities(st, v), at => done({ at }));
+  if (id === 'smith')
+    return mk('settlement', Knights.legalPromotions(st, v).filter(x => !sel.includes(x) && !Science.smithBlock(st, v, [...sel, x])), k => {
+      sel.push(k);
+      if (sel.length === Science.SMITH_FREE) done({ knights: [...sel] });
+      else rerender();
+    });
+  return undefined;
+}
+
+export function progressBanner(st, ui, inter) {
+  if (!hasCK(st) || !inter || !ui.pick || !ui.pick.startsWith('prog:')) return '';
+  const n = (ui.progSel || []).length;
+  return {
+    inventor: n ? t('💡 Elige la segunda ficha (Esc para cancelar)') : t('💡 Elige la primera ficha a intercambiar (ni 2, 12, 6 ni 8)'),
+    engineer: t('📐 Elige la ciudad de la muralla gratis (Esc para cancelar)'),
+    medicine: t('💊 Elige el poblado que pasa a ciudad (Esc para cancelar)'),
+    smith: n ? t('🔨 Elige otro caballero o pulsa Listo') : t('🔨 Elige hasta 2 caballeros para ascender gratis (Esc para cancelar)'),
+  }[ui.pick.slice(5)] || '';
+}
+
+// smith with one knight chosen: finish without a second one
+export function progressButtons(st, v, ui, { h, dispatch }) {
+  if (!hasCK(st) || ui.pick !== 'prog:smith' || !(ui.progSel || []).length) return [];
+  return [h('button', { class: 'btn green', 'data-testid': 'smith-done', onclick: e => {
+    e.stopPropagation();
+    const knights = [...ui.progSel];
+    ui.pick = null;
+    ui.progSel = [];
+    dispatch({ type: 'playProgress', pid: v, card: 'smith', knights });
+  } }, t('✔️ Listo'))];
+}
+
+// Alchemist: pick both number dice (the event die is still rolled)
+export function alchemistModal(st, v, ui, { h, dispatch, close, rerender }) {
+  const d = (ui.alch ||= [3, 4]);
+  const row = (i, label) => h('div', { class: 'alch-row' }, h('b', null, label), [1, 2, 3, 4, 5, 6].map(n => h('button', {
+    class: 'btn sm' + (d[i] === n ? ' active' : ''), 'data-testid': `alch-${i}-${n}`, onclick: () => { d[i] = n; rerender(); },
+  }, String(n))));
+  return h('div', null,
+    h('h2', null, t('⚗️ Alquimista')),
+    h('p', null, t('Elige qué sale en los dados de números. El dado de evento se tira normal.')),
+    row(0, t('Dado blanco')), row(1, t('Dado rojo')),
+    h('p', null, t('Total: {n}', { n: d[0] + d[1] })),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn ghost', onclick: close }, t('Cancelar')),
+      h('button', { class: 'btn primary', 'data-testid': 'alch-go', onclick: () => { close(); dispatch({ type: 'playProgress', pid: v, card: 'alchemist', dice: [...d] }); } }, t('⚗️ Tirar así'))));
 }
