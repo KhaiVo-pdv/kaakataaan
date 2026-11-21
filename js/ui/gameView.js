@@ -18,7 +18,7 @@ let ui = null;
 
 const PHASE_TEXT = {
   setup: tk('Colocación inicial'), roll: tk('Tirar dados'), main: tk('Construir y comerciar'), discard: tk('Descartar'),
-  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), harbor: tk('Puerto comercial'), displace: tk('Recolocar caballero'),
+  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), harbor: tk('Puerto comercial'), wedding: tk('Boda'), deserter: tk('Desertor'), deserterPlace: tk('Desertor'), displace: tk('Recolocar caballero'),
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -629,7 +629,7 @@ function interaction(real, v) {
   const sea = Sea.seaInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (sea !== undefined) return sea;
   const ck = CK.ckInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a) }) // Cities & Knights: wall / metropolis city
-    ?? CK.progressInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), legalCities: G.legalCities })
+    ?? CK.progressInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), legalCities: G.legalCities, legalRoads: G.legalRoads })
     ?? CK.knightInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (ck !== undefined) return ck;
   if (st.phase === 'setup') {
@@ -658,7 +658,7 @@ function interaction(real, v) {
 
 function robberPick(st, v, tile) {
   const victims = G.stealTargets(G.viewFor(st, v), v, tile);
-  if (victims.length <= 1) {
+  if (victims.length <= 1 || st.bishopSteal) { // C&K Bishop: it robs everyone there
     App.dispatch({ type: 'moveRobber', pid: v, tile, victim: victims[0] });
     return;
   }
@@ -692,6 +692,8 @@ function bannerText(st, v, inter) {
   if (st.phase === 'pillage') return (inter && CK.ckBanner(st, ui, inter)) || t('🔥 Los bárbaros saquean: esperando a los perdedores...');
   if (st.phase === 'progressPick') return t('🛡️ Los defensores empatados eligen carta...');
   if (st.phase === 'harbor') return t('⚓ Esperando a que devuelvan mercancías...');
+  if (st.phase === 'wedding') return t('💍 Esperando los regalos de boda...');
+  if (st.phase === 'deserter' || st.phase === 'deserterPlace') return (inter && CK.politicsBanner(st, v, inter)) || t('🏃 Un caballero deserta...');
   if (st.phase === 'progressDiscard') return t('🗑️ Esperando descartes de progreso...');
   if (st.phase === 'discard') {
     const n = Object.keys(st.pendingDiscards).length;
@@ -702,7 +704,7 @@ function bannerText(st, v, inter) {
   if (st.phase === 'roadBuilding' && inter && inter.kind === 'ship') return Sea.seaBanner(st, v, ui, inter);
   if (st.phase === 'roadBuilding') return st.freeRoads > 1 ? t('🛤️ Coloca {n} caminos gratis', { n: st.freeRoads }) : t('🛤️ Coloca {n} camino gratis', { n: st.freeRoads });
   if (st.phase === 'roll') return t('🎲 ¡Tu turno! Tira los dados');
-  const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter) || CK.progressBanner(st, ui, inter) || CK.knightBanner(st, v, ui, inter);
+  const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter) || CK.progressBanner(st, ui, inter) || CK.politicsBanner(st, v, inter) || CK.knightBanner(st, v, ui, inter);
   if (seaTxt) return seaTxt;
   if (inter) return { road: t('Elige dónde construir el camino (Esc para cancelar)'), settlement: t('Elige dónde construir el poblado (Esc para cancelar)'), city: t('Elige qué poblado mejorar (Esc para cancelar)') }[inter.kind];
   return '';
@@ -852,6 +854,10 @@ function fillActions(bar, st, v, locked) {
   }
   if (st.phase === 'harbor') {
     acts.append(CK.harborWaiting(st, v, h));
+    return;
+  }
+  if (['wedding', 'deserter', 'deserterPlace'].includes(st.phase)) {
+    acts.append(CK.politicsWaiting(st, v, h));
     return;
   }
   if (st.phase === 'progressPick' || st.phase === 'progressDiscard') {
@@ -1227,6 +1233,8 @@ function modalContent(st, v) {
     return { kind: 'discard' + v, body: discardModal(st, v) };
   }
   ui.discard = null;
+  if (st.phase === 'wedding' && st.wedding && v in st.wedding.pending && localHumans(st).includes(v))
+    return { kind: 'wedding' + v, body: CK.weddingModal(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }) };
   if (st.phase === 'harbor' && st.harbor && v in st.harbor.pending && localHumans(st).includes(v))
     return { kind: 'harbor' + v, body: CK.harborReturnModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressPick' && st.progressPick && st.progressPick.includes(v) && localHumans(st).includes(v))

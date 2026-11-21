@@ -15,6 +15,7 @@ import { PROGRESS_TRACKS } from './citiesKnights/progress.js';
 import * as Knights from './citiesKnights/knights.js';
 import * as Science from './citiesKnights/science.js';
 import * as TradeCards from './citiesKnights/tradeCards.js';
+import * as Politics from './citiesKnights/politics.js';
 import { COMMODITIES } from './citiesKnights/commodities.js';
 
 const LEVELS = {
@@ -346,6 +347,33 @@ function tryProgressPlay(s, pid) {
     }
     if (Object.keys(offers).length) return play('commercialHarbor', { offers });
   }
+  // politics cards
+  const vp = q => victoryPoints(s, q, false);
+  if (can.has('wedding')) return play('wedding');
+  if (can.has('saboteur')) return play('saboteur');
+  if (can.has('warlord') && Politics.warlordKnights(s, pid).length >= 2) return play('warlord');
+  if (can.has('spy')) {
+    const tg = best(Politics.spyTargets(s, pid), q => s.players[q].progress.length + vp(q));
+    if (p.progress.length < 4) return play('spy', { target: tg, take: s.players[tg].progress[0] });
+  }
+  if (can.has('deserter')) {
+    const tg = best(Politics.deserterTargets(s, pid), q => vp(q));
+    if (Politics.deserterSpots(s, pid).length) return play('deserter', { target: tg });
+  }
+  if (can.has('intrigue') && !s.config.modes.fog) return play('intrigue', { at: best(Politics.intrigueTargets(s, pid), v => s.knights[v].level) });
+  if (can.has('bishop')) {
+    // the tile that hurts the leaders most, with the most neighbours to rob
+    const tiles = legalRobberTiles(s, pid);
+    const score = t => stealTargets(s, pid, t).reduce((n, q) => n + 1 + vp(q) * 0.2, 0);
+    const t = best(tiles, score);
+    if (t != null && score(t) >= 2) return play('bishop');
+  }
+  // (in the fog our view may miss pieces that make a road not loose: we leave the Diplomat then)
+  if (can.has('diplomat') && !s.config.modes.fog) {
+    // pull a rival's loose road off the longest-road race
+    const e = best(Politics.openRoads(s).filter(x => s.roads[x] !== pid), x => s.players[s.roads[x]].roadLen || 0);
+    if (e != null) return play('diplomat', { edge: e });
+  }
   if (can.has('merchantFleet')) {
     // only when we hold 4+ of something: two 2:1 trades this turn
     const r = best(cardsOf(s), x => p.res[x]);
@@ -552,6 +580,24 @@ export function botAct(real, pid) {
     // over the hand limit: drop the oldest card (cards can't be played yet)
     if (!s.progressDiscard || !s.progressDiscard[pid]) return null;
     return { type: 'progressDiscard', pid, card: s.players[pid].progress[0] };
+  }
+  if (s.phase === 'deserter') {
+    // a rival's Deserter: let our weakest knight go
+    if (!s.deserter || s.deserter.victim !== pid) return null;
+    return { type: 'desertKnight', pid, at: best(Knights.knightsOf(s, pid), v => -s.knights[v].level - (s.knights[v].active ? 0.5 : 0)) };
+  }
+  if (s.phase === 'deserterPlace') {
+    if (!s.deserter || s.deserter.from !== pid) return null;
+    const near = v => s.board.vertices[v].adj.filter(u => s.buildings[u] && s.buildings[u].owner === pid).length;
+    return { type: 'placeDeserter', pid, at: best(Politics.deserterSpots(s, pid), v => near(v) + noise(s, v) * 0.1) };
+  }
+  if (s.phase === 'wedding') {
+    // a wedding gift: the cards we need least
+    if (!s.wedding || !(pid in s.wedding.pending)) return null;
+    const p = s.players[pid];
+    const hand = cardsOf(s).flatMap(r => Array(p.res[r]).fill(r));
+    hand.sort((a, b) => (COMMODITIES.includes(a) ? 1.5 : RES_W[a] || 1) - (COMMODITIES.includes(b) ? 1.5 : RES_W[b] || 1));
+    return { type: 'weddingGive', pid, cards: hand.slice(0, s.wedding.pending[pid]) };
   }
   if (s.phase === 'harbor') {
     // Commercial Harbor: give back the commodity we have most of

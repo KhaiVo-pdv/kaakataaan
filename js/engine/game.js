@@ -14,6 +14,7 @@ import * as Barb from './citiesKnights/barbarians.js';
 import * as Progress from './citiesKnights/progress.js';
 import * as Science from './citiesKnights/science.js';
 import * as TradeCards from './citiesKnights/tradeCards.js';
+import * as Politics from './citiesKnights/politics.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
 // every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
@@ -383,6 +384,9 @@ export function pendingActors(s) {
   if (s.phase === 'displace') return s.displaced ? [s.displaced.pid] : [];
   if (s.phase === 'progressPick') return (s.progressPick || []).filter(pid => !s.players[pid].retired);
   if (s.phase === 'progressDiscard') return s.progressDiscard ? Object.keys(s.progressDiscard).map(Number).filter(pid => !s.players[pid].retired) : [];
+  if (s.phase === 'deserter') return s.deserter ? [s.deserter.victim] : [];
+  if (s.phase === 'deserterPlace') return s.deserter ? [s.deserter.from] : [];
+  if (s.phase === 'wedding') return s.wedding ? Object.keys(s.wedding.pending).map(Number).filter(pid => !s.players[pid].retired) : [];
   if (s.phase === 'harbor') return s.harbor ? Object.keys(s.harbor.pending).map(Number).filter(pid => !s.players[pid].retired) : [];
   if (s.phase === 'pillage') return s.pillage ? Object.keys(s.pillage).map(Number).filter(pid => !s.players[pid].retired) : [];
   const out = [s.current];
@@ -973,6 +977,11 @@ H.roll = (s, a) => {
 
 // C&K: wait for every choice the event die left pending, then finish the roll
 function resumeRoll(s) {
+  if (s.progressBack && !s.progressDiscard) {
+    s.phase = s.progressBack;
+    delete s.progressBack;
+    return;
+  }
   if (s.pillage) s.phase = 'pillage';
   else if (s.progressPick && s.progressPick.length) s.phase = 'progressPick';
   else if (s.progressDiscard) s.phase = 'progressDiscard';
@@ -1020,7 +1029,13 @@ function afterRoll(s, sum) {
 };
 
 // where a 7 goes once discards are done: no robber (rule, or C&K before the first barbarian attack) -> main
-const afterSeven = s => (s.config.rules.noRobber || Barb.robberAsleep(s) ? 'main' : 'robber');
+const afterSeven = s => {
+  if (s.sabotage) { // C&K Saboteur: those discards were not a 7
+    delete s.sabotage;
+    return 'main';
+  }
+  return s.config.rules.noRobber || Barb.robberAsleep(s) ? 'main' : 'robber';
+};
 
 // ---- Cities & Knights barbarians ----
 // the ship moves one step; on landing the attack is fought. True while losers must still pick a city.
@@ -1078,6 +1093,7 @@ H.progressDiscard = (s, a) => {
   resumeRoll(s);
 };
 
+
 // ---- Cities & Knights progress cards: playing them ----
 // marks a text for the translation extractor (tools/i18n.mjs); fail() translates it where it is shown
 const tk = x => x;
@@ -1105,6 +1121,15 @@ function progressBlock(s, pid, id) {
     case 'merchant': return TradeCards.merchantTiles(s, pid).length ? '' : tk('No tienes casillas donde poner el mercader.');
     case 'merchantFleet': case 'resourceMonopoly': case 'tradeMonopoly': return '';
     case 'masterMerchant': return TradeCards.masterTargets(s, pid, publicVP(s)).length ? '' : tk('Nadie tiene más puntos que tú.');
+    // politics
+    case 'bishop': return !Barb.robberAsleep(s) && legalRobberTiles(s, pid).length ? '' : tk('El ladrón duerme hasta el primer ataque bárbaro.');
+    case 'warlord': return Politics.warlordKnights(s, pid).length ? '' : tk('No tienes caballeros inactivos.');
+    case 'intrigue': return Politics.intrigueTargets(s, pid).length ? '' : tk('Ningún caballero rival toca tus caminos.');
+    case 'spy': return Politics.spyTargets(s, pid).length ? '' : tk('Ningún rival tiene cartas de progreso.');
+    case 'diplomat': return Politics.openRoads(s).length ? '' : tk('No hay caminos sueltos.');
+    case 'deserter': return Politics.deserterTargets(s, pid).length ? '' : tk('Ningún rival tiene caballeros.');
+    case 'saboteur': return Politics.saboteurTargets(s, pid, publicVP(s)).length ? '' : tk('Nadie con tus puntos o más tiene cartas que perder.');
+    case 'wedding': return Politics.weddingTargets(s, pid, publicVP(s)).length ? '' : tk('Nadie con más puntos que tú tiene cartas.');
     case 'commercialHarbor': return TradeCards.harborTargets(s, pid).length && RES.some(r => p.res[r] > 0) ? '' : tk('Ningún rival tiene mercancías (o no tienes recursos).');
     default: return tk('Esta carta aún no se puede jugar.');
   }
@@ -1143,6 +1168,19 @@ H.playProgress = (s, a) => {
   if (id === 'commercialHarbor') {
     const why = TradeCards.harborBlock(s, a.pid, a.offers);
     if (why) fail(why);
+  }
+  if (id === 'intrigue' && !Politics.intrigueTargets(s, a.pid).includes(a.at)) fail('Elige un caballero rival que toque tus caminos.');
+  if (id === 'spy' && (!Politics.spyTargets(s, a.pid).includes(a.target) || !s.players[a.target].progress.includes(a.take))) fail('Elige una carta de progreso de ese rival.');
+  if (id === 'deserter' && !Politics.deserterTargets(s, a.pid).includes(a.target)) fail('Elige un rival con caballeros.');
+  if (id === 'diplomat') {
+    if (!Politics.openRoads(s).includes(a.edge)) fail('Elige un camino suelto.');
+    if (a.to != null) {
+      if (s.roads[a.edge] !== a.pid) fail('Solo puedes recolocar tus propios caminos.');
+      delete s.roads[a.edge]; // try the new spot without the old road
+      const ok = a.to !== a.edge && canBuildRoad(s, a.pid, a.to);
+      s.roads[a.edge] = a.pid;
+      if (!ok) fail('El camino debe conectar con tu red.');
+    }
   }
   // 2) the card leaves the hand and goes under its deck
   p.progress.splice(p.progress.indexOf(id), 1);
@@ -1238,6 +1276,76 @@ H.playProgress = (s, a) => {
       log(s, msg('🧐 @{p} mira la mano de @{q} y se lleva {n} cartas.', { p: a.pid, q: a.target, n: a.cards.length }), a.pid);
       break;
     }
+    // ---- politics ----
+    case 'bishop':
+      s.bishopSteal = true;
+      s.robberReturn = 'main';
+      s.phase = 'robber';
+      break;
+    case 'warlord':
+      for (const v of Politics.warlordKnights(s, a.pid)) {
+        Knights.activate(s, v);
+        s.fx.push({ kind: 'knight', pid: a.pid, at: v });
+      }
+      break;
+    case 'intrigue': {
+      const r = Knights.expel(s, a.at);
+      log(s, msg('🗡️ @{p} expulsa al caballero de @{q}.', { p: a.pid, q: r.victim.owner }), a.pid);
+      if (r.removed) log(s, msg('🏳️ El caballero de @{q} no tiene adónde ir y vuelve a su reserva.', { q: r.victim.owner }));
+      else {
+        s.displacedReturn = 'main';
+        s.phase = 'displace';
+      }
+      updateLongestRoad(s);
+      break;
+    }
+    case 'spy': {
+      const q = s.players[a.target];
+      q.progress.splice(q.progress.indexOf(a.take), 1);
+      p.progress.push(a.take);
+      if (p.progress.length > Progress.PROGRESS_HAND) (s.progressDiscard ||= {})[a.pid] = p.progress.length - Progress.PROGRESS_HAND;
+      log(s, msg('🕵️ @{p} espía a @{q} y se lleva una carta de progreso.', { p: a.pid, q: a.target }), a.pid);
+      if (s.progressDiscard) {
+        s.progressBack = 'main';
+        s.phase = 'progressDiscard';
+      }
+      break;
+    }
+    case 'diplomat': {
+      const owner = s.roads[a.edge];
+      delete s.roads[a.edge];
+      s.players[owner].roadsLeft++;
+      log(s, msg('🤝 @{p} retira un camino de @{q}.', { p: a.pid, q: owner }), a.pid);
+      if (a.to != null) {
+        s.roads[a.to] = a.pid;
+        p.roadsLeft--;
+        s.fx.push({ kind: 'build', what: 'road', pid: a.pid, at: a.to });
+        log(s, msg('🛤️ @{p} construye un camino gratis.', { p: a.pid }), a.pid);
+      }
+      updateLongestRoad(s);
+      break;
+    }
+    case 'deserter':
+      s.deserter = { from: a.pid, victim: a.target };
+      s.phase = 'deserter';
+      log(s, msg('🏃 @{p} convence a un caballero de @{q} para desertar.', { p: a.pid, q: a.target }), a.pid);
+      break;
+    case 'saboteur': {
+      s.pendingDiscards = {};
+      for (const q of Politics.saboteurTargets(s, a.pid, publicVP(s))) s.pendingDiscards[q] = Math.floor(Politics.handCount(s, q) / 2);
+      s.sabotage = true;
+      s.phase = 'discard';
+      log(s, msg('💣 ¡Sabotaje! Los rivales con tus puntos o más descartan la mitad.'), a.pid);
+      break;
+    }
+    case 'wedding': {
+      const pending = {};
+      for (const q of Politics.weddingTargets(s, a.pid, publicVP(s))) pending[q] = Math.min(Politics.WEDDING_GIFT, Politics.handCount(s, q));
+      s.wedding = { to: a.pid, pending };
+      s.phase = 'wedding';
+      log(s, msg('💍 ¡Boda de @{p}! Los rivales con más puntos le hacen un regalo.', { p: a.pid }), a.pid);
+      break;
+    }
     case 'commercialHarbor': {
       // the resources go out now; each rival then picks the commodity they give back
       const pending = {};
@@ -1258,6 +1366,64 @@ H.playProgress = (s, a) => {
 // public points (no hidden cards): who counts as "having more points" for the trade cards
 const publicVP = s => pid => victoryPoints(s, pid, false);
 
+// Deserter: the rival chooses which of their knights leaves...
+H.desertKnight = (s, a) => {
+  if (s.phase !== 'deserter' || !s.deserter || s.deserter.victim !== a.pid) fail('No tienes que retirar ningún caballero.');
+  const k = s.knights[a.at];
+  if (!k || k.owner !== a.pid) fail('Elige uno de tus caballeros.');
+  delete s.knights[a.at];
+  s.players[a.pid].knightsLeft[k.level]++;
+  log(s, msg('🏃 Un caballero de @{q} deserta.', { q: a.pid }), a.pid);
+  updateLongestRoad(s);
+  const d = s.deserter;
+  d.level = Politics.deserterLevel(s, d.from, k.level);
+  if (d.level && Politics.deserterSpots(s, d.from).length) s.phase = 'deserterPlace';
+  else {
+    s.deserter = null;
+    s.phase = 'main';
+  }
+};
+
+// ...and the player who played the card puts one of theirs on the board
+H.placeDeserter = (s, a) => {
+  if (s.phase !== 'deserterPlace' || !s.deserter || s.deserter.from !== a.pid) fail('No tienes que colocar ningún caballero.');
+  if (!Politics.deserterSpots(s, a.pid).includes(a.at)) fail('El caballero va en un cruce libre junto a tu camino.');
+  const lvl = s.deserter.level;
+  s.knights[a.at] = { owner: a.pid, level: lvl, active: false, activatedTurn: -1, promotedTurn: -1, usedTurn: -1 };
+  s.players[a.pid].knightsLeft[lvl]--;
+  s.fx.push({ kind: 'build', what: 'knight', pid: a.pid, at: a.at });
+  log(s, msg('🏃 El desertor se une a @{p}: {name}.', { p: a.pid, name: Knights.KNIGHT_NAMES[lvl] }), a.pid);
+  s.deserter = null;
+  s.phase = 'main';
+  updateLongestRoad(s);
+};
+
+// Wedding: each rival with more points gives 2 cards of their choice
+H.weddingGive = (s, a) => {
+  if (s.phase !== 'wedding' || !s.wedding || !(a.pid in s.wedding.pending)) fail('No tienes que hacer ningún regalo.');
+  const need = s.wedding.pending[a.pid];
+  const cards = Array.isArray(a.cards) ? a.cards : [];
+  if (cards.length !== need) fail(msg('Debes dar exactamente {n} cartas.', { n: need }));
+  const q = s.players[a.pid], to = s.players[s.wedding.to];
+  const n = {};
+  for (const c of cards) n[c] = (n[c] || 0) + 1;
+  for (const c in n) if (!cardsOf(s).includes(c) || !(q.res[c] >= n[c])) fail('No tienes esas cartas.');
+  for (const c of cards) {
+    q.res[c]--;
+    to.res[c]++;
+  }
+  s.fx.push({ kind: 'steal', from: a.pid, to: s.wedding.to, res: cards[0] });
+  log(s, msg('🎁 @{q} regala {n} cartas a @{p}.', { q: a.pid, p: s.wedding.to, n: need }), a.pid);
+  delete s.wedding.pending[a.pid];
+  weddingDone(s);
+};
+
+function weddingDone(s) {
+  if (Object.keys(s.wedding.pending).some(pid => !s.players[pid].retired)) return;
+  s.wedding = null;
+  s.phase = 'main';
+}
+
 H.harborReturn = (s, a) => {
   if (s.phase !== 'harbor' || !s.harbor || !(a.pid in s.harbor.pending)) fail('No tienes que devolver ninguna mercancía.');
   const q = s.players[a.pid];
@@ -1274,6 +1440,19 @@ function harborDone(s) {
   if (Object.keys(s.harbor.pending).some(pid => !s.players[pid].retired)) return;
   s.phase = s.harbor.back || 'main';
   s.harbor = null;
+}
+
+function bishopMove(s, a, victims) {
+  delete s.bishopSteal;
+  s.board.robberFrom = s.board.robber;
+  s.board.robber = a.tile;
+  s.fx.push({ kind: 'robber', tile: a.tile });
+  log(s, msg('⛪ @{p} mueve el ladrón y roba a todos los vecinos.', { p: a.pid }), a.pid);
+  for (const v of victims) {
+    const r = stealRandom(s, v, a.pid);
+    if (r) s.fx.push({ kind: 'steal', from: v, to: a.pid, res: r });
+  }
+  s.phase = s.robberReturn;
 }
 
 H.discard = (s, a) => {
@@ -1302,6 +1481,7 @@ H.moveRobber = (s, a) => {
   const known = s.config.modes.fog ? viewFor(s, a.pid) : s;
   if (!legalRobberTiles(known, a.pid).includes(a.tile)) fail('No puedes poner el ladrón ahí.');
   const victims = stealTargets(s, a.pid, a.tile);
+  if (s.bishopSteal) return bishopMove(s, a, victims); // C&K Bishop: one card from everyone there
   let victim = a.victim;
   if (victims.length === 1 && victim == null) victim = victims[0];
   // in the fog you may not see who is there: steal from a random neighbour
@@ -1782,6 +1962,15 @@ H.retirePlayer = (s, a) => {
   }
   if (s.progressPick) s.progressPick = s.progressPick.filter(q => q !== pid);
   if (s.harbor && s.harbor.from === pid) s.harbor = null; // their turn ends anyway
+  if (s.deserter && (s.deserter.from === pid || s.deserter.victim === pid)) {
+    s.deserter = null;
+    if (s.phase === 'deserter' || s.phase === 'deserterPlace') s.phase = 'main';
+  }
+  if (s.wedding && s.wedding.to === pid) s.wedding = null;
+  else if (s.wedding && pid in s.wedding.pending) {
+    delete s.wedding.pending[pid];
+    if (s.phase === 'wedding') weddingDone(s);
+  }
   else if (s.harbor && pid in s.harbor.pending) {
     delete s.harbor.pending[pid];
     if (s.phase === 'harbor') harborDone(s);

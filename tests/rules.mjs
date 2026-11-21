@@ -10,6 +10,7 @@ import * as Improve from '../js/engine/citiesKnights/improvements.js';
 import * as Knights from '../js/engine/citiesKnights/knights.js';
 import * as Progress from '../js/engine/citiesKnights/progress.js';
 import * as Science from '../js/engine/citiesKnights/science.js';
+import * as Politics from '../js/engine/citiesKnights/politics.js';
 import { seaTileEdges } from '../js/engine/seafarers/pirate.js';
 
 let pass = 0, failN = 0;
@@ -1540,6 +1541,121 @@ t('Comercio: puerto comercial: cada rival elige qué mercancía devuelve', () =>
   eq(s.phase, 'main');
   eq([s.players[0].res.brick, s.players[0].res.cloth, s.players[0].res.paper], [0, 1, 1]);
 });
+
+// ---- Cities & Knights politics progress cards ----
+const twoPlayersWithKnights = () => {
+  const s = ckMain();
+  const { path } = ckRoads(s);
+  return { s, path };
+};
+
+t('Política: obispo mueve el ladrón y roba 1 carta a cada vecino (no antes del primer ataque)', () => {
+  const s = withCard(ckMain(), 'bishop');
+  ok(!G.playableProgress(s, 0).includes('bishop'), 'el ladrón duerme');
+  s.barbarians.attacks = 1;
+  const tile = s.board.tiles.find(t => t.num && t.id !== s.board.robber);
+  s.buildings[tile.verts[0]] = { owner: 1, type: 'settlement' };
+  s.buildings[tile.verts[3]] = { owner: 2, type: 'settlement' };
+  give(s, 1, { wood: 2 });
+  give(s, 2, { ore: 1 });
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'bishop' }).ok);
+  eq(s.phase, 'robber');
+  ok(act(s, { type: 'moveRobber', pid: 0, tile: tile.id }).ok);
+  eq(s.board.robber, tile.id);
+  eq([s.players[0].res.wood, s.players[0].res.ore], [1, 1], 'una de cada vecino');
+  eq(s.phase, 'main');
+});
+
+t('Política: señor de la guerra activa gratis todos tus caballeros', () => {
+  const { s, path } = twoPlayersWithKnights();
+  withCard(s, 'warlord');
+  Knights.recruit(s, 0, path[1]);
+  Knights.recruit(s, 0, path[3]);
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'warlord' }).ok);
+  ok(s.knights[path[1]].active && s.knights[path[3]].active);
+});
+
+t('Política: intriga expulsa a un caballero rival que toca tus caminos', () => {
+  const { s, path } = twoPlayersWithKnights();
+  withCard(s, 'intrigue');
+  Knights.recruit(s, 1, path[2]);
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'intrigue', at: path[2] }).ok);
+  eq(s.knights[path[2]], undefined);
+  eq(s.players[1].knightsLeft[1], 2, 'sin caminos propios vuelve a la reserva');
+});
+
+t('Política: espía se queda con una carta de progreso de un rival', () => {
+  const s = withCard(ckMain(), 'spy');
+  s.players[1].progress = ['smith', 'wedding'];
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'spy', target: 1, take: 'bishop' }).ok, 'una carta que tenga');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'spy', target: 1, take: 'wedding' }).ok);
+  eq(s.players[0].progress, ['wedding']);
+  eq(s.players[1].progress, ['smith']);
+});
+
+t('Política: diplomático quita un camino suelto (el propio se puede recolocar)', () => {
+  const { s, path } = twoPlayersWithKnights();
+  withCard(withCard(s, 'diplomat'), 'diplomat');
+  const open = Politics.openRoads(s);
+  ok(open.length >= 1, 'el extremo del camino está suelto');
+  const e = open.find(x => s.roads[x] === 0);
+  const left = s.players[0].roadsLeft;
+  const bd = s.board;
+  // a new legal spot once e is gone
+  delete s.roads[e];
+  const to = G.legalRoads(s, 0).find(x => x !== e);
+  s.roads[e] = 0;
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'diplomat', edge: e, to }).ok);
+  eq(s.roads[e], undefined);
+  eq(s.roads[to], 0);
+  eq(s.players[0].roadsLeft, left);
+});
+
+t('Política: desertor: el rival elige qué caballero se va y tú pones uno igual', () => {
+  const { s, path } = twoPlayersWithKnights();
+  withCard(s, 'deserter');
+  // a strong knight of player 1 far from our roads
+  const far = s.board.vertices.find(V => V.hexes.length && !path.includes(V.id) && !s.buildings[V.id] && !V.adj.some(u => path.includes(u))).id;
+  s.knights[far] = { owner: 1, level: 2, active: true, activatedTurn: -1, promotedTurn: -1, usedTurn: -1 };
+  s.players[1].knightsLeft[2]--;
+  const p1 = { 2: far };
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'deserter', target: 1 }).ok);
+  eq(s.phase, 'deserter');
+  eq(G.pendingActors(s), [1]);
+  ok(act(s, { type: 'desertKnight', pid: 1, at: p1[2] }).ok);
+  eq(s.phase, 'deserterPlace');
+  eq(s.deserter.level, 2);
+  ok(act(s, { type: 'placeDeserter', pid: 0, at: path[2] }).ok);
+  eq(s.knights[path[2]].owner, 0);
+  eq(s.knights[path[2]].level, 2);
+  eq(s.phase, 'main');
+});
+
+t('Política: saboteador: los rivales con tus puntos o más descartan la mitad (sin ladrón)', () => {
+  const s = withCard(ckMain(), 'saboteur');
+  s.barbarians.attacks = 1;
+  give(s, 1, { wood: 5 });
+  give(s, 2, { ore: 1 });
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'saboteur' }).ok);
+  eq(s.phase, 'discard');
+  eq(s.pendingDiscards, { 1: 2 }, 'con 1 carta no pierde nada');
+  ok(act(s, { type: 'discard', pid: 1, res: { wood: 2 } }).ok);
+  eq(s.phase, 'main', 'no despierta al ladrón');
+});
+
+t('Política: boda: cada rival con más puntos te regala 2 cartas a su elección', () => {
+  const s = withCard(ckMain(), 'wedding');
+  s.buildings[s.board.tiles[4].verts[0]] = { owner: 1, type: 'city' };
+  give(s, 1, { wood: 1, coin: 3 });
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'wedding' }).ok);
+  eq(s.phase, 'wedding');
+  eq(G.pendingActors(s), [1]);
+  ok(!act(s, { type: 'weddingGive', pid: 1, cards: ['wood', 'wood'] }).ok, 'solo cartas que tiene');
+  ok(act(s, { type: 'weddingGive', pid: 1, cards: ['coin', 'wood'] }).ok);
+  eq([s.players[0].res.coin, s.players[0].res.wood], [1, 1]);
+  eq(s.phase, 'main');
+});
+
 
 
 

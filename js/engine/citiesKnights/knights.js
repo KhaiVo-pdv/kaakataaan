@@ -33,8 +33,8 @@ export function initKnights(s) {
 }
 
 export const knightAt = (s, v) => (s.knights ? s.knights[v] : undefined);
-const ownRoadAt = (s, pid, v) => s.board.vertices[v].edges.some(e => s.roads[e] === pid);
-const emptyAt = (s, v) => !s.buildings[v] && !knightAt(s, v);
+export const ownRoadAt = (s, pid, v) => s.board.vertices[v].edges.some(e => s.roads[e] === pid);
+export const emptyAt = (s, v) => !s.buildings[v] && !knightAt(s, v);
 export const knightsOf = (s, pid) => (s.knights ? Object.keys(s.knights).map(Number).filter(v => s.knights[v].owner === pid) : []);
 
 // a rival piece (building or knight) on v stops pid's roads there
@@ -146,6 +146,19 @@ export function displace(s, pid, from, to) {
     return { victim, removed: true };
   }
   s.displaced = { pid: victim.owner, level: victim.level, active: victim.active, options, from: to };
+  return { victim, removed: false };
+}
+
+// Intrigue (politics card): a knight is pushed off without anyone taking its place
+export function expel(s, at) {
+  const victim = s.knights[at];
+  delete s.knights[at];
+  const options = reachable(s, victim.owner, at).filter(u => emptyAt(s, u));
+  if (!options.length) {
+    s.players[victim.owner].knightsLeft[victim.level]++;
+    return { victim, removed: true };
+  }
+  s.displaced = { pid: victim.owner, level: victim.level, active: victim.active, options, from: at };
   return { victim, removed: false };
 }
 
