@@ -852,5 +852,103 @@ t('expansiones: solo una a la vez', () => {
   ok(seafarersOn(s) && !citiesKnightsOn(s), 'una config con las dos se queda con Navegantes');
 });
 
+// ---------- Cities & Knights: commodities and event die ----------
+function ckMain(seed = 11) {
+  const s = fresh(c => {
+    c.seed = seed;
+    c.expansions = { seafarers: false, citiesKnights: true, scenario: 'newShores' };
+    c.rules.vpTarget = 13;
+  });
+  return s;
+}
+// a corner touching a tile of `res`, for a city of player 0
+const cornerOf = (s, res) => s.board.tiles.find(t => t.res === res && t.num).verts[0];
+
+t('Ciudades y Caballeros: banco y manos con mercancías; sin la expansión no existen', () => {
+  const s = ckMain();
+  for (const c of ['paper', 'cloth', 'coin']) {
+    eq(s.bank[c], 12, 'banco ' + c);
+    eq(s.players[0].res[c], 0, 'mano ' + c);
+  }
+  const b = fresh();
+  ok(b.bank.paper === undefined && b.players[0].res.paper === undefined, 'base: sin mercancías');
+});
+
+t('Ciudades y Caballeros: una ciudad junto al bosque da madera + papel; junto a la colina, 2 arcillas', () => {
+  for (const [res, expect] of [['wood', { wood: 1, paper: 1 }], ['sheep', { sheep: 1, cloth: 1 }], ['ore', { ore: 1, coin: 1 }], ['brick', { brick: 2 }], ['wheat', { wheat: 2 }]]) {
+    const s = ckMain();
+    s.board.robber = -1;
+    const tile = s.board.tiles.find(t => t.res === res && t.num);
+    s.buildings[tile.verts[0]] = { owner: 0, type: 'city' };
+    const before = { ...s.players[0].res };
+    // force the tile's number
+    let tries = 0;
+    do {
+      s.phase = 'roll';
+      s.current = 0;
+      for (const k in s.players[0].res) s.players[0].res[k] = before[k];
+      act(s, { type: 'roll', pid: 0 });
+      s.pendingDiscards = {};
+    } while (s.dice[0] + s.dice[1] !== tile.num && ++tries < 300);
+    // only this tile's production counts: other tiles with the same number touch nothing of ours
+    const got = {};
+    for (const k in s.players[0].res) if (s.players[0].res[k] !== before[k]) got[k] = s.players[0].res[k] - before[k];
+    eq(got, expect, 'ciudad en ' + res);
+  }
+});
+
+t('Ciudades y Caballeros: el dado de evento rueda con los números (solo con la expansión)', () => {
+  const s = ckMain();
+  s.phase = 'roll';
+  act(s, { type: 'roll', pid: 0 });
+  ok(['ship', 'trade', 'politics', 'science'].includes(s.eventDie), 'cara del dado: ' + s.eventDie);
+  const b = fresh();
+  b.phase = 'roll';
+  act(b, { type: 'roll', pid: 0 });
+  ok(b.eventDie === undefined, 'base: sin dado de evento');
+});
+
+t('Ciudades y Caballeros: las mercancías cuentan para el 7 y se descartan', () => {
+  const s = ckMain();
+  give(s, 0, { paper: 4, coin: 4 });
+  s.phase = 'roll';
+  let tries = 0;
+  do {
+    s.phase = 'roll';
+    s.current = 0;
+    s.pendingDiscards = {};
+    act(s, { type: 'roll', pid: 0 });
+  } while (s.dice[0] + s.dice[1] !== 7 && ++tries < 300);
+  eq(s.pendingDiscards[0], 4, '8 cartas: descarta 4');
+  ok(act(s, { type: 'discard', pid: 0, res: { paper: 2, coin: 2 } }).ok, 'descarta mercancías');
+  eq(s.players[0].res.paper + s.players[0].res.coin, 4);
+  eq(s.bank.paper, 10, 'vuelven al banco');
+});
+
+t('Ciudades y Caballeros: el banco cambia mercancías 4:1 y se comercian entre jugadores', () => {
+  const s = ckMain();
+  give(s, 0, { cloth: 4 });
+  ok(act(s, { type: 'bankTrade', pid: 0, give: 'cloth', get: 'ore' }).ok, 'banco 4:1');
+  eq(s.players[0].res.cloth, 0);
+  eq(s.players[0].res.ore, 1);
+  give(s, 0, { paper: 1 });
+  give(s, 1, { wood: 1 });
+  ok(act(s, { type: 'proposeTrade', pid: 0, give: { paper: 1 }, get: { wood: 1 }, to: [1] }).ok, 'oferta con papel');
+  ok(act(s, { type: 'respondTrade', pid: 1, accept: true }).ok);
+  ok(act(s, { type: 'confirmTrade', pid: 0, with: 1 }).ok);
+  eq(s.players[1].res.paper, 1, 'el papel cambió de manos');
+});
+
+t('Ciudades y Caballeros: el ladrón también roba mercancías', () => {
+  const s = ckMain();
+  const tile = s.board.tiles.find(t => t.res !== 'desert' && t.id !== s.board.robber);
+  s.buildings[tile.verts[0]] = { owner: 1, type: 'settlement' };
+  give(s, 1, { coin: 1 });
+  s.phase = 'robber';
+  s.robberReturn = 'main';
+  ok(act(s, { type: 'moveRobber', pid: 0, tile: tile.id, victim: 1 }).ok);
+  eq(s.players[0].res.coin, 1, 'robó la moneda');
+});
+
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);

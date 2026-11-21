@@ -766,4 +766,10 @@ export default {
   "Ciudades y Caballeros": "Thành phố & Hiệp sĩ",
   "Mercancías, mejoras de ciudad, caballeros, bárbaros y cartas de progreso. Se juega a 13 puntos. (En construcción)": "Hàng hoá, nâng cấp thành phố, hiệp sĩ, quân man rợ và thẻ tiến bộ. Chơi tới 13 điểm. (Đang xây dựng)",
   "🏰 Expansión Ciudades y Caballeros activada (en construcción).": "🏰 Đã bật bản mở rộng Thành phố & Hiệp sĩ (đang xây dựng).",
+  "Papel": "Giấy",
+  "Tela": "Vải",
+  "Barco bárbaro": "Thuyền man rợ",
+  "Puerta amarilla (comercio)": "Cổng vàng (thương mại)",
+  "Puerta azul (política)": "Cổng xanh dương (chính trị)",
+  "Puerta verde (ciencia)": "Cổng xanh lá (khoa học)",
 };

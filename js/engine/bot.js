@@ -9,6 +9,7 @@ import {
 import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
+import { cardsOf } from './citiesKnights/commodities.js';
 
 const LEVELS = {
   easy: { noise: 1.6, trade: 0.2, dev: 0.4 },
@@ -341,9 +342,9 @@ function discard(s, pid) {
   let need = s.pendingDiscards[pid];
   const tgt = chooseTarget(s, pid);
   const hand = { ...p.res };
-  const out = zeroRes();
+  const out = Object.fromEntries(cardsOf(s).map(r => [r, 0])); // Cities & Knights: commodities too
   while (need > 0) {
-    const r = best(RES.filter(x => hand[x] > 0), x => hand[x] - ((tgt && tgt.cost[x]) || 0) * 1.5);
+    const r = best(cardsOf(s).filter(x => hand[x] > 0), x => hand[x] - ((tgt && tgt.cost[x]) || 0) * 1.5);
     hand[r]--;
     out[r]++;
     need--;

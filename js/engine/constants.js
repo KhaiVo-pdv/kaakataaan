@@ -8,6 +8,10 @@ export const TILE_INFO = {
   ore: { name: 'Mineral', icon: '⛰️', color: '#8d93a3', dark: '#555b6b' },
   desert: { name: 'Desierto', icon: '🌵', color: '#e6d197', dark: '#b39b5c' },
   gold: { name: 'Oro', icon: '💰', color: '#ffb300', dark: '#b37400' },
+  // Cities & Knights commodities (cards only, never a tile): see engine/citiesKnights/commodities.js
+  paper: { name: 'Papel', icon: '📜', color: '#e8d9a8', dark: '#a8955a' },
+  cloth: { name: 'Tela', icon: '🧵', color: '#d97ab0', dark: '#9c3f76' },
+  coin: { name: 'Moneda', icon: '🪙', color: '#f2c94c', dark: '#a8831a' },
 };
 
 export const COSTS = {

@@ -11,6 +11,7 @@ import { iconSet, setIconSet, ICON_SETS, pxIcon, pixelize } from './pixel.js';
 import { mountAdhd, updateAdhd, adhdButton, celebrate, disposeAdhd } from './adhd.js';
 import { t, tx, tk } from '../i18n.js';
 import * as Sea from './seafarersUI.js';
+import * as CK from './citiesKnightsUI.js';
 
 let ui = null;
 
@@ -21,7 +22,7 @@ const PHASE_TEXT = {
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
 const costIcons = c => Object.entries(c).map(([r, n]) => TILE_INFO[r].icon.repeat(n)).join('');
-const resLine = o => RES.filter(r => o[r]).map(r => `${o[r]}${TILE_INFO[r].icon}`).join(' ');
+const resLine = o => CK.ANY_CARD.filter(r => o[r]).map(r => `${o[r]}${TILE_INFO[r].icon}`).join(' ');
 
 export function gameScreen(root) {
   const boardWrap = h('section', { class: 'board-wrap' });
@@ -343,7 +344,7 @@ function flyOne(res, tile, pid, mine, first) {
 
 // ---------------- cards flying between hands, players and the bank ----------------
 // {wood: 2, ore: 1} -> ['wood', 'wood', 'ore']
-const spread = o => RES.flatMap(r => Array(o[r] || 0).fill(r));
+const spread = o => CK.ANY_CARD.flatMap(r => Array(o[r] || 0).fill(r));
 
 // centre of an element on screen, null when it isn't laid out (hidden panel on a phone)
 function centre(el) {
@@ -354,9 +355,9 @@ function centre(el) {
 // where a player's cards are drawn: the card of that resource in your own hand, or their card in the list
 function cardsOf(pid, res, mine) {
   const hand = mine && ui.els.actionbar.querySelectorAll('.hand .rcard');
-  return hand && hand.length ? hand[RES.indexOf(res)] : ui.els.players.children[pid];
+  return hand && hand.length ? hand[CK.cardList(App.state).indexOf(res)] : ui.els.players.children[pid];
 }
-const bankOf = res => (centre(ui.els.bank) ? ui.els.bank.children[1 + RES.indexOf(res)] || ui.els.bank : document.querySelector('.board-wrap'));
+const bankOf = res => (centre(ui.els.bank) ? ui.els.bank.children[1 + CK.cardList(App.state).indexOf(res)] || ui.els.bank : document.querySelector('.board-wrap'));
 
 // cards travel one after another from `a` to `b` (a player id or 'bank'); `hidden` shows their backs
 function flyCards(list, a, b, v, o = {}) {
@@ -605,7 +606,7 @@ function renderTop(st) {
   clear(e.dice);
   if (st.dice) {
     const sum = st.dice[0] + st.dice[1];
-    e.dice.append(dieFace(st.dice[0]), dieFace(st.dice[1], true), h('div', { class: 'dice-sum' + (sum === 7 ? ' seven' : '') }, sum));
+    e.dice.append(dieFace(st.dice[0]), dieFace(st.dice[1], true), CK.eventDieBadge(st, h) || '', h('div', { class: 'dice-sum' + (sum === 7 ? ' seven' : '') }, sum));
     if (ui.diceAnim) {
       e.dice.classList.remove('rolling');
       void e.dice.offsetWidth;
@@ -759,7 +760,7 @@ function renderPlayers(st, v) {
     if (said) card.append(h('div', { class: 'pc-emote' + (ONLY_EMOJI.test(said.e) ? ' big' : ''), style: { animationDelay: `-${now - said.at}ms` } }, said.e));
     box.append(card);
   }
-  clear(ui.els.bank).append(h('span', null, '🏦'), ...RES.map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`),
+  clear(ui.els.bank).append(h('span', null, '🏦'), ...CK.cardList(st).map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`),
     h('span', { title: t('Meta') },`🏆 ${st.config.rules.vpTarget}`));
 }
 
@@ -795,7 +796,7 @@ function fillActions(bar, st, v, locked) {
   const p = st.players[v];
   const bump = ui.bumpRes || new Set();
   ui.bumpRes = null;
-  bar.append(h('div', { class: 'hand' }, RES.map(r => resCard(r, p.res[r], bump.has(r)))));
+  bar.append(h('div', { class: 'hand' }, CK.cardList(st).map(r => resCard(r, p.res[r], bump.has(r)))));
   bar.append(h('button', { class: 'btn emote-toggle', title: t('Reaccionar con un emoji'), onclick: e => { e.stopPropagation(); toggleEmotes(e.currentTarget); } }, '😀'));
   bar.append(adhdButton());
 
@@ -966,7 +967,7 @@ function playDev(st, v, type) {
 
 // ---------------- trade ----------------
 function openTrade(v) {
-  ui.draft = { tab: 'bank', give: G.zeroRes(), get: G.zeroRes(), bankGive: null, bankGet: null, to: App.state.players.filter(p => p.id !== v).map(p => p.id) };
+  ui.draft = { tab: 'bank', give: CK.blankHand(App.state), get: CK.blankHand(App.state), bankGive: null, bankGet: null, to: App.state.players.filter(p => p.id !== v).map(p => p.id) };
   openModal(() => tradeModal(App.state, v));
 }
 
@@ -990,12 +991,12 @@ function tradeModal(st, v) {
     const ratio = r => G.tradeRatio(st, v, r);
     return h('div', null, h('h2', null, t('Comerciar')), tabs,
       h('div', { class: 'section-label' }, t('Das')),
-      h('div', { class: 'respick' }, RES.map(r => h('button', {
+      h('div', { class: 'respick' }, CK.cardList(st).map(r => h('button', {
         class: 'btn' + (d.bankGive === r ? ' active' : ''), disabled: p.res[r] < ratio(r),
         onclick: () => { d.bankGive = r; renderModal(App.state); },
       }, TILE_INFO[r].icon, h('small', null, t('{ratio}:1 · tienes {n}', { ratio: ratio(r), n: p.res[r] }))))),
       h('div', { class: 'section-label' }, t('Recibes')),
-      h('div', { class: 'respick' }, RES.map(r => h('button', {
+      h('div', { class: 'respick' }, CK.cardList(st).map(r => h('button', {
         class: 'btn' + (d.bankGet === r ? ' active' : ''), disabled: r === d.bankGive || st.bank[r] < 1,
         onclick: () => { d.bankGet = r; renderModal(App.state); },
       }, TILE_INFO[r].icon, h('small', null, t('banco {n}', { n: st.bank[r] }))))),
@@ -1007,12 +1008,12 @@ function tradeModal(st, v) {
         }, d.bankGive ? t('Cambiar {n}{give} → 1{get}', { n: ratio(d.bankGive), give: TILE_INFO[d.bankGive].icon, get: d.bankGet ? TILE_INFO[d.bankGet].icon : '?' }) : t('Cambiar'))));
   }
   const others = st.players.filter(o => o.id !== v);
-  const valid = G.handSize(d.give) > 0 && G.handSize(d.get) > 0 && d.to.length && G.canAfford(p.res, d.give) && !RES.some(r => d.give[r] && d.get[r]);
+  const valid = G.handSize(d.give) > 0 && G.handSize(d.get) > 0 && d.to.length && G.canAfford(p.res, d.give) && !CK.ANY_CARD.some(r => d.give[r] && d.get[r]);
   return h('div', null, h('h2', null, t('Comerciar')), tabs,
     h('div', { class: 'section-label' }, t('Das')),
-    h('div', { class: 'steppers' }, RES.map(r => stepper('das', d.give, r, p.res[r]))),
+    h('div', { class: 'steppers' }, CK.cardList(st).map(r => stepper('das', d.give, r, p.res[r]))),
     h('div', { class: 'section-label' }, t('Pides')),
-    h('div', { class: 'steppers' }, RES.map(r => stepper('pides', d.get, r, null))),
+    h('div', { class: 'steppers' }, CK.cardList(st).map(r => stepper('pides', d.get, r, null))),
     h('div', { class: 'section-label' }, t('Ofrecer a')),
     h('div', { class: 'chips' }, others.map(o => h('button', {
       class: 'chip' + (d.to.includes(o.id) ? ' on' : ''),
@@ -1138,7 +1139,7 @@ function modalContent(st, v) {
   }
   // forced modals
   if (st.phase === 'discard' && st.pendingDiscards[v] && localHumans(st).includes(v)) {
-    if (!ui.discard || ui.discard.pid !== v) ui.discard = { pid: v, res: G.zeroRes() };
+    if (!ui.discard || ui.discard.pid !== v) ui.discard = { pid: v, res: CK.blankHand(App.state) };
     return { kind: 'discard' + v, body: discardModal(st, v) };
   }
   ui.discard = null;
@@ -1162,7 +1163,7 @@ function discardModal(st, v) {
   return h('div', null,
     h('h2', null, t('🗑️ {name}: descarta {n}', { name: p.name, n: need })),
     h('p', null, t('¡Salió un 7 y tienes más de {limit} cartas! Elige {n} para devolver al banco.', { limit: st.config.rules.handLimit, n: need })),
-    h('div', { class: 'steppers' }, RES.map(r => stepper('desc', d, r, p.res[r]))),
+    h('div', { class: 'steppers' }, CK.cardList(st).map(r => stepper('desc', d, r, p.res[r]))),
     h('div', { class: 'row' },
       h('span', { class: 'pill' }, `${n} / ${need}`),
       h('button', { class: 'btn primary', disabled: n !== need, onclick: () => { const res = { ...d }; ui.discard = null; App.dispatch({ type: 'discard', pid: v, res }); } }, t('Descartar'))));

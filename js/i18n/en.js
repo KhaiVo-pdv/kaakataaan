@@ -767,4 +767,10 @@ export default {
   "Ciudades y Caballeros": "Cities & Knights",
   "Mercancías, mejoras de ciudad, caballeros, bárbaros y cartas de progreso. Se juega a 13 puntos. (En construcción)": "Commodities, city improvements, knights, barbarians and progress cards. Played to 13 points. (Work in progress)",
   "🏰 Expansión Ciudades y Caballeros activada (en construcción).": "🏰 Cities & Knights expansion on (work in progress).",
+  "Papel": "Paper",
+  "Tela": "Cloth",
+  "Barco bárbaro": "Barbarian ship",
+  "Puerta amarilla (comercio)": "Yellow gate (trade)",
+  "Puerta azul (política)": "Blue gate (politics)",
+  "Puerta verde (ciencia)": "Green gate (science)",
 };

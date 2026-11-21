@@ -7,9 +7,14 @@ import { normalizeExpansions, seafarersOn, citiesKnightsOn } from './expansions.
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
+import { COMMODITIES, EVENT_FACES, cardsOf, initCommodities, cityYield } from './citiesKnights/commodities.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
-export const handSize = h => RES.reduce((a, r) => a + (h[r] || 0), 0);
+// every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
+const ALL_CARDS = [...RES, ...COMMODITIES];
+export const handSize = h => ALL_CARDS.reduce((a, r) => a + (h[r] || 0), 0);
+// an empty hand with a slot for every card of this game (base game: the 5 resources)
+const blankHand = s => Object.fromEntries(cardsOf(s).map(r => [r, 0]));
 export const canAfford = (h, cost) => Object.entries(cost).every(([r, n]) => (h[r] || 0) >= n);
 const resName = r => `:${r}:`;
 
@@ -103,6 +108,7 @@ export function createGame(configIn) {
     Ships.initShips(s);
     Islands.initIslands(s);
   }
+  if (citiesKnightsOn(s)) initCommodities(s);
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -477,7 +483,7 @@ function checkWin(s) {
 function stealRandom(s, from, to) {
   const p = s.players[from];
   const bag = [];
-  for (const r of RES) for (let i = 0; i < p.res[r]; i++) bag.push(r);
+  for (const r of cardsOf(s)) for (let i = 0; i < p.res[r]; i++) bag.push(r);
   if (!bag.length) return null;
   const r = pick(s.rng, bag);
   p.res[r]--;
@@ -490,8 +496,9 @@ function stealRandom(s, from, to) {
 function produce(s, sum) {
   const bd = s.board;
   const mult = (s.config.rules.productionMult || 1) * (s.event && s.event.id === 'bonanza' ? 2 : 1);
-  const gains = s.players.map(() => zeroRes());
+  const gains = s.players.map(() => blankHand(s));
   const from = s.players.map(() => ({})); // tiles each gain came from (the UI flies the cards from there)
+  const ck = citiesKnightsOn(s);
   for (const t of bd.tiles) {
     if (t.num !== sum || t.id === bd.robber) continue;
     if (t.fog && !t.revealed) continue; // Seafarers: undiscovered fog land doesn't produce
@@ -508,8 +515,12 @@ function produce(s, sum) {
         const p = s.players[b.owner];
         r = RES.reduce((best, x) => (p.res[x] + gains[b.owner][x] < p.res[best] + gains[b.owner][best] ? x : best), RES[0]);
       }
-      gains[b.owner][r] += amt;
-      (from[b.owner][r] ||= []).push(t.id);
+      // Cities & Knights: a city by forest / pasture / mountains takes 1 resource + 1 commodity
+      const got = ck && b.type === 'city' && t.res !== 'gold' ? cityYield(r, mult) : { [r]: amt };
+      for (const [c, n] of Object.entries(got)) {
+        gains[b.owner][c] += n;
+        (from[b.owner][c] ||= []).push(t.id);
+      }
       produced = true;
     }
     if (produced && t.revealed && !t.numRevealed) {
@@ -517,7 +528,7 @@ function produce(s, sum) {
       s.fx.push({ kind: 'revealTile', tile: t.id });
     }
   }
-  for (const r of RES) {
+  for (const r of cardsOf(s)) {
     const receivers = gains.map((g, i) => i).filter(i => gains[i][r] > 0);
     const total = receivers.reduce((a, i) => a + gains[i][r], 0);
     if (!total) continue;
@@ -532,7 +543,7 @@ function produce(s, sum) {
   }
   const summary = gains
     .map((g, i) => {
-      const parts = RES.filter(r => g[r]).map(r => `${g[r]}${resName(r)}`);
+      const parts = cardsOf(s).filter(r => g[r]).map(r => `${g[r]}${resName(r)}`);
       return parts.length ? `@${i} ${parts.join(' ')}` : null;
     })
     .filter(Boolean);
@@ -904,6 +915,11 @@ H.roll = (s, a) => {
   const d = rollDice(s);
   const sum = d[0] + d[1];
   s.dice = d;
+  // Cities & Knights: the event die rolls along (its effects come with barbarians / progress cards)
+  if (citiesKnightsOn(s)) {
+    s.eventDie = EVENT_FACES[randInt(s.rng, 6)];
+    s.fx.push({ kind: 'eventDie', face: s.eventDie });
+  }
   s.stats.rolls[sum]++;
   (s.rollLog ||= []).push({ pid: a.pid, sum });
   if (s.rollLog.length > 30) s.rollLog.shift();
@@ -937,16 +953,16 @@ H.discard = (s, a) => {
   const need = s.pendingDiscards[a.pid];
   if (!need) fail('No tienes que descartar.');
   const res = a.res || {};
-  const total = RES.reduce((t, r) => t + (res[r] || 0), 0);
+  const total = cardsOf(s).reduce((t, r) => t + (res[r] || 0), 0);
   if (total !== need) fail(msg('Debes descartar exactamente {n} cartas.', { n: need }));
   const p = s.players[a.pid];
-  for (const r of RES) if ((res[r] || 0) < 0 || (res[r] || 0) > p.res[r]) fail('No tienes esas cartas.');
-  for (const r of RES) {
+  for (const r of cardsOf(s)) if ((res[r] || 0) < 0 || (res[r] || 0) > p.res[r]) fail('No tienes esas cartas.');
+  for (const r of cardsOf(s)) {
     p.res[r] -= res[r] || 0;
     s.bank[r] += res[r] || 0;
   }
   p.stats.lost += need;
-  s.fx.push({ kind: 'discard', pid: a.pid, res: Object.fromEntries(RES.map(r => [r, res[r] || 0])) });
+  s.fx.push({ kind: 'discard', pid: a.pid, res: Object.fromEntries(cardsOf(s).map(r => [r, res[r] || 0])) });
   delete s.pendingDiscards[a.pid];
   log(s, msg('🗑️ @{p} descarta {n} cartas.', { p: a.pid, n: need }), a.pid);
   if (!Object.keys(s.pendingDiscards).length) s.phase = s.config.rules.noRobber ? 'main' : 'robber';
@@ -1145,7 +1161,7 @@ H.playDev = (s, a) => {
 
 H.bankTrade = (s, a) => {
   assertMain(s, a);
-  if (!RES.includes(a.give) || !RES.includes(a.get) || a.give === a.get) fail('Intercambio inválido.');
+  if (!cardsOf(s).includes(a.give) || !cardsOf(s).includes(a.get) || a.give === a.get) fail('Intercambio inválido.');
   const ratio = tradeRatio(s, a.pid, a.give);
   const p = s.players[a.pid];
   if (p.res[a.give] < ratio) fail(msg('Necesitas {n} de ese recurso.', { n: ratio }));
@@ -1158,19 +1174,19 @@ H.bankTrade = (s, a) => {
   log(s, msg('🏦 @{p} cambia {n}{give} por 1{get}.', { p: a.pid, n: ratio, give: resName(a.give), get: resName(a.get) }), a.pid);
 };
 
-const validOffer = o => o && RES.every(r => Number.isInteger(o[r] || 0) && (o[r] || 0) >= 0);
+const validOffer = (s, o) => o && cardsOf(s).every(r => Number.isInteger(o[r] || 0) && (o[r] || 0) >= 0);
 
 H.proposeTrade = (s, a) => {
   assertMain(s, a);
   if (s.trade) fail('Ya hay una oferta abierta.');
-  if (!validOffer(a.give) || !validOffer(a.get)) fail('Oferta inválida.');
+  if (!validOffer(s, a.give) || !validOffer(s, a.get)) fail('Oferta inválida.');
   if (!handSize(a.give) || !handSize(a.get)) fail('La oferta debe dar y pedir algo.');
-  if (RES.some(r => (a.give[r] || 0) && (a.get[r] || 0))) fail('No puedes dar y pedir el mismo recurso.');
+  if (cardsOf(s).some(r => (a.give[r] || 0) && (a.get[r] || 0))) fail('No puedes dar y pedir el mismo recurso.');
   if (!canAfford(s.players[a.pid].res, a.give)) fail('No tienes lo que ofreces.');
   const to = (a.to && a.to.length ? a.to : s.players.map(p => p.id)).filter(i => i !== a.pid && s.players[i] && !s.players[i].retired);
   if (!to.length) fail('Nadie a quien ofrecer.');
-  const give = zeroRes(), get = zeroRes();
-  for (const r of RES) {
+  const give = blankHand(s), get = blankHand(s);
+  for (const r of cardsOf(s)) {
     give[r] = a.give[r] || 0;
     get[r] = a.get[r] || 0;
   }
@@ -1198,7 +1214,7 @@ H.confirmTrade = (s, a) => {
     s.trade = null;
     fail('Alguien ya no tiene los recursos.');
   }
-  for (const r of RES) {
+  for (const r of cardsOf(s)) {
     p.res[r] += t.get[r] - t.give[r];
     o.res[r] += t.give[r] - t.get[r];
   }
@@ -1264,7 +1280,7 @@ H.retirePlayer = (s, a) => {
   if (s.players.filter(x => !x.retired).length <= 2) fail('Tienen que quedar al menos 2 jugadores.');
   p.retired = true;
   // hand back to the bank, development cards leave the game
-  for (const r of RES) {
+  for (const r of cardsOf(s)) {
     s.bank[r] += p.res[r];
     p.res[r] = 0;
   }

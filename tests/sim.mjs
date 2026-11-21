@@ -7,12 +7,22 @@ import { SHAPES } from '../js/engine/board.js';
 import { RES } from '../js/engine/constants.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import { MAX_SHIPS } from '../js/engine/seafarers/ships.js';
+import { COMMODITIES, COMMODITY_BANK } from '../js/engine/citiesKnights/commodities.js';
 
 const GAMES = +process.argv[2] || 200;
 const shapes = Object.keys(SHAPES).filter(k => k !== 'custom');
 // after the base games, one extra Seafarers game per 5 base games (scenarios are for 2-4 players)
 const SF_GAMES = Math.ceil(GAMES / 5);
 const scenarios = Object.keys(SCENARIOS);
+// and one Cities & Knights game per 5 base games, on the normal maps
+const CK_GAMES = Math.ceil(GAMES / 5);
+function makeCitiesKnightsConfig(i) {
+  const c = makeConfig(i);
+  c.expansions = { seafarers: false, citiesKnights: true, scenario: 'newShores' };
+  c.rules.vpTarget = 13;
+  c.map.shape = 'ck:' + c.map.shape; // a label for the summary; stripped below
+  return c;
+}
 function makeSeafarersConfig(i) {
   const c = makeConfig(i);
   c.players = c.players.slice(0, 2 + (i % 3));
@@ -82,6 +92,13 @@ function check(s, where) {
       const ok = [E.a, E.b].some(v => (s.buildings[v] && s.buildings[v].owner === pid) || s.board.vertices[v].edges.some(e => e != k && s.roads[e] === pid));
       if (!ok) errs.push(`camino suelto ${k}`);
     }
+  // Cities & Knights commodities: never created or lost
+  if (s.config.expansions && s.config.expansions.citiesKnights)
+    for (const c of COMMODITIES) {
+      const tot = s.bank[c] + s.players.reduce((a, p) => a + p.res[c], 0);
+      if (tot !== COMMODITY_BANK) errs.push(`conservación ${c}: ${tot}`);
+      if (s.bank[c] < 0 || s.players.some(p => p.res[c] < 0)) errs.push(`${c} negativo`);
+    }
   // Seafarers ships: counted, on water, never sharing an edge with a road, linked to the network
   if (s.ships)
     for (const p of s.players) {
@@ -104,8 +121,10 @@ function check(s, where) {
 }
 
 const summary = { games: 0, finished: 0, turns: 0, byShape: {}, winnerVP: [], errors: 0 };
-for (let i = 0; i < GAMES + SF_GAMES; i++) {
-  const cfg = i < GAMES ? makeConfig(i) : makeSeafarersConfig(i);
+for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
+  const cfg = i < GAMES ? makeConfig(i) : i < GAMES + SF_GAMES ? makeSeafarersConfig(i) : makeCitiesKnightsConfig(i);
+  const label = cfg.map.shape;
+  if (label.startsWith('ck:')) cfg.map.shape = label.slice(3);
   let s;
   try {
     s = createGame(cfg);
@@ -157,7 +176,8 @@ for (let i = 0; i < GAMES + SF_GAMES; i++) {
       summary.fogAll = (summary.fogAll || 0) + s.board.tiles.filter(t => t.fog).length + s.board.sea.filter(t => t.fog).length;
     }
     summary.turns += s.turn;
-    const sh = (summary.byShape[cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
+    if (s.config.expansions.citiesKnights) summary.commodities = (summary.commodities || 0) + s.players.reduce((a, p) => a + COMMODITIES.reduce((b, c) => b + p.res[c], 0), 0) + (s.ckProduced || 0);
+    const sh = (summary.byShape[label.startsWith('ck:') ? 'ck' : cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
     sh.n++;
     sh.turns += s.turn;
     if (s.phase === 'gameOver') {

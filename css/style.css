@@ -137,6 +137,9 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 .dice { display: flex; gap: 6px; }
 .die { width: 34px; height: 34px; background: #fffaf0; border-radius: 8px; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 5px; box-shadow: 0 3px 0 #b8a988, inset 0 -2px 0 #e0d3b5; }
 .die.red-die { background: #ffe9e9; }
+/* Cities & Knights event die: a third die, ship or coloured city gate */
+.event-die { width: 34px; height: 34px; display: grid; place-items: center; font-size: 20px; background: #2b2b33; border-radius: 8px; box-shadow: 0 3px 0 #111; }
+.event-die.face-trade { background: #f2c94c; } .event-die.face-politics { background: #3b7dd8; } .event-die.face-science { background: #43a047; }
 .die i { width: 6px; height: 6px; border-radius: 50%; background: #222; place-self: center; opacity: 0; }
 .die i.on { opacity: 1; }
 .dice.rolling .die { animation: dieRoll .5s ease-out; }
