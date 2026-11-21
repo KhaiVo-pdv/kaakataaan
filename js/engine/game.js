@@ -13,6 +13,7 @@ import * as Knights from './citiesKnights/knights.js';
 import * as Barb from './citiesKnights/barbarians.js';
 import * as Progress from './citiesKnights/progress.js';
 import * as Science from './citiesKnights/science.js';
+import * as TradeCards from './citiesKnights/tradeCards.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
 // every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
@@ -119,6 +120,7 @@ export function createGame(configIn) {
     Knights.initKnights(s);
     Barb.initBarbarians(s);
     Progress.initProgress(s);
+    TradeCards.initTradeCards(s);
     s.devDeck = []; // progress cards replace the development cards
     s.devTotal = 0;
   }
@@ -232,6 +234,7 @@ export function victoryPoints(s, pid, hidden = true) {
   vp += Improve.metropolisVP(s, pid); // Cities & Knights metropolises (none in the base game)
   vp += s.players[pid].defenderVP || 0; // Cities & Knights Defender of Catan (absent in the base game)
   vp += s.players[pid].progressVP || 0; // Cities & Knights printer / constitution
+  if (s.merchant) vp += TradeCards.merchantVP(s, pid); // Cities & Knights merchant piece
   return vp;
 }
 
@@ -239,6 +242,7 @@ export function tradeRatio(s, pid, res) {
   let best = 4;
   // Cities & Knights trading house (trade level 3): commodities 2:1
   if (COMMODITIES.includes(res) && Improve.commodityRatio(s, pid)) best = Improve.commodityRatio(s, pid);
+  if (s.progress && TradeCards.cardRatio(s, pid, res)) best = Math.min(best, TradeCards.cardRatio(s, pid, res)); // merchant / merchant fleet
   if (s.event && s.event.id === 'fairTrade') best = 3;
   if (s.event && s.event.id === 'blackMarket' && s.event.res === res) best = 2;
   for (const k in s.buildings) {
@@ -379,6 +383,7 @@ export function pendingActors(s) {
   if (s.phase === 'displace') return s.displaced ? [s.displaced.pid] : [];
   if (s.phase === 'progressPick') return (s.progressPick || []).filter(pid => !s.players[pid].retired);
   if (s.phase === 'progressDiscard') return s.progressDiscard ? Object.keys(s.progressDiscard).map(Number).filter(pid => !s.players[pid].retired) : [];
+  if (s.phase === 'harbor') return s.harbor ? Object.keys(s.harbor.pending).map(Number).filter(pid => !s.players[pid].retired) : [];
   if (s.phase === 'pillage') return s.pillage ? Object.keys(s.pillage).map(Number).filter(pid => !s.players[pid].retired) : [];
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
@@ -1096,6 +1101,11 @@ function progressBlock(s, pid, id) {
     case 'medicine': return p.citiesLeft > 0 && legalCities(s, pid).length && canAfford(p.res, Science.MEDICINE_COST) ? '' : tk('Necesitas un poblado, una ciudad libre, 2 minerales y 1 cereal.');
     case 'roadBuilding': return p.roadsLeft > 0 && legalRoads(s, pid).length ? '' : tk('No puedes construir caminos.');
     case 'smith': return Knights.legalPromotions(s, pid).length ? '' : tk('No tienes caballeros que ascender.');
+    // trade
+    case 'merchant': return TradeCards.merchantTiles(s, pid).length ? '' : tk('No tienes casillas donde poner el mercader.');
+    case 'merchantFleet': case 'resourceMonopoly': case 'tradeMonopoly': return '';
+    case 'masterMerchant': return TradeCards.masterTargets(s, pid, publicVP(s)).length ? '' : tk('Nadie tiene más puntos que tú.');
+    case 'commercialHarbor': return TradeCards.harborTargets(s, pid).length && RES.some(r => p.res[r] > 0) ? '' : tk('Ningún rival tiene mercancías (o no tienes recursos).');
     default: return tk('Esta carta aún no se puede jugar.');
   }
 }
@@ -1120,6 +1130,18 @@ H.playProgress = (s, a) => {
   if (id === 'medicine' && !canBuildCity(s, a.pid, a.at)) fail('Solo puedes mejorar tus poblados.');
   if (id === 'smith') {
     const why = Science.smithBlock(s, a.pid, a.knights);
+    if (why) fail(why);
+  }
+  if (id === 'merchant' && !TradeCards.merchantTiles(s, a.pid).includes(a.tile)) fail('El mercader va en una casilla junto a tu poblado o ciudad.');
+  if (id === 'merchantFleet' && !cardsOf(s).includes(a.res)) fail('Elige un recurso o una mercancía.');
+  if (id === 'resourceMonopoly' && !RES.includes(a.res)) fail('Elige un recurso.');
+  if (id === 'tradeMonopoly' && !COMMODITIES.includes(a.res)) fail('Elige una mercancía.');
+  if (id === 'masterMerchant') {
+    const why = TradeCards.masterBlock(s, a.pid, a.target, a.cards, publicVP(s));
+    if (why) fail(why);
+  }
+  if (id === 'commercialHarbor') {
+    const why = TradeCards.harborBlock(s, a.pid, a.offers);
     if (why) fail(why);
   }
   // 2) the card leaves the hand and goes under its deck
@@ -1176,8 +1198,83 @@ H.playProgress = (s, a) => {
         s.fx.push({ kind: 'knight', pid: a.pid, at: v });
       }
       break;
+    // ---- trade ----
+    case 'merchant': {
+      const from = s.merchant ? s.merchant.owner : null;
+      s.merchant = { owner: a.pid, tile: a.tile };
+      s.fx.push({ kind: 'merchant', pid: a.pid, tile: a.tile, from });
+      log(s, from != null && from !== a.pid ? msg('💼 @{p} le quita el mercader a @{q}.', { p: a.pid, q: from }) : msg('💼 @{p} pone el mercader: 2:1 en {res}.', { p: a.pid, res: TILE_INFO[s.board.tiles[a.tile].res].name }), a.pid);
+      break;
+    }
+    case 'merchantFleet':
+      p.fleet = { turn: s.turn, res: a.res };
+      log(s, msg('🚢 @{p} comercia {res} 2:1 este turno.', { p: a.pid, res: TILE_INFO[a.res].name }), a.pid);
+      break;
+    case 'resourceMonopoly':
+    case 'tradeMonopoly': {
+      const most = id === 'resourceMonopoly' ? TradeCards.MONOPOLY_RES : TradeCards.MONOPOLY_COM;
+      const from = [];
+      let got = 0;
+      for (const q of s.players) {
+        if (q.id === a.pid || q.retired) continue;
+        const n = Math.min(most, q.res[a.res]);
+        if (!n) continue;
+        q.res[a.res] -= n;
+        p.res[a.res] += n;
+        got += n;
+        from.push([q.id, n]);
+      }
+      s.fx.push({ kind: 'monopoly', pid: a.pid, res: a.res, from });
+      log(s, msg('{icon} @{p} se lleva {n} {res}.', { icon: c.icon, p: a.pid, n: got, res: TILE_INFO[a.res].name }), a.pid);
+      break;
+    }
+    case 'masterMerchant': {
+      const q = s.players[a.target];
+      for (const r of a.cards) {
+        q.res[r]--;
+        p.res[r]++;
+      }
+      s.fx.push({ kind: 'steal', from: a.target, to: a.pid, res: a.cards[0] });
+      log(s, msg('🧐 @{p} mira la mano de @{q} y se lleva {n} cartas.', { p: a.pid, q: a.target, n: a.cards.length }), a.pid);
+      break;
+    }
+    case 'commercialHarbor': {
+      // the resources go out now; each rival then picks the commodity they give back
+      const pending = {};
+      for (const [qs, r] of Object.entries(a.offers)) {
+        const q = +qs;
+        p.res[r]--;
+        s.players[q].res[r]++;
+        pending[q] = r;
+      }
+      s.harbor = { from: a.pid, pending, back: s.phase };
+      s.phase = 'harbor';
+      log(s, msg('⚓ @{p} ofrece recursos a cambio de mercancías.', { p: a.pid }), a.pid);
+      break;
+    }
   }
 };
+
+// public points (no hidden cards): who counts as "having more points" for the trade cards
+const publicVP = s => pid => victoryPoints(s, pid, false);
+
+H.harborReturn = (s, a) => {
+  if (s.phase !== 'harbor' || !s.harbor || !(a.pid in s.harbor.pending)) fail('No tienes que devolver ninguna mercancía.');
+  const q = s.players[a.pid];
+  if (!COMMODITIES.includes(a.card) || !(q.res[a.card] > 0)) fail('Elige una mercancía que tengas.');
+  q.res[a.card]--;
+  s.players[s.harbor.from].res[a.card]++;
+  s.fx.push({ kind: 'steal', from: a.pid, to: s.harbor.from, res: a.card });
+  log(s, msg('⚓ @{q} devuelve una mercancía a @{p}.', { q: a.pid, p: s.harbor.from }), a.pid);
+  delete s.harbor.pending[a.pid];
+  harborDone(s);
+};
+
+function harborDone(s) {
+  if (Object.keys(s.harbor.pending).some(pid => !s.players[pid].retired)) return;
+  s.phase = s.harbor.back || 'main';
+  s.harbor = null;
+}
 
 H.discard = (s, a) => {
   if (s.phase !== 'discard') fail('No hay descartes pendientes.');
@@ -1684,6 +1781,11 @@ H.retirePlayer = (s, a) => {
     if (!Object.keys(s.pillage).length) s.pillage = null;
   }
   if (s.progressPick) s.progressPick = s.progressPick.filter(q => q !== pid);
+  if (s.harbor && s.harbor.from === pid) s.harbor = null; // their turn ends anyway
+  else if (s.harbor && pid in s.harbor.pending) {
+    delete s.harbor.pending[pid];
+    if (s.phase === 'harbor') harborDone(s);
+  }
   if (s.progressDiscard && s.progressDiscard[pid]) {
     delete s.progressDiscard[pid];
     if (!Object.keys(s.progressDiscard).length) s.progressDiscard = null;

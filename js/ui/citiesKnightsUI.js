@@ -6,6 +6,7 @@ import * as Knights from '../engine/citiesKnights/knights.js';
 import * as Barb from '../engine/citiesKnights/barbarians.js';
 import * as Progress from '../engine/citiesKnights/progress.js';
 import * as Science from '../engine/citiesKnights/science.js';
+import * as TradeCards from '../engine/citiesKnights/tradeCards.js';
 import { COMMODITIES, GATE_INFO, cardsOf } from '../engine/citiesKnights/commodities.js';
 import { t } from '../i18n.js';
 
@@ -283,7 +284,7 @@ export function progressHand(st, v, h, { open, playable = [] }) {
 // the list of your progress cards with what each one does
 export function progressModal(st, v, { h, close, playable = [], play }) {
   const p = st.players[v];
-  const soon = id => Progress.PROGRESS_CARDS[id].track !== 'science';
+  const soon = id => Progress.PROGRESS_CARDS[id].track === 'politics';
   return h('div', null,
     h('h2', null, t('📜 Cartas de progreso')),
     h('p', null, t('Máximo {n} en la mano. Las cartas de punto se revelan al robarlas.', { n: Progress.PROGRESS_HAND })),
@@ -293,7 +294,7 @@ export function progressModal(st, v, { h, close, playable = [], play }) {
       onclick: () => play(id),
     }))),
     p.progressVP ? h('p', null, t('🏆 Puntos por cartas reveladas: {n}', { n: p.progressVP })) : null,
-    p.progress.some(soon) ? h('p', { class: 'muted' }, t('Las cartas de comercio y política se podrán jugar pronto.')) : null,
+    p.progress.some(soon) ? h('p', { class: 'muted' }, t('Las cartas de política se podrán jugar pronto.')) : null,
     h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: close }, t('Cerrar'))));
 }
 
@@ -352,17 +353,23 @@ export function progressDescribe(a) {
   if (!a) return undefined;
   if (a.type === 'playProgress') return t('{icon} Juega {card}.', { icon: Progress.PROGRESS_CARDS[a.card].icon, card: progressName(a.card) });
   if (a.type === 'progressPick') return t('📜 Roba del mazo {track}.', { track: trackName(a.track) });
+  if (a.type === 'harborReturn') return t('⚓ Devuelve {card}.', { card: t(TILE_INFO[a.card].name) });
   if (a.type === 'progressDiscard') return t('🗑️ Descarta {card}.', { card: progressName(a.card) });
   return undefined;
 }
 
 // ---------- playing progress cards (science) ----------
 // ui.pick: 'prog:inventor' | 'prog:engineer' | 'prog:medicine' | 'prog:smith'; ui.progSel = chosen ids
-const PICK_CARDS = ['inventor', 'engineer', 'medicine', 'smith'];
+const PICK_CARDS = ['inventor', 'engineer', 'medicine', 'smith', 'merchant'];
+const MODAL_CARDS = ['merchantFleet', 'resourceMonopoly', 'tradeMonopoly', 'masterMerchant', 'commercialHarbor'];
 
 // start playing a card: direct ones go at once, the others ask for a target first
-export function startProgress(st, v, id, ui, { dispatch, rerender, openDice }) {
+export function startProgress(st, v, id, ui, { dispatch, rerender, openDice, openCard }) {
   if (id === 'alchemist') return openDice();
+  if (MODAL_CARDS.includes(id)) {
+    ui.cardDraft = { id, target: null, cards: [], offers: {} };
+    return openCard(id);
+  }
   if (PICK_CARDS.includes(id)) {
     ui.pick = 'prog:' + id;
     ui.progSel = [];
@@ -387,6 +394,7 @@ export function progressInteraction(st, v, ui, { mk, dispatch, rerender, legalCi
       else rerender();
     });
   if (id === 'engineer') return mk('city', Science.engineerSpots(st, v), at => done({ at }));
+  if (id === 'merchant') return mk('robber', TradeCards.merchantTiles(st, v), tile => done({ tile }));
   if (id === 'medicine') return mk('city', legalCities(st, v), at => done({ at }));
   if (id === 'smith')
     return mk('settlement', Knights.legalPromotions(st, v).filter(x => !sel.includes(x) && !Science.smithBlock(st, v, [...sel, x])), k => {
@@ -404,6 +412,7 @@ export function progressBanner(st, ui, inter) {
     inventor: n ? t('💡 Elige la segunda ficha (Esc para cancelar)') : t('💡 Elige la primera ficha a intercambiar (ni 2, 12, 6 ni 8)'),
     engineer: t('📐 Elige la ciudad de la muralla gratis (Esc para cancelar)'),
     medicine: t('💊 Elige el poblado que pasa a ciudad (Esc para cancelar)'),
+    merchant: t('💼 Elige la casilla del mercader, junto a tu poblado o ciudad (Esc para cancelar)'),
     smith: n ? t('🔨 Elige otro caballero o pulsa Listo') : t('🔨 Elige hasta 2 caballeros para ascender gratis (Esc para cancelar)'),
   }[ui.pick.slice(5)] || '';
 }
@@ -434,4 +443,76 @@ export function alchemistModal(st, v, ui, { h, dispatch, close, rerender }) {
     h('div', { class: 'row' },
       h('button', { class: 'btn ghost', onclick: close }, t('Cancelar')),
       h('button', { class: 'btn primary', 'data-testid': 'alch-go', onclick: () => { close(); dispatch({ type: 'playProgress', pid: v, card: 'alchemist', dice: [...d] }); } }, t('⚗️ Tirar así'))));
+}
+
+// ---------- trade cards that need a choice in a panel ----------
+const cardBtn = (h, r, n, attrs) => h('button', { class: 'btn res-opt', ...attrs }, h('span', null, TILE_INFO[r].icon), h('small', null, n == null ? t(TILE_INFO[r].name) : `${t(TILE_INFO[r].name)} ×${n}`));
+
+export function tradeCardModal(st, v, ui, { h, dispatch, close, rerender, vp }) {
+  const d = ui.cardDraft;
+  const p = st.players[v];
+  const c = Progress.PROGRESS_CARDS[d.id];
+  const head = [h('h2', null, `${c.icon} ${t(c.name)}`), h('p', null, t(c.desc))];
+  const go = extra => { close(); dispatch({ type: 'playProgress', pid: v, card: d.id, ...extra }); };
+  const cancel = h('button', { class: 'btn ghost', onclick: close }, t('Cancelar'));
+  // one resource / commodity to name
+  if (['merchantFleet', 'resourceMonopoly', 'tradeMonopoly'].includes(d.id)) {
+    const list = d.id === 'resourceMonopoly' ? RES : d.id === 'tradeMonopoly' ? COMMODITIES : cardsOf(st);
+    return h('div', null, ...head, h('div', { class: 'respick' }, list.map(r => cardBtn(h, r, null, { 'data-testid': 'name-' + r, onclick: () => go({ res: r }) }))), h('div', { class: 'row' }, cancel));
+  }
+  if (d.id === 'masterMerchant') {
+    const targets = TradeCards.masterTargets(st, v, vp);
+    if (d.target == null || !targets.includes(d.target))
+      return h('div', null, ...head, h('div', { class: 'row' }, targets.map(q => h('button', { class: 'btn', 'data-testid': 'mm-' + q, style: { borderColor: st.players[q].color }, onclick: () => { d.target = q; d.cards = []; rerender(); } }, `${st.players[q].name} (${vp(q)})`))), h('div', { class: 'row' }, cancel));
+    const q = st.players[d.target];
+    const want = Math.min(TradeCards.MASTER_TAKE, Object.values(q.res).reduce((a, b) => a + b, 0));
+    const taken = r => d.cards.filter(x => x === r).length;
+    return h('div', null, ...head,
+      h('p', null, t('Mano de {name}: elige {n} cartas.', { name: q.name, n: want })),
+      h('div', { class: 'respick' }, cardsOf(st).filter(r => q.res[r] > 0).map(r => cardBtn(h, r, q.res[r] - taken(r), {
+        class: 'btn res-opt' + (taken(r) ? ' active' : ''), disabled: q.res[r] - taken(r) <= 0 || d.cards.length >= want, 'data-testid': 'mmc-' + r,
+        onclick: () => { d.cards.push(r); rerender(); },
+      }))),
+      h('p', null, t('Elegidas: {list}', { list: d.cards.map(r => TILE_INFO[r].icon).join(' ') || '—' })),
+      h('div', { class: 'row' }, cancel, h('button', { class: 'btn ghost', onclick: () => { d.cards = []; rerender(); } }, t('Borrar')),
+        h('button', { class: 'btn primary', 'data-testid': 'mm-go', disabled: d.cards.length !== want, onclick: () => go({ target: d.target, cards: [...d.cards] }) }, t('🧐 Llevármelas'))));
+  }
+  if (d.id === 'commercialHarbor') {
+    const targets = TradeCards.harborTargets(st, v);
+    const used = r => Object.values(d.offers).filter(x => x === r).length;
+    return h('div', null, ...head,
+      h('p', null, t('Elige qué recurso ofreces a cada rival (o ninguno). Cada uno te devuelve la mercancía que elija.')),
+      ...targets.map(q => h('div', { class: 'harbor-row' }, h('b', { style: { color: st.players[q].color } }, st.players[q].name),
+        h('button', { class: 'btn sm' + (d.offers[q] == null ? ' active' : ''), onclick: () => { delete d.offers[q]; rerender(); } }, t('Nada')),
+        RES.filter(r => p.res[r] > 0).map(r => h('button', {
+          class: 'btn sm' + (d.offers[q] === r ? ' active' : ''), 'data-testid': `hb-${q}-${r}`,
+          disabled: d.offers[q] !== r && used(r) >= p.res[r], title: t(TILE_INFO[r].name),
+          onclick: () => { d.offers[q] = r; rerender(); },
+        }, TILE_INFO[r].icon)))),
+      h('div', { class: 'row' }, cancel, h('button', { class: 'btn primary', 'data-testid': 'hb-go', disabled: !Object.keys(d.offers).length, onclick: () => go({ offers: { ...d.offers } }) }, t('⚓ Ofrecer'))));
+  }
+  return null;
+}
+
+// Commercial Harbor: a rival picks which commodity to give back
+export function harborReturnModal(st, v, { h, dispatch }) {
+  const p = st.players[v];
+  const from = st.players[st.harbor.from];
+  const got = st.harbor.pending[v];
+  return h('div', null,
+    h('h2', null, t('⚓ Puerto comercial')),
+    h('p', null, t('{name} te da {res} y tú le devuelves una mercancía a tu elección.', { name: from.name, res: `${TILE_INFO[got].icon} ${t(TILE_INFO[got].name)}` })),
+    h('div', { class: 'respick' }, COMMODITIES.filter(c => p.res[c] > 0).map(c => cardBtn(h, c, p.res[c], { 'data-testid': 'hr-' + c, onclick: () => dispatch({ type: 'harborReturn', pid: v, card: c }) }))));
+}
+
+export function harborWaiting(st, v, h) {
+  if (st.phase !== 'harbor' || !st.harbor) return null;
+  if (v in st.harbor.pending) return h('div', { class: 'waiting your-turn' }, t('⚓ Elige qué mercancía devuelves'));
+  return h('div', { class: 'waiting' }, t('⚓ Esperando a que devuelvan mercancías...'));
+}
+
+// player card: the merchant
+export function merchantStats(st, p, { h }) {
+  if (!st.merchant || st.merchant.owner !== p.id) return [];
+  return [h('span', { class: 'award', title: t('Mercader: 2:1 en {res} y +1 punto', { res: t(TILE_INFO[st.board.tiles[st.merchant.tile].res].name) }) }, '💼')];
 }

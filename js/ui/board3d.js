@@ -24,7 +24,7 @@ import { pxIcon } from './pixel.js';
 import { flagCanvas } from './flag.js';
 import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
-import { makeKnight } from './citiesKnights3d.js';
+import { makeKnight, makeMerchant } from './citiesKnights3d.js';
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
 const TOKEN_SPAN = 0.75; // widest a number token gets on the map, in world units (a hex is 1.73 across)
@@ -1958,7 +1958,7 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p)),
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p)),
       inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b)], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
@@ -2093,6 +2093,15 @@ export class Board3D {
       const o = makeKnight(color, kn.level, kn.active);
       o.position.set(V.x, vy(+k) - 0.01, V.y);
       add(o, 'k' + k + kn.level + (kn.active ? 'a' : ''), color);
+    }
+    // Cities & Knights: the merchant on its tile
+    if (st.merchant) {
+      const t = bd.tiles[st.merchant.tile];
+      const color = st.players[st.merchant.owner].color;
+      const o = makeMerchant(color);
+      const x = t.x + 0.32, z = t.y - 0.2;
+      o.position.set(x, Math.max(this.heightAt(x, z), 0.1), z);
+      add(o, 'merchant' + t.id + st.merchant.owner, color);
     }
 
     if (robberOn) {

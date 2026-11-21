@@ -35,3 +35,16 @@ export function drawWallsAndMetros(S, U, st) {
   }
   return g;
 }
+
+// the merchant piece on its tile (trade progress card)
+export function drawMerchant(S, U, st) {
+  const m = st.merchant;
+  if (!m) return null;
+  const t = st.board.tiles[m.tile];
+  const g = S('g', { class: 'piece merchant', transform: `translate(${t.x * U + U * 0.38},${t.y * U - U * 0.28})`, filter: 'url(#shadow)' });
+  g.append(S('circle', { r: 15, fill: st.players[m.owner].color, stroke: '#1a1c2c', 'stroke-width': 2.5 }));
+  // a gold coin on the owner's token (emoji fonts are not reliable inside the svg)
+  g.append(S('circle', { r: 7, fill: '#ffcd75', stroke: '#8a5a1c', 'stroke-width': 2 }));
+  g.append(S('rect', { x: -1.5, y: -4, width: 3, height: 8, fill: '#8a5a1c' }));
+  return g;
+}

@@ -30,7 +30,7 @@ export const PROGRESS_CARDS = {
   // trade (yellow)
   commercialHarbor: { track: 'trade', n: 2, icon: '⚓', name: tk('Puerto comercial'), desc: tk('Ofrece a cada rival 1 recurso; quien tenga mercancías te da 1 a cambio.') },
   masterMerchant: { track: 'trade', n: 2, icon: '🧐', name: tk('Maestro mercader'), desc: tk('Mira la mano de un rival con más puntos que tú y toma 2 cartas.') },
-  merchant: { track: 'trade', n: 6, icon: '🧑‍💼', name: tk('Mercader'), desc: tk('Pon el mercader junto a tu poblado o ciudad: 2:1 con ese recurso y 1 punto mientras lo tengas.') },
+  merchant: { track: 'trade', n: 6, icon: '💼', name: tk('Mercader'), desc: tk('Pon el mercader junto a tu poblado o ciudad: 2:1 con ese recurso y 1 punto mientras lo tengas.') },
   merchantFleet: { track: 'trade', n: 2, icon: '🚢', name: tk('Flota mercante'), desc: tk('Este turno comercias 2:1 con el banco un recurso o mercancía a tu elección.') },
   resourceMonopoly: { track: 'trade', n: 4, icon: '🌾', name: tk('Monopolio de recursos'), desc: tk('Elige un recurso: cada rival te da hasta 2.') },
   tradeMonopoly: { track: 'trade', n: 2, icon: '🪙', name: tk('Monopolio comercial'), desc: tk('Elige una mercancía: cada rival te da 1.') },

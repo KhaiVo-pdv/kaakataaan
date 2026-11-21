@@ -14,6 +14,8 @@ import * as Improve from './citiesKnights/improvements.js';
 import { PROGRESS_TRACKS } from './citiesKnights/progress.js';
 import * as Knights from './citiesKnights/knights.js';
 import * as Science from './citiesKnights/science.js';
+import * as TradeCards from './citiesKnights/tradeCards.js';
+import { COMMODITIES } from './citiesKnights/commodities.js';
 
 const LEVELS = {
   easy: { noise: 1.6, trade: 0.2, dev: 0.4 },
@@ -310,6 +312,45 @@ function tryProgressPlay(s, pid) {
     const helps = Improve.TRACKS.some(tr => !Improve.improveBlock(s, pid, tr) && !canAfford(p.res, Improve.improveCost(s, pid, tr)) && (p.res[Improve.TRACK_COMMODITY[tr]] || 0) >= p.improve[tr]);
     if (helps) return play('crane');
   }
+  // trade cards
+  if (can.has('merchant')) {
+    const prod = production(s, pid);
+    const tiles = TradeCards.merchantTiles(s, pid);
+    const mine = s.merchant && s.merchant.owner === pid;
+    if (!mine) return play('merchant', { tile: best(tiles, t => (prod[s.board.tiles[t].res] || 0) + p.res[s.board.tiles[t].res] + noise(s, t) * 0.1) });
+  }
+  const rivalsHave = r => s.players.filter(q => q.id !== pid && !q.retired).reduce((n, q) => n + Math.min(2, q.res[r] || 0), 0);
+  if (can.has('resourceMonopoly')) {
+    const r = best(RES, x => rivalsHave(x) * RES_W[x]);
+    if (rivalsHave(r) >= 3) return play('resourceMonopoly', { res: r });
+  }
+  if (can.has('tradeMonopoly')) {
+    const r = best(COMMODITIES, x => rivalsHave(x));
+    if (rivalsHave(r) >= 2) return play('tradeMonopoly', { res: r });
+  }
+  if (can.has('masterMerchant')) {
+    const vp = q => victoryPoints(s, q, false);
+    const tg = best(TradeCards.masterTargets(s, pid, vp), q => vp(q) * 10 + handSize(s.players[q].res));
+    const hand = Object.entries(s.players[tg].res).flatMap(([r, n]) => Array(n).fill(r));
+    hand.sort((a, b) => (COMMODITIES.includes(b) ? 1.5 : RES_W[b] || 1) - (COMMODITIES.includes(a) ? 1.5 : RES_W[a] || 1));
+    return play('masterMerchant', { target: tg, cards: hand.slice(0, TradeCards.MASTER_TAKE) });
+  }
+  if (can.has('commercialHarbor')) {
+    const offers = {};
+    const left = { ...p.res };
+    for (const q of TradeCards.harborTargets(s, pid)) {
+      const r = best(RES.filter(x => left[x] > 0), x => left[x]);
+      if (r == null || left[r] < 2) break; // keep at least one of each thing we give
+      offers[q] = r;
+      left[r]--;
+    }
+    if (Object.keys(offers).length) return play('commercialHarbor', { offers });
+  }
+  if (can.has('merchantFleet')) {
+    // only when we hold 4+ of something: two 2:1 trades this turn
+    const r = best(cardsOf(s), x => p.res[x]);
+    if (p.res[r] >= 4 && tradeRatio(s, pid, r) > 2) return play('merchantFleet', { res: r });
+  }
   if (can.has('inventor')) {
     // give our best spot a better number: swap our weakest swappable token with the best one nobody of us has
     const ok = Science.inventorTiles(s);
@@ -511,6 +552,12 @@ export function botAct(real, pid) {
     // over the hand limit: drop the oldest card (cards can't be played yet)
     if (!s.progressDiscard || !s.progressDiscard[pid]) return null;
     return { type: 'progressDiscard', pid, card: s.players[pid].progress[0] };
+  }
+  if (s.phase === 'harbor') {
+    // Commercial Harbor: give back the commodity we have most of
+    if (!s.harbor || !(pid in s.harbor.pending)) return null;
+    const p = s.players[pid];
+    return { type: 'harborReturn', pid, card: best(COMMODITIES.filter(c => p.res[c] > 0), c => p.res[c]) };
   }
   if (s.phase === 'pillage') {
     // Cities & Knights barbarians: give up the city that produces least

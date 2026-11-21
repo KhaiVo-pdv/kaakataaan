@@ -1469,6 +1469,79 @@ t('Progreso: no se juega fuera de tu turno ni antes de tirar (salvo el alquimist
   ok(!act(s, { type: 'playProgress', pid: 0, card: 'bishop' }).ok, 'solo cartas de tu mano');
 });
 
+// ---- Cities & Knights trade progress cards ----
+t('Comercio: mercader da 2:1 en su recurso y 1 punto; el último que lo juega se lo lleva', () => {
+  const s = withCard(ckMain(), 'merchant');
+  const tile = s.board.tiles.find(t => t.res === 'sheep');
+  s.buildings[tile.verts[0]] = { owner: 0, type: 'settlement' };
+  const vp = G.victoryPoints(s, 0);
+  const far = s.board.tiles.find(t => t.res && t.res !== 'desert' && !t.verts.includes(tile.verts[0]) && t.res !== 'sea');
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'merchant', tile: far.id }).ok, 'solo junto a tus edificios');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'merchant', tile: tile.id }).ok);
+  eq(G.tradeRatio(s, 0, 'sheep'), 2);
+  eq(G.victoryPoints(s, 0), vp + 1);
+  // player 1 takes it
+  s.current = 1;
+  const t1 = s.board.tiles.find(t => t.res === 'ore');
+  s.buildings[t1.verts[0]] = { owner: 1, type: 'settlement' };
+  s.players[1].progress.push('merchant');
+  ok(act(s, { type: 'playProgress', pid: 1, card: 'merchant', tile: t1.id }).ok);
+  eq(G.victoryPoints(s, 0), vp, 'pierde el punto');
+  eq(s.merchant.owner, 1);
+  ok(G.tradeRatio(s, 0, 'sheep') > 2);
+});
+
+t('Comercio: flota mercante da 2:1 en lo elegido solo este turno', () => {
+  const s = withCard(ckMain(), 'merchantFleet');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'merchantFleet', res: 'coin' }).ok);
+  eq(G.tradeRatio(s, 0, 'coin'), 2);
+  s.turn++;
+  ok(G.tradeRatio(s, 0, 'coin') > 2, 'se acaba con el turno');
+});
+
+t('Comercio: monopolio de recursos (hasta 2 de cada rival) y comercial (1 mercancía)', () => {
+  const s = withCard(withCard(ckMain(), 'resourceMonopoly'), 'tradeMonopoly');
+  give(s, 1, { wheat: 5, cloth: 2 });
+  give(s, 2, { wheat: 1 });
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'resourceMonopoly', res: 'cloth' }).ok, 'solo recursos');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'resourceMonopoly', res: 'wheat' }).ok);
+  eq(s.players[0].res.wheat, 3);
+  eq(s.players[1].res.wheat, 3);
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'tradeMonopoly', res: 'cloth' }).ok);
+  eq(s.players[0].res.cloth, 1);
+});
+
+t('Comercio: maestro mercader toma 2 cartas a un rival con más puntos', () => {
+  const s = withCard(ckMain(), 'masterMerchant');
+  give(s, 1, { ore: 2, paper: 1 });
+  give(s, 2, { wood: 3 });
+  ok(!G.playableProgress(s, 0).includes('masterMerchant'), 'nadie tiene más puntos');
+  s.buildings[s.board.tiles[3].verts[0]] = { owner: 1, type: 'city' };
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'masterMerchant', target: 2, cards: ['wood', 'wood'] }).ok, 'el rival 2 no tiene más puntos');
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'masterMerchant', target: 1, cards: ['ore', 'wood'] }).ok, 'solo cartas de su mano');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'masterMerchant', target: 1, cards: ['ore', 'paper'] }).ok);
+  eq([s.players[0].res.ore, s.players[0].res.paper, s.players[1].res.ore], [1, 1, 1]);
+});
+
+t('Comercio: puerto comercial: cada rival elige qué mercancía devuelve', () => {
+  const s = withCard(ckMain(), 'commercialHarbor');
+  give(s, 0, { brick: 2 });
+  give(s, 1, { coin: 1, cloth: 1 });
+  give(s, 2, { paper: 2 });
+  ok(!act(s, { type: 'playProgress', pid: 0, card: 'commercialHarbor', offers: { 1: 'brick', 2: 'brick', 3: 'brick' } }).ok, 'el rival 3 no tiene mercancías');
+  ok(act(s, { type: 'playProgress', pid: 0, card: 'commercialHarbor', offers: { 1: 'brick', 2: 'brick' } }).ok);
+  eq(s.phase, 'harbor');
+  eq(G.pendingActors(s).sort(), [1, 2]);
+  eq(s.players[1].res.brick, 1);
+  ok(!act(s, { type: 'harborReturn', pid: 1, card: 'paper' }).ok, 'una mercancía que tenga');
+  ok(act(s, { type: 'harborReturn', pid: 1, card: 'cloth' }).ok);
+  eq(s.phase, 'harbor');
+  ok(act(s, { type: 'harborReturn', pid: 2, card: 'paper' }).ok);
+  eq(s.phase, 'main');
+  eq([s.players[0].res.brick, s.players[0].res.cloth, s.players[0].res.paper], [0, 1, 1]);
+});
+
+
 
 
 

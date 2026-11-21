@@ -18,7 +18,7 @@ let ui = null;
 
 const PHASE_TEXT = {
   setup: tk('Colocación inicial'), roll: tk('Tirar dados'), main: tk('Construir y comerciar'), discard: tk('Descartar'),
-  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), displace: tk('Recolocar caballero'),
+  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), harbor: tk('Puerto comercial'), displace: tk('Recolocar caballero'),
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -691,6 +691,7 @@ function bannerText(st, v, inter) {
   if (st.phase === 'displace') return t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name });
   if (st.phase === 'pillage') return (inter && CK.ckBanner(st, ui, inter)) || t('🔥 Los bárbaros saquean: esperando a los perdedores...');
   if (st.phase === 'progressPick') return t('🛡️ Los defensores empatados eligen carta...');
+  if (st.phase === 'harbor') return t('⚓ Esperando a que devuelvan mercancías...');
   if (st.phase === 'progressDiscard') return t('🗑️ Esperando descartes de progreso...');
   if (st.phase === 'discard') {
     const n = Object.keys(st.pendingDiscards).length;
@@ -767,6 +768,7 @@ function renderPlayers(st, v) {
         ...Sea.seaStats(st, p, { h }), // Seafarers: ships left, island bonus
         ...CK.ckStats(st, p, { h }), // Cities & Knights: improvements, metropolises, walls
         ...CK.knightStats(st, p, { h }),
+        ...CK.merchantStats(st, p, { h }),
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
         st.pendingDiscards[p.id] ? h('span', { style: { color: 'var(--red)' } }, `🗑️ ${st.pendingDiscards[p.id]}`) : null));
@@ -846,6 +848,10 @@ function fillActions(bar, st, v, locked) {
   }
   if (st.phase === 'pillage') {
     acts.append(CK.pillageWaiting(st, v, h));
+    return;
+  }
+  if (st.phase === 'harbor') {
+    acts.append(CK.harborWaiting(st, v, h));
     return;
   }
   if (st.phase === 'progressPick' || st.phase === 'progressDiscard') {
@@ -1141,9 +1147,13 @@ function openProgress(v) {
     h, close: closeModal, playable: G.playableProgress(App.state, v),
     play: id => {
       closeModal();
-      CK.startProgress(App.state, v, id, ui, { dispatch: a => App.dispatch(a), rerender: () => render(App.state), openDice: () => openAlchemist(v) });
+      CK.startProgress(App.state, v, id, ui, { dispatch: a => App.dispatch(a), rerender: () => render(App.state), openDice: () => openAlchemist(v), openCard: () => openTradeCard(v) });
     },
   }));
+}
+
+function openTradeCard(v) {
+  openModal(() => CK.tradeCardModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, rerender: () => render(App.state), vp: q => G.victoryPoints(App.state, q, false) }));
 }
 
 function openAlchemist(v) {
@@ -1217,6 +1227,8 @@ function modalContent(st, v) {
     return { kind: 'discard' + v, body: discardModal(st, v) };
   }
   ui.discard = null;
+  if (st.phase === 'harbor' && st.harbor && v in st.harbor.pending && localHumans(st).includes(v))
+    return { kind: 'harbor' + v, body: CK.harborReturnModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressPick' && st.progressPick && st.progressPick.includes(v) && localHumans(st).includes(v))
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))

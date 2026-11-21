@@ -3,7 +3,7 @@
 import { TILE_INFO, probLook } from '../engine/constants.js';
 import { s as S, clear } from './dom.js';
 import { drawShips, drawPirate, drawSeaHotspots, drawSeaFog } from './seafarers2d.js';
-import { drawKnights, drawWallsAndMetros } from './citiesKnights2d.js';
+import { drawKnights, drawWallsAndMetros, drawMerchant } from './citiesKnights2d.js';
 
 const U = 100; // svg units per hex radius
 const hexPoints = (cx, cy, r) =>
@@ -262,6 +262,7 @@ export class BoardView {
     if (st.walls) svg.append(drawWallsAndMetros(S, U, st)); // Cities & Knights: walls under the cities
     svg.append(gB);
     if (st.knights) svg.append(drawKnights(S, U, st)); // Cities & Knights: knights
+    if (st.merchant) svg.append(drawMerchant(S, U, st)); // Cities & Knights: merchant
 
     // robber
     if (bd.robber >= 0 && !st.config.rules.noRobber && bd.tiles[bd.robber].revealed && !bd.robberHidden) {

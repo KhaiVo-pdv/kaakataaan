@@ -38,3 +38,16 @@ export function makeKnight(color, level, active) {
   g.scale.setScalar(1.3);
   return g;
 }
+
+// the merchant piece (trade progress card): a little figure with a coin on top, in its owner's colour
+export function makeMerchant(color) {
+  const g = new THREE.Group();
+  part(g, geo.base, mat(color), 0.03);
+  const body = part(g, new THREE.ConeGeometry(0.11, 0.3, 10), mat(color), 0.21);
+  body.scale.set(1, 1, 1);
+  part(g, new THREE.SphereGeometry(0.07, 10, 8), mat('#f2d0a4'), 0.41);
+  const coin = part(g, new THREE.CylinderGeometry(0.07, 0.07, 0.02, 14), mat('#ffcd75', { metal: 0.8 }), 0.55);
+  coin.rotation.x = Math.PI / 2;
+  g.scale.setScalar(1.4);
+  return g;
+}
