@@ -1,0 +1,180 @@
+// Headless self-play: runs many bot-only games over every map/mode combination and
+// checks rule invariants after every single action.  Usage: node tests/sim.mjs [games]
+import { createGame, applyAction, pendingActors, victoryPoints, handSize, canBuildRoad } from '../js/engine/game.js';
+import { botAct } from '../js/engine/bot.js';
+import { defaultConfig, MODES, PLAYER_COLORS } from '../js/engine/config.js';
+import { SHAPES } from '../js/engine/board.js';
+import { RES } from '../js/engine/constants.js';
+import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
+import { MAX_SHIPS } from '../js/engine/seafarers/ships.js';
+
+const GAMES = +process.argv[2] || 200;
+const shapes = Object.keys(SHAPES).filter(k => k !== 'custom');
+// after the base games, one extra Seafarers game per 5 base games (scenarios are for 2-4 players)
+const SF_GAMES = Math.ceil(GAMES / 5);
+const scenarios = Object.keys(SCENARIOS);
+function makeSeafarersConfig(i) {
+  const c = makeConfig(i);
+  c.players = c.players.slice(0, 2 + (i % 3));
+  c.expansions = { seafarers: true, scenario: scenarios[i % scenarios.length] };
+  c.map.shape = 'sf:' + c.expansions.scenario; // only a label for the summary: the scenario draws the map
+  c.rules.vpTarget = SCENARIOS[c.expansions.scenario].vp;
+  return c;
+}
+
+function makeConfig(i) {
+  const c = defaultConfig();
+  c.seed = 1000 + i * 7919;
+  const np = 2 + (i % 7);
+  c.players = Array.from({ length: np }, (_, k) => ({ name: 'B' + k, kind: 'bot', level: ['easy', 'normal', 'hard'][(i + k) % 3], color: PLAYER_COLORS[k] }));
+  c.map.shape = shapes[i % shapes.length];
+  if (np > 4 && ['classic', 'mini'].includes(c.map.shape)) c.map.shape = 'extended';
+  if (np > 6) {
+    c.map.shape = ['big', 'huge', 'kingdoms', 'pangea'][i % 4];
+    c.map.size = 40;
+  }
+  c.map.size = 18 + (i % 20);
+  c.map.gold = i % 4 === 0 ? 2 : 0;
+  c.map.resources = i % 3 === 0 ? 'chaos' : 'balanced';
+  c.map.numbers = i % 5 === 0 ? 'random' : 'balanced';
+  c.map.ports = ['normal', 'many', 'few', 'none'][i % 4];
+  // toggle modes pseudo-randomly
+  MODES.forEach((m, k) => m.set(c, ((i * 2654435761) >>> (k + 3)) % 3 === 0));
+  if (i % 7 === 0) c.rules.vpTarget = 6 + (i % 9);
+  if (i % 6 === 0) c.rules.startBonus = 1;
+  if (i % 8 === 0) c.rules.setupRounds = 3;
+  if (i % 9 === 0) c.rules.devDeck = ['war', 'progress', 'none'][i % 3];
+  c.rules.robberGrace = i % 10 === 0 ? 2 : 0;
+  return c;
+}
+
+function check(s, where) {
+  const errs = [];
+  const bankEach = s.bankTotal;
+  for (const r of RES) {
+    const tot = s.bank[r] + s.players.reduce((a, p) => a + p.res[r], 0);
+    if (tot !== bankEach * RES.length / RES.length && tot !== bankEach) errs.push(`conservación ${r}: ${tot} != ${bankEach}`);
+    if (s.bank[r] < 0) errs.push(`banco negativo ${r}`);
+    for (const p of s.players) if (p.res[r] < 0) errs.push(`mano negativa ${p.id} ${r}`);
+  }
+  const R = s.config.rules;
+  for (const p of s.players) {
+    const setts = Object.values(s.buildings).filter(b => b.owner === p.id && b.type === 'settlement').length;
+    const cities = Object.values(s.buildings).filter(b => b.owner === p.id && b.type === 'city').length;
+    const roads = Object.values(s.roads).filter(o => o === p.id).length;
+    const blindS = s.blind.filter(b => b.pid === p.id && b.type === 'settlement').length;
+    const blindC = s.blind.filter(b => b.pid === p.id && b.type === 'city').length;
+    const blindR = s.blind.filter(b => b.pid === p.id && b.eid != null).length;
+    if (setts + blindS + p.settlementsLeft !== R.maxSettlements) errs.push(`poblados ${p.id}: ${setts}+${blindS}+${p.settlementsLeft}`);
+    if (cities + blindC + p.citiesLeft !== R.maxCities) errs.push(`ciudades ${p.id}`);
+    if (roads + blindR + p.roadsLeft !== R.maxRoads) errs.push(`caminos ${p.id}: ${roads}+${blindR}+${p.roadsLeft}`);
+  }
+  // buildings and roads only on land (Seafarers boards also have open-sea vertices and edges)
+  for (const k in s.buildings) if (!s.board.vertices[k].hexes.length) errs.push(`edificio en el mar ${k}`);
+  for (const k in s.roads) if (!s.board.edges[k].hexes.length) errs.push(`camino en el mar ${k}`);
+  // distance rule
+  for (const k in s.buildings) for (const u of s.board.vertices[k].adj) if (s.buildings[u]) errs.push(`distancia violada ${k}-${u}`);
+  // road connectivity: every road must touch own building or own road
+  if (s.phase !== 'setup' || !s.setup.blindActive)
+    for (const k in s.roads) {
+      const pid = s.roads[k];
+      const E = s.board.edges[k];
+      const ok = [E.a, E.b].some(v => (s.buildings[v] && s.buildings[v].owner === pid) || s.board.vertices[v].edges.some(e => e != k && s.roads[e] === pid));
+      if (!ok) errs.push(`camino suelto ${k}`);
+    }
+  // Seafarers ships: counted, on water, never sharing an edge with a road, linked to the network
+  if (s.ships)
+    for (const p of s.players) {
+      const mine = Object.keys(s.ships).filter(k => s.ships[k] === p.id);
+      if (mine.length + p.shipsLeft !== MAX_SHIPS) errs.push(`barcos ${p.id}: ${mine.length}+${p.shipsLeft}`);
+      for (const k of mine) {
+        const E = s.board.edges[k];
+        if (E.kind !== 'coast' && E.kind !== 'sea') errs.push(`barco fuera del agua ${k}`);
+        if (s.roads[k] !== undefined) errs.push(`barco y camino en ${k}`);
+        const linked = [E.a, E.b].some(v => (s.buildings[v] && s.buildings[v].owner === p.id) || s.board.vertices[v].edges.some(e => e != k && s.ships[e] === p.id));
+        if (!linked) errs.push(`barco suelto ${k}`);
+      }
+    }
+  // dev cards conservation
+  const devHeld = s.players.reduce((a, p) => a + p.dev.length, 0);
+  if (devHeld + s.devDeck.length > s.devTotal) errs.push('cartas de desarrollo duplicadas');
+  if (s.phase !== 'gameOver' && s.phase !== 'setup' && victoryPoints(s, s.current) >= R.vpTarget) errs.push('ganador no detectado');
+  if (s.phase === 'discard' && !Object.keys(s.pendingDiscards).length) errs.push('fase descarte vacía');
+  if (errs.length) throw new Error(`[${where}] ` + errs.join('; '));
+}
+
+const summary = { games: 0, finished: 0, turns: 0, byShape: {}, winnerVP: [], errors: 0 };
+for (let i = 0; i < GAMES + SF_GAMES; i++) {
+  const cfg = i < GAMES ? makeConfig(i) : makeSeafarersConfig(i);
+  let s;
+  try {
+    s = createGame(cfg);
+    let guard = 0;
+    while (s.phase !== 'gameOver' && s.turn < 1500) {
+      if (++guard > 200000) throw new Error('bucle infinito');
+      const actors = pendingActors(s);
+      let acted = false;
+      // simulate disconnections: occasionally retire a player or hand a seat to a bot
+      if (i % 3 === 0 && s.actions > 0 && s.actions % 97 === 0 && !s.__admin?.[s.actions]) {
+        (s.__admin ||= {})[s.actions] = 1;
+        const alive = s.players.filter(p => !p.retired);
+        const target = alive[(s.actions / 97) % alive.length | 0];
+        const act = alive.length > 2 && (s.actions / 97) % 2 < 1 ? { type: 'retirePlayer', pid: target.id } : { type: 'setController', pid: target.id, kind: target.kind === 'bot' ? 'human' : 'bot' };
+        if (act.type === 'setController' && act.kind === 'human') act.kind = 'bot';
+        const r = applyAction(s, act);
+        if (!r.ok) throw new Error(`admin ${JSON.stringify(act)}: ${r.error}`);
+        check(s, act.type);
+        continue;
+      }
+      for (const pid of actors) {
+        const a = botAct(s, pid);
+        if (!a) continue;
+        const robberBefore = s.board.robber, roadsBefore = { ...s.roads }, setupBefore = s.phase === 'setup';
+        const pirateBefore = s.board.pirate;
+        const r = applyAction(s, a);
+        if (a.type === 'movePirate') {
+          summary.pirate = (summary.pirate || 0) + 1;
+          if (s.board.pirate === pirateBefore || !s.board.sea[s.board.pirate]) throw new Error(`[movePirate] el pirata no se movió al mar`);
+        }
+        if (!r.ok) throw new Error(`acción ilegal del bot ${JSON.stringify(a)} en fase ${s.phase}: ${r.error}`);
+        check(s, a.type);
+        if (a.type === 'moveRobber' && s.board.robber === robberBefore) throw new Error(`[moveRobber] el ladrón se quedó en la casilla ${robberBefore}`);
+        // a new road must connect at an end that isn't a rival's building (checked when it's built:
+        // a rival may legally cut it later by settling in between)
+        if (!setupBefore)
+          for (const k in s.roads) if (roadsBefore[k] === undefined && !canBuildRoad({ ...s, roads: roadsBefore }, s.roads[k], +k))
+            throw new Error(`[${a.type}] camino ${k} no conecta (o pasa por un edificio rival)`);
+        acted = true;
+        break;
+      }
+      if (!acted) throw new Error(`bloqueo: fase=${s.phase} actores=${actors} trade=${JSON.stringify(s.trade)}`);
+    }
+    summary.games++;
+    if (s.ships) summary.ships = (summary.ships || 0) + Object.keys(s.ships).length;
+    if (s.board.islands) {
+      summary.islandVP = (summary.islandVP || 0) + s.players.reduce((t, p) => t + p.islandVP, 0);
+      summary.fogSeen = (summary.fogSeen || 0) + s.board.tiles.filter(t => t.fog && t.revealed).length + s.board.sea.filter(t => t.fog && t.revealed).length;
+      summary.fogAll = (summary.fogAll || 0) + s.board.tiles.filter(t => t.fog).length + s.board.sea.filter(t => t.fog).length;
+    }
+    summary.turns += s.turn;
+    const sh = (summary.byShape[cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
+    sh.n++;
+    sh.turns += s.turn;
+    if (s.phase === 'gameOver') {
+      summary.finished++;
+      sh.done++;
+      summary.winnerVP.push(victoryPoints(s, s.winner));
+    } else {
+      console.log(`⚠️  partida ${i} (${cfg.map.shape}, ${cfg.players.length}p) no terminó en 1500 turnos. VP: ${s.players.map(p => victoryPoints(s, p.id)).join(',')}`);
+    }
+  } catch (e) {
+    summary.errors++;
+    console.log(`❌ partida ${i} seed=${cfg.seed} shape=${cfg.map.shape} players=${cfg.players.length} modes=${JSON.stringify(cfg.modes)} rules=${JSON.stringify(cfg.rules)}`);
+    console.log('   ', e.stack.split('\n').slice(0, 4).join('\n    '));
+    if (summary.errors > 5) break;
+  }
+}
+if (summary.ships != null) console.log(`\n⛵ barcos en el mar al final de las partidas de Navegantes: ${summary.ships} · 🏴‍☠️ movimientos del pirata: ${summary.pirate || 0} · 🏝️ puntos por islas nuevas: ${summary.islandVP || 0} · 🌫️ niebla descubierta: ${summary.fogSeen || 0}/${summary.fogAll || 0}`);
+console.log(`\nPartidas: ${summary.games}, terminadas: ${summary.finished}, errores: ${summary.errors}, turnos medios: ${(summary.turns / Math.max(1, summary.games)).toFixed(1)}`);
+for (const [k, v] of Object.entries(summary.byShape)) console.log(`  ${k.padEnd(9)} ${v.done}/${v.n} terminadas, ${(v.turns / v.n).toFixed(0)} turnos`);
+process.exit(summary.errors ? 1 : 0);

@@ -1,0 +1,375 @@
+import { App, SAVE_KEY } from './app.js';
+import { h, storage, toast } from './ui/dom.js';
+import { lobbyScreen } from './ui/lobby.js';
+import { gameScreen } from './ui/gameView.js';
+import { editorScreen, decodeMap } from './ui/editor.js';
+import { showHelp, creditLine } from './ui/help.js';
+import { Net, HOST_SESSION, GUEST_SESSION, DEFAULT_CAPACITY, ONLINE_MAX, roomCodeFromSearch } from './net.js';
+import { openFlagEditor, flagImg, myKingdom, saveMyKingdom, patternFlag } from './ui/flag.js';
+import { autoPixelize } from './ui/pixel.js';
+import { t, LANGS, lang, setLang } from './i18n.js';
+
+// A full-screen WebGL canvas behind the menu steals taps AND mouse clicks
+// (GPU compositor layer + touch-action:none). pointer-events:none on the parent
+// is not enough. The island is decorative — only mount it with ?gfx=3d.
+function wantMenuDiorama() {
+  try {
+    return new URLSearchParams(location.search).get('gfx') === '3d';
+  } catch {
+    return false;
+  }
+}
+
+// live 3D island slowly orbiting behind the title (desktop only; phones skip it)
+async function menuDiorama(el) {
+  try {
+    const [{ Board3D }, { createGame }, { defaultConfig }] = await Promise.all([import('./ui/board3d.js'), import('./engine/game.js'), import('./engine/config.js')]);
+    if (!el.isConnected) return;
+    const c = defaultConfig();
+    c.map.shape = ['pangea', 'big', 'star', 'ring'][Math.floor(Math.random() * 4)];
+    c.map.size = 30;
+    c.map.gold = 1;
+    const st = createGame(c);
+    const b = await Board3D.create(el);
+    if (!el.isConnected) return b.dispose();
+    b.render(st, {});
+    b.labels.domElement.style.display = 'none';
+    b.controls.enabled = false;
+    b.controls.autoRotate = true;
+    b.controls.autoRotateSpeed = 0.35;
+    b.setZoom(1.15);
+    const prev = App.onLeave;
+    App.onLeave = () => {
+      if (prev) prev();
+      b.dispose();
+    };
+  } catch (e) {
+    console.warn('diorama', e);
+  }
+}
+
+async function reopenRoom(btn) {
+  btn.disabled = true;
+  btn.textContent = t('⏳ Reabriendo la sala (puede tardar unos segundos)...');
+  try {
+    await Net.reopen();
+    toast(t('🔁 Sala reabierta: tus amigos se reconectan solos'), 'good', 4000);
+  } catch (e) {
+    App.net = null;
+    toast(t('No se pudo reabrir: {msg}', { msg: e.message }), 'error', 5000);
+    App.go('menu');
+  }
+}
+
+async function backToRoom(sess) {
+  toast(t('📡 Volviendo a la sala {code}...', { code: sess.code }));
+  try {
+    App.net = new Net();
+    await App.net.join(sess.code, sess.name, myKingdom() || {});
+  } catch (e) {
+    App.net = null;
+    toast('❌ ' + e.message, 'error', 5000);
+  }
+}
+
+const myOrDefaultKingdom = () => myKingdom() || { name: storage('katanittes.name') || '', color: '#e53935', flag: patternFlag('#e53935', 1) };
+
+// "Tu reino" on the main menu: name + banner are set before any game (local, host or join)
+// the language picker, top right of the menu: the choice is saved and the page reloads in it
+function langPicker() {
+  const sel = h('select', { id: 'lang', 'aria-label': t('Idioma'), onchange: () => { setLang(sel.value); location.reload(); } },
+    LANGS.map(l => h('option', { value: l.id }, l.name)));
+  sel.value = lang;
+  return h('label', { class: 'lang-pick', title: t('Idioma') }, '🌐', sel);
+}
+
+function kingdomPanel() {
+  const box = h('div', { class: 'menu-kingdom' });
+  const draw = () => {
+    const k = myOrDefaultKingdom();
+    const nameIn = h('input', { type: 'text', class: 'hub-name', placeholder: t('Tu nombre'), value: k.name || '', maxlength: 16, 'aria-label': t('Tu nombre') });
+    nameIn.addEventListener('input', () => {
+      const n = nameIn.value.trim();
+      storage('katanittes.name', n);
+      saveMyKingdom({ ...myOrDefaultKingdom(), name: n });
+    });
+    box.replaceChildren(
+      h('button', { class: 'hub-flag small mk-flag', title: t('Pintar bandera y color del castillo'), onclick: paint }, h('div', { class: 'pole' }), flagImg(k.flag, 36, 'flag-img wave')),
+      h('div', { class: 'mk-info' },
+        h('label', { class: 'section-label' }, h('span', { class: 'swatch', style: { background: k.color } }), t('Tu reino')),
+        nameIn),
+      h('button', { class: 'btn sm', title: t('Pintar bandera y color del castillo'), onclick: paint }, '🎨'));
+    function paint() {
+      openFlagEditor({ flag: k.flag, color: k.color, name: nameIn.value.trim(), onSave: ({ flag, color }) => { saveMyKingdom({ ...myOrDefaultKingdom(), name: nameIn.value.trim(), flag, color }); draw(); } });
+    }
+  };
+  draw();
+  return box;
+}
+
+function menuScreen(root) {
+  const save = storage(SAVE_KEY);
+  const fresh = (x, hours) => x && Date.now() - (x.at || 0) < hours * 3600e3;
+  const hostSess = fresh(storage(HOST_SESSION), 24) ? storage(HOST_SESSION) : null;
+  // both can exist (hosted yesterday, joined a friend today): offer both
+  const guestSess = fresh(storage(GUEST_SESSION), 6) ? storage(GUEST_SESSION) : null;
+  const icons = ['🌲', '🧱', '🐑', '🌾', '⛰️', '🏠', '🏰', '🎲', '⚔️', '💰', '🛤️', '🙈'];
+  const bg = h('div', { class: 'menu-bg' }, Array.from({ length: 26 }, (_, i) => h('div', {
+    class: 'fhex', style: { left: ((i * 37) % 100) + '%', top: ((i * 53) % 100) + '%', animationDelay: -(i * 0.7) + 's', fontSize: 26 + ((i * 7) % 30) + 'px' },
+  }, icons[i % icons.length])));
+  const dio = h('div', { class: 'menu-bg3d' });
+  root.append(h('div', { class: 'menu screen' }, bg, dio, langPicker(),
+    h('div', { class: 'logo' },
+      h('div', { class: 't1 jit' }, h('span', { class: 't1b' }, 'KAAKATAAAN')),
+      h('div', { class: 'sub' }, t('Colonos, caos y modos que no existen en la caja.'))),
+    kingdomPanel(),
+    h('div', { class: 'menu-buttons' },
+      save ? h('button', { class: 'btn green', onclick: () => App.resume() }, t('▶️ Continuar partida (ronda {n})', { n: save.round || 0 })) : null,
+      hostSess ? h('div', { style: { display: 'flex', gap: '6px' } },
+        h('button', { class: 'btn green', style: { flex: 1 }, onclick: e => reopenRoom(e.currentTarget) }, t('🔁 Reabrir sala {code} (ronda {n})', { code: hostSess.code, n: hostSess.state.round })),
+        h('button', { class: 'btn ghost', title: t('Cerrar esa sala para siempre'), onclick: () => { storage(HOST_SESSION, null); App.go('menu'); } }, '✕')) : null,
+      guestSess ? h('button', { class: 'btn green', onclick: () => backToRoom(guestSess) }, t('📡 Volver a la sala {code}', { code: guestSess.code })) : null,
+      h('button', { class: 'btn primary', 'data-testid': 'play-local', onclick: () => App.go('lobby') }, t('🎮 Jugar local (hotseat + bots)')),
+      h('button', { class: 'btn pink', 'data-testid': 'play-online', onclick: () => App.go('online') }, t('🌐 Jugar online con amigos')),
+      h('button', { class: 'btn', onclick: () => App.go('editor') }, t('✏️ Editor de mapas')),
+      h('button', { class: 'btn', onclick: () => showHelp() }, t('📖 Cómo se juega'))),
+    h('div', { class: 'menu-foot' }, t('Hecho para jugar con amigos · funciona en PC y móvil · sin instalar nada'), creditLine())));
+  if (wantMenuDiorama()) menuDiorama(dio);
+}
+
+const RECENT_KEY = 'katanittes.recentRooms';
+function rememberRoom(code) {
+  const list = (storage(RECENT_KEY) || []).filter(r => r.code !== code);
+  list.unshift({ code, at: Date.now() });
+  storage(RECENT_KEY, list.slice(0, 4));
+}
+
+// "Jugar con amigos": identity, create a room or join one — and the guest's waiting room
+function onlineScreen(root) {
+  const params = new URLSearchParams(location.search);
+  const dio = h('div', { class: 'menu-bg3d' });
+  const inner = h('div', { class: 'hub-inner' });
+  root.append(h('div', { class: 'online-hub screen' }, dio, inner));
+  if (wantMenuDiorama()) menuDiorama(dio);
+  const kingdom = myOrDefaultKingdom;
+  let capacity = DEFAULT_CAPACITY;
+  let busy = false;
+  const invited = roomCodeFromSearch(params);
+  let autoTried = false;
+
+  const header = () => h('div', { class: 'hub-head' },
+    h('button', { class: 'btn', 'data-testid': 'hub-back', onclick: backToMenu }, t('← Menú')),
+    h('div', null, h('h2', { class: 'jit' }, t('🌐 Jugar con amigos')), h('div', { class: 'hub-sub' }, t('Hasta 6 en el móvil · código o enlace · sin cuentas'))));
+
+  function abortNet() {
+    busy = false;
+    if (App.net) {
+      try { App.net.close(); } catch {}
+      App.net = null;
+    }
+  }
+
+  function backToMenu() {
+    abortNet();
+    App.go('menu');
+  }
+
+  function draw() {
+    App.onLobby = draw;
+    const net = App.net;
+    if (net && net.role === 'client' && net.lobby) return drawWaiting(net);
+    const k = kingdom();
+    const nameIn = h('input', { type: 'text', class: 'hub-name', placeholder: t('Tu nombre'), value: k.name || storage('katanittes.name') || '', maxlength: 16 });
+    const saveName = () => {
+      const n = nameIn.value.trim();
+      storage('katanittes.name', n);
+      saveMyKingdom({ ...kingdom(), name: n });
+      return n;
+    };
+    nameIn.addEventListener('change', saveName);
+
+    // code as 5 PIN-like boxes
+    const boxes = Array.from({ length: 5 }, (_, i) => {
+      const b = h('input', { type: 'text', maxlength: 1, class: 'pin', inputmode: 'text', autocomplete: 'off', 'aria-label': t('Letra {n} del código', { n: i + 1 }) });
+      b.addEventListener('input', () => {
+        b.value = b.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (b.value && i < 4) boxes[i + 1].focus();
+      });
+      b.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !b.value && i > 0) boxes[i - 1].focus();
+        if (e.key === 'Enter') join();
+      });
+      b.addEventListener('paste', e => {
+        const t = (e.clipboardData.getData('text') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+        if (!t) return;
+        e.preventDefault();
+        [...t].forEach((c, j) => (boxes[j].value = c));
+        boxes[Math.min(4, t.length)].focus();
+      });
+      return b;
+    });
+    const pre = (invited || roomCodeFromSearch(params) || '').toUpperCase();
+    [...pre.slice(0, 5)].forEach((c, j) => (boxes[j].value = c));
+    const status = h('div', { class: 'hub-status', 'data-testid': 'hub-status' });
+    const retryBtn = h('button', { class: 'btn', 'data-testid': 'retry-join', hidden: true, onclick: () => join(invited) }, t('🔁 Reintentar'));
+    const actions = h('div', { class: 'hub-join-actions', hidden: true, 'data-testid': 'join-actions' },
+      h('button', { class: 'btn ghost', 'data-testid': 'cancel-join', onclick: () => {
+        abortNet();
+        status.classList.remove('error');
+        status.textContent = t('Búsqueda cancelada.');
+        actions.hidden = false;
+        retryBtn.hidden = false;
+      } }, t('✕ Cancelar')),
+      retryBtn);
+    const recent = (storage(RECENT_KEY) || []).filter(r => Date.now() - r.at < 7 * 864e5);
+
+    function failStatus(msg) {
+      busy = false;
+      status.classList.add('error');
+      status.textContent = '❌ ' + msg;
+      actions.hidden = false;
+      retryBtn.hidden = false;
+    }
+
+    async function host() {
+      if (busy) abortNet();
+      const n = saveName() || t('Anfitrión');
+      busy = true;
+      retryBtn.hidden = true;
+      actions.hidden = false;
+      status.classList.remove('error');
+      status.textContent = t('⏳ Abriendo tu sala...');
+      try {
+        App.net = new Net();
+        await App.net.host();
+        const cfg = storage('katanittes.lastConfig');
+        if (cfg && cfg.players) {
+          cfg.players[0] = { ...cfg.players[0], name: n, kind: 'human', color: kingdom().color, flag: kingdom().flag };
+          storage('katanittes.lastConfig', cfg);
+        }
+        App.go('lobby', { online: 'host', capacity: Math.min(capacity, ONLINE_MAX) });
+      } catch (e) {
+        App.net = null;
+        if (/cancelad/i.test(e.message || '')) {
+          busy = false;
+          status.classList.remove('error');
+          status.textContent = '';
+          actions.hidden = true;
+          return;
+        }
+        failStatus(e.message);
+      }
+    }
+
+    async function join(codeArg) {
+      if (busy) abortNet();
+      const n = saveName();
+      const code = (codeArg || boxes.map(b => b.value).join('')).toUpperCase();
+      if (!n) {
+        nameIn.focus();
+        return toast(t('Primero pon tu nombre'), 'error');
+      }
+      if (code.length < 5) return toast(t('El código tiene 5 letras'), 'error');
+      busy = true;
+      retryBtn.hidden = true;
+      actions.hidden = false;
+      status.classList.remove('error');
+      status.textContent = t('⏳ Buscando la sala {code}...', { code });
+      try {
+        App.net = new Net();
+        await App.net.join(code, n, kingdom(), st => {
+          if (st === 'waiting') {
+            rememberRoom(code);
+            status.textContent = t('✅ ¡Dentro!');
+          }
+          if (st === 'closed' && App.screen !== 'game') status.textContent = t('🔌 Conexión cerrada.');
+        });
+        busy = false;
+      } catch (e) {
+        App.net = null;
+        if (/cancelad/i.test(e.message || '')) {
+          busy = false;
+          status.classList.remove('error');
+          status.textContent = t('Búsqueda cancelada.');
+          actions.hidden = false;
+          retryBtn.hidden = false;
+          return;
+        }
+        failStatus(e.message);
+      }
+    }
+
+    const flagPole = h('div', { class: 'hub-flag' }, h('div', { class: 'pole' }), flagImg(k.flag, 72, 'flag-img wave'));
+    inner.replaceChildren(header(),
+      h('div', { class: 'hub-grid' },
+        h('div', { class: 'card hub-card kingdom-card' },
+          h('h3', null, t('🏰 Tu reino')),
+          h('div', { class: 'kingdom-hero' }, flagPole,
+            h('div', { class: 'kingdom-info' },
+              h('label', { class: 'section-label' }, t('Nombre')), nameIn,
+              h('div', { class: 'castle-line' }, h('span', { class: 'swatch', style: { background: k.color } }), h('span', null, t('Color de tu castillo'))))),
+          h('button', { class: 'btn', onclick: () => openFlagEditor({ flag: k.flag, color: k.color, name: nameIn.value.trim(), onSave: ({ flag, color }) => { saveMyKingdom({ ...kingdom(), name: nameIn.value.trim(), flag, color }); draw(); } }) }, t('🎨 Pintar bandera y castillo'))),
+        h('div', { class: 'card hub-card create-card' },
+          h('h3', null, t('👑 Crear sala')),
+          h('p', null, t('Tú eliges el mapa y los modos. Tu navegador hace de servidor: déjalo abierto mientras juegan.')),
+          h('div', { class: 'section-label' }, t('¿Cuántos jugadores?')),
+          h('div', { class: 'cap-row', 'data-testid': 'cap-row' }, [2, 3, 4, 5, 6].map(n => h('button', { class: 'cap' + (n === capacity ? ' on' : ''), 'data-cap': n, onclick: () => { capacity = n; if (!busy) draw(); } }, n))),
+          h('div', { class: 'cap-people' }, Array.from({ length: capacity }, (_, i) => h('span', { class: i === 0 ? 'me' : '' }, i === 0 ? '👑' : '🧑'))),
+          capacity >= 5 ? h('p', { class: 'hub-map-hint' }, t('🗺️ Con 5-6 jugadores uso el mapa extendido (30 hexágonos).')) : null,
+          h('button', { class: 'btn primary big', 'data-testid': 'create-room', onclick: host }, t('✨ Crear sala'))),
+        h('div', { class: 'card hub-card join-card' },
+          h('h3', null, invited ? t('🚪 Unirse a la sala {code}', { code: invited }) : t('🚪 Unirse')),
+          h('p', null, invited ? t('Pon tu nombre y entra. El anfitrión te está esperando.') : t('Pide el código de 5 letras al anfitrión (o entra con su enlace).')),
+          h('div', { class: 'pins' }, boxes),
+          h('button', { class: 'btn pink big', 'data-testid': 'join-room', onclick: () => join() }, t('🚀 Entrar')),
+          recent.length ? h('div', null, h('div', { class: 'section-label' }, t('Salas recientes')), h('div', { class: 'chips' }, recent.map(r => h('button', { class: 'chip', onclick: () => join(r.code) }, '↩ ' + r.code)))) : null)),
+      status,
+      actions,
+      h('div', { class: 'hub-tips' },
+        h('span', null, t('📡 WebRTC entre teléfonos (con relé TURN si hace falta)')),
+        h('span', null, t('🔁 Si se te cae la señal, vuelves a tu asiento')),
+        h('span', null, t('🗳️ Si alguien se va, la mesa vota'))));
+    if (pre && !boxes[4].value) boxes[pre.length] && boxes[pre.length].focus();
+    // a ?room= / ?sala= link with a saved name opens straight into that lobby
+    if (invited && invited.length === 5 && !autoTried && (saveName() || nameIn.value.trim())) {
+      autoTried = true;
+      setTimeout(() => join(invited), 50);
+    }
+  }
+
+  function drawWaiting(net) {
+    const L = net.lobby;
+    const seats = [{ ...L.host, host: true }, ...L.players];
+    const me = storage('katanittes.name');
+    inner.replaceChildren(header(),
+      h('div', { class: 'card hub-card waiting-card', 'data-testid': 'waiting-room' },
+        h('h3', null, t('🏰 Sala '), h('span', { class: 'room-code inline', 'data-testid': 'room-code' }, L.code || net.code), h('span', { class: 'room-state ' + (L.open ? 'on' : 'off') }, L.open ? t('abierta') : t('cerrada'))),
+        h('p', { class: 'waiting-msg jit' }, t('⏳ Esperando a que el anfitrión empiece la partida...')),
+        h('div', { class: 'section-label', 'data-testid': 'lobby-count' }, t('Reinos en la sala {n} / {max}', { n: seats.length, max: L.capacity })),
+        h('div', { class: 'seat-grid', 'data-testid': 'seat-grid' },
+          seats.map(p => h('div', { class: 'seat' + (p.host ? ' host' : '') + (p.name === me ? ' me' : ''), 'data-testid': 'seat' },
+            h('div', { class: 'hub-flag small' }, h('div', { class: 'pole' }), flagImg(p.flag, 40, 'flag-img wave')),
+            h('b', null, p.name), h('small', null, p.host ? t('👑 anfitrión') : p.name === me ? t('tú') : t('listo')))),
+          Array.from({ length: Math.max(0, L.capacity - seats.length) }, () => h('div', { class: 'seat empty' }, h('div', { class: 'seat-q' }, '?'), h('small', null, t('libre'))))),
+        h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: () => { net.close(); App.net = null; storage(GUEST_SESSION, null); App.go('online'); } }, t('🚪 Salir de la sala')))));
+  }
+
+  App.onLeave = () => {
+    App.onLobby = null;
+  };
+  draw();
+}
+
+autoPixelize(document.body);
+App.screens = { menu: menuScreen, lobby: lobbyScreen, game: gameScreen, editor: editorScreen, online: onlineScreen };
+
+// shared map link: ?mapa=<code>
+const params = new URLSearchParams(location.search);
+if (params.get('mapa')) {
+  try {
+    App.go('editor', decodeMap(params.get('mapa')));
+  } catch {
+    App.go('menu');
+  }
+} else if (params.get('sala') || params.get('room')) App.go('online');
+else App.go('menu');

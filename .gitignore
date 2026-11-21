@@ -1,0 +1,14 @@
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+artifacts/guest-fail-*.png
+.claude/*
+!.claude/commands/
+!.claude/hooks/
+!.claude/settings.json
+CatanVault/.obsidian/*
+!CatanVault/.obsidian/app.json
+*.log
+showcase/frames/

@@ -1,0 +1,187 @@
+# Kaakataaan
+
+**Kaakataaan** là bản phát triển tiếp từ [Katanittes của Sowtank](https://github.com/KurusuDes/CatanTestFriendos) (giấy phép MIT), thêm:
+
+- ⛵ **Bản mở rộng Navegantes (Seafarers):** 4 kịch bản, tàu, cướp biển, đảo mới có điểm thưởng, sương mù để khám phá, kèm màn hướng dẫn luật có hình minh hoạ.
+- 🇻🇳 **Tiếng Việt** (mặc định) và tiếng Anh.
+
+Chạy trên máy: `py tools/serve.py` rồi mở http://localhost:8123/ · Kiểm thử: `npm test`.
+
+Toàn bộ ghi công cho tác giả gốc được giữ nguyên trong [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) và trong game. Phần dưới đây là README gốc của Katanittes.
+
+---
+
+# Katanittes
+
+*English · [Español](README.es.md)*
+
+**A settlers-style board game inspired by Catan that runs in your browser.** Custom maps, game modes the box never had, bots that hate you, online play with friends, a hand-built 3D diorama board with a pixel-art UI, and a gambling-minigame arcade to kill time while everyone else takes their turn (with 100% fake money).
+
+Free, no ads, no accounts, nothing to install. Works on desktop and **mobile-first** (portrait phones ~360–430px, landscape, add-to-home-screen).
+
+This copy is based on **[Katanittes by Sowtank](https://github.com/KurusuDes/CatanTestFriendos)** (MIT). Original author credit stays in [LICENSE](LICENSE), [NOTICE.md](NOTICE.md), the main menu and the help screen.
+
+| | |
+|---|---|
+| 🎮 **Play** | https://kurusudes.github.io/CatanTestFriendos/ |
+| 🎞️ **Trailer (English)** | [Watch in the browser](https://kurusudes.github.io/CatanTestFriendos/showcase/trailer.html?lang=en) · [MP4](showcase/katanittes-trailer-en.mp4) |
+| 🎞️ **Tráiler (español)** | [Ver en el navegador](https://kurusudes.github.io/CatanTestFriendos/showcase/trailer.html) · [MP4](showcase/katanittes-trailer.mp4) |
+| 🎬 **Feature showcase** | [Watch in the browser](https://kurusudes.github.io/CatanTestFriendos/showcase/) · [MP4](showcase/katanittes.mp4) |
+
+[![Katanittes](showcase/poster.jpg)](https://kurusudes.github.io/CatanTestFriendos/showcase/trailer.html?lang=en)
+
+> The game is available in English, Spanish, Portuguese, French, German and Italian: it picks your browser's language, and you can change it from the main menu. The trailer is in English and Spanish.
+
+---
+
+## The trailer
+
+A 72-second satirical motion-graphics trailer: an epic movie-trailer cold open ("In a world... where your friends steal your sheep..."), a tour of the modes, fake critic reviews and, as the centerpiece, a parody casino ad for the in-game arcade, now with its two new machines (the sheep race and the mine).
+
+![The ADHD arcade, sold like a casino ad](showcase/readme/trailer-casino.gif)
+
+| | | |
+|---|---|---|
+| ![3D diorama](showcase/readme/diorama.jpg) | ![Blindfold mode](showcase/readme/blindfold.jpg) | ![Fog of war](showcase/readme/fog.jpg) |
+| ![The new machines: sheep race and the mine](showcase/readme/adhd-machines.jpg) | ![Reach $1600 and win fireworks](showcase/readme/adhd-ladder.jpg) | ![What critics say](showcase/readme/reviews.jpg) |
+
+Like the showcase, the trailer is a live web page: every frame is a pure function of the clock, including the real 3D board and real bot games, so the same page plays in the browser or is recorded frame by frame into the MP4. The chiptune soundtrack and sound effects are synthesized in code and timed to the scenes.
+
+---
+
+## Screenshots
+
+| Main menu | A game in progress |
+|---|---|
+| ![Main menu](showcase/readme/menu.jpg) | ![A game in progress](showcase/readme/in-game.jpg) |
+
+---
+
+## Features
+
+### Maps
+- **10 map shapes:** classic (19 hexes), mini (14), extended for 5–6 players (30), big (37), huge (61), lake ring, star, two kingdoms, archipelago and random pangea.
+- **Map editor** with shareable map codes.
+- Balanced or chaotic resource and number placement, optional **gold** tiles, configurable ports and deserts.
+
+### Signature modes
+- **Blindfold:** the whole board starts face down. You place your first settlements blind (everyone else can see where they went) and when setup ends the board flips over.
+- **Fog of war:** everyone has their own vision, around their buildings plus half a hex beside their roads. Build onto someone you can't see and your piece is diverted to the nearest free spot.
+
+### More modes (all combinable)
+- **Secret houses:** nobody sees where the others place their first houses until the reveal; on a clash, the latecomer relocates.
+- **Secret numbers:** you see the resources, but number tokens reveal themselves when someone builds next to them.
+- **Round events:** each round draws an event: bumper harvest, drought, fair trade, black market, earthquake, storm, the king's gift, plague, taxes, rebellion or calm.
+- **Living land:** every 3 rounds the numbers (or the resources) on the map shuffle.
+- **Balanced dice:** rolls come from a 36-card deck, so the statistics hold.
+- **Friendly robber**, **no robber**, **starting city** and **turbo** (double production).
+- **Presets** that bundle them: Classic, Blindfold, Fog of war, Explorers, Paranoia, Total chaos, Quick and War.
+
+### Rules you can tune
+Victory points, hand limit, setup rounds, starting bonus, pieces per player, development card decks (normal, war, progress or none), gold, ports and deserts. The full base rules are in: robber, discards, 3:1 and 2:1 ports, player trading, development cards, longest road and largest army.
+
+### Players
+- **Up to 8 players**, with the bank, deck and maps scaled to match.
+- Every kingdom paints its own **flag** in a 12×12 pixel editor and picks a **castle color**; the flag waves on the 3D board.
+- **Bots** in three levels (easy, normal, hard) that trade, rob and block. There's also a 💡 hint button that suggests a move.
+- **Hotseat** on one device, with a pass-the-screen privacy step between human players.
+- **Spectator mode:** watch a bots-only game at the speed you pick.
+
+### Online with friends
+- **Peer-to-peer** over WebRTC (PeerJS). The host's browser runs the game; there's no game server.
+- **Up to 6 human players** in one room (host + 5 joiners; rooms can go to 8 with bots). Creating a 5–6 player room switches to the **extended map** (30 hexes).
+- Share a 5-letter code or a link (`?room=XXXX` / `?sala=XXXX`) that opens straight into that lobby on a phone.
+- **Automatic reconnection:** drop out and you get your seat back.
+- When someone disconnects, the table **votes**: wait, let a bot take over, or retire the player.
+- If the host drops, they can **reopen the room** with the same code and carry on.
+- **Reactions:** emoji balloons rise from all of your buildings, and a middle click drops a marker on the map that everyone sees.
+
+### The ADHD arcade
+A small window of gambling minigames for while you wait for your turn, with **fake money**:
+- Six machines, unlocked one after another as your balance grows ($150, $250, $400, $650, $1000):
+  - **Plinko**, **slots** and **coin flip** (double or nothing).
+  - **Sheep race:** bet on one of four sheep; the favourite pays x2.6, the long shot x10.
+  - **The mine:** 16 rocks, 3 of them hide the robber. Every ore you dig raises the payout; cash out before you find him.
+  - **Rocket:** cash out before it blows up; it can reach x10, but almost never does, and after you cash out a ghost rocket shows how far it would have gone.
+- Machines you've already beaten get an **Auto** button (all but the mine and the rocket).
+- Reach **$1600** and fireworks burst from your houses, with a banner every player sees (winners who land together get their banners one after another).
+- Every win of the match adds **gold trims** to your pieces, up to 5: beams, road edges and studs, windows, a gold knob on the roof and finally a shine.
+- When it's your turn (or a trade offer is up) it **turns see-through and ignores clicks** until you're done, so you can always see the game behind it and never play the arcade by accident.
+
+### Board and interface
+- **3D diorama board** built with three.js: one continuous terrain blending 8 PBR textures, a physical sky with image-based lighting, water with depth-based foam, grass and wheat swaying in the wind, cloud shadows, ambient occlusion and a tilt-shift camera.
+- **Tile variants:** every resource has several looks (pine hill, woodcutter's clearing, round sheep pen, mill on a knoll, clay pit, brickworks, snowy peak, quarry...), picked per tile so every player sees the same map.
+- Props and resource icons are modelled in **Blender** and generated by scripts in `tools/blender/` (icons are 3D models rendered through a pixel camera).
+- **Top view** button: the camera goes straight down onto the map, like a flat plan. Number tokens and port signs shrink as you zoom out, so they never cover the tiles.
+- A **dice history** in the top right corner of the map: the last rolls, newest first, in the colour of whoever threw them.
+- **Pixel-art UI** with animated dice you can charge (hold the button to throw harder), **cards that fly** from the tiles to your hand, between players when trading and to and from the bank, and a sound effects set synthesized in the browser.
+
+---
+
+## Tech
+
+- **A static site with no build step:** plain JavaScript ES modules, HTML and CSS. It's served straight from GitHub Pages.
+- **Rules engine** (`js/engine/`): pure functions. `applyAction(state, action)` validates and applies every move, and visual effects come out as a list of events, so the same engine drives local games, online games (on the host) and the tests.
+- **Libraries:** [three.js](https://threejs.org/) for the 3D board and [PeerJS](https://peerjs.com/) for WebRTC. Both load from a CDN.
+
+| Area | Files | What it does |
+|---|---|---|
+| Rules engine | `js/engine/game.js`, `board.js`, `constants.js`, `config.js`, `rng.js` | Game state, rules, map generation, seeded randomness |
+| Bots | `js/engine/bot.js` | Three difficulty levels, plus the hint button |
+| App | `js/app.js`, `js/main.js` | Game state, dispatching actions, bot turns, saving |
+| Online | `js/net.js` | Rooms, host-authoritative sync, reconnection, voting |
+| Game screen | `js/ui/gameView.js` | Cards, hand, actions, dice, trading, flying cards |
+| 3D board | `js/ui/board3d.js`, `dice3d.js`, `flag.js` | Terrain, tile variants, pieces, fog, 3D dice, flags |
+| ADHD arcade | `js/ui/adhd.js` | The six minigames, balance, unlocks, fireworks |
+| Other UI | `js/ui/lobby.js`, `editor.js`, `pixel.js`, `sfx.js`, `help.js` | Lobby and rooms, map editor, pixel sprites, sounds, help |
+| Languages | `js/i18n.js`, `js/i18n/*.js`, `tools/i18n.mjs` | Spanish is the source; one dictionary per language. `node tools/i18n.mjs check` lists missing texts |
+| Styles | `css/style.css`, `css/pixel.css` | Pixel theme (Sweetie-16 palette) |
+| Assets | `assets/`, `tools/blender/` | Textures, `kit.glb` models and icons, and the Blender scripts that make them |
+| Videos | `showcase/` | Showcase and trailer pages (`trailer.html?lang=en`), shared animation helpers in `motion.js` |
+| Tests | `tests/` | Rules tests plus hundreds of bot-vs-bot games with invariant checks |
+
+## Running it locally
+
+```bash
+python3 -m http.server 8123
+# then open http://localhost:8123/
+```
+
+Engine tests (rules plus 300 bot-vs-bot games checking invariants):
+
+```bash
+npm test
+```
+
+Six-phone online smoke test (Playwright; starts a local PeerJS broker):
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+## Deploy on Vercel (static, no build)
+
+Import the repo. **Framework preset: Other.** Leave **Build Command** empty and **Output Directory** empty (site is served from the repo root). There is no Node build.
+
+`vercel.json` only sets short cache headers so HTML/JS/CSS update immediately. Relative asset paths (`css/`, `js/`, `icons/`) work at the domain root.
+
+On a phone: Open in Safari/Chrome → Share → **Add to Home Screen** (PWA manifest + icons). No service worker, so a refresh always gets the latest files.
+
+### WebRTC / TURN (phones on 4G)
+
+Signalling uses the public PeerJS broker. Game data is WebRTC between browsers.
+
+- Same wifi: usually works with STUN only (Google + Cloudflare + freeTURN).
+- **4G/5G, CGNAT, campus wifi:** a **TURN relay** is often required, preferably **TCP/TLS on 443** (many mobile networks drop UDP 3478). The client ships public fallbacks: PeerJS `0.peerjs.com`, [freeTURN](https://freeturn.net/) `turns:` **5349**, and `turns:turn.evan-brass.net:443?transport=tcp` (guest/password; TLS 1.3 on 443). These are shared, rate-limited, and can go down; they are not a paid service and there are no secrets in the repo.
+- A `?room=` join that cannot reach the broker stops after **12 s** with an error, **Retry**, and **Cancel**. Back to the menu always works. Local vs-bots never talks to PeerJS.
+- If a guest still cannot join, the game shows a clear error: try the **same wifi** as the host, swap wifi/data, or a phone hotspot. Symmetric NAT on both sides can still fail.
+- Optional: in `js/net.js` you can fill `METERED_APP` / `METERED_KEY` with a free [Metered](https://metered.ca/) TURN app (20 GB/month). Do not commit keys.
+
+Query flags for tests / self-hosting: `?peerHost=127.0.0.1&peerPort=9000` (local PeerJS), `?gfx=flat` (SVG board, no WebGL).
+
+## License and credits
+
+Original code and assets are under the [MIT license](LICENSE) © 2026 Sowtank ([KurusuDes/CatanTestFriendos](https://github.com/KurusuDes/CatanTestFriendos)). If you use this project or part of it, a visible credit is kindly appreciated (details in [NOTICE.md](NOTICE.md)). The game itself shows that credit, with a link to the original repository, under the main menu and in the help screen.
+
+**Unofficial fan project.** It isn't affiliated with, sponsored or endorsed by Catan GmbH, CATAN Studio or Kosmos. *CATAN* is a trademark of its respective owners. Third-party notices (three.js, PeerJS, fonts) are in [NOTICE.md](NOTICE.md).
