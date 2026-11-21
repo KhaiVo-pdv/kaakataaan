@@ -17,7 +17,7 @@ let ui = null;
 
 const PHASE_TEXT = {
   setup: tk('Colocación inicial'), roll: tk('Tirar dados'), main: tk('Construir y comerciar'), discard: tk('Descartar'),
-  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'),
+  robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), displace: tk('Recolocar caballero'),
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -684,6 +684,7 @@ function bannerText(st, v, inter) {
   }
   if (st.phase === 'aqueduct') return st.pendingAqueduct[v] ? t('🟩 Acueducto: elige 1 recurso') : t('🟩 Esperando el acueducto...');
   if (st.phase === 'displace') return t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name });
+  if (st.phase === 'pillage') return (inter && CK.ckBanner(st, ui, inter)) || t('🔥 Los bárbaros saquean: esperando a los perdedores...');
   if (st.phase === 'discard') {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
@@ -768,7 +769,7 @@ function renderPlayers(st, v) {
     box.append(card);
   }
   clear(ui.els.bank).append(h('span', null, '🏦'), ...CK.cardList(st).map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`),
-    h('span', { title: t('Meta') },`🏆 ${st.config.rules.vpTarget}`));
+    h('span', { title: t('Meta') },`🏆 ${st.config.rules.vpTarget}`), CK.barbarianTrack(st, h) || '');
 }
 
 function renderLog(st) {
@@ -831,6 +832,10 @@ function fillActions(bar, st, v, locked) {
   }
   if (st.phase === 'displace') {
     acts.append(h('div', { class: 'waiting' + (st.displaced.pid === v ? ' your-turn' : '') }, st.displaced.pid === v ? t('🐎 Toca dónde recolocar tu caballero') : t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name })));
+    return;
+  }
+  if (st.phase === 'pillage') {
+    acts.append(CK.pillageWaiting(st, v, h));
     return;
   }
   if (st.phase === 'aqueduct') {

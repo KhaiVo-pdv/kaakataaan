@@ -122,6 +122,15 @@ function check(s, where) {
         if (onBoard + waiting + p.knightsLeft[lvl] !== 2) errs.push(`caballeros ${p.id} nivel ${lvl}`);
       }
     for (const k in s.knights) if (s.buildings[k]) errs.push(`caballero bajo un edificio ${k}`);
+    // barbarians: the ship stays on its track; pieces add up after cities fall; robber asleep until the first attack
+    const b = s.barbarians;
+    if (b.pos < 0 || b.pos >= b.track) errs.push(`bárbaros fuera del recorrido ${b.pos}`);
+    if (s.phase === 'pillage' && !s.pillage) errs.push('fase de saqueo sin saqueo');
+    if (!b.attacks && s.phase === 'robber' && !s.robberReturn) errs.push('ladrón despierto antes del primer ataque');
+    if (s.phase !== 'setup') for (const p of s.players) { // (blind setup hides pieces until it ends)
+      const cities = Object.values(s.buildings).filter(x => x.owner === p.id && x.type === 'city').length;
+      if (cities + p.citiesLeft !== s.config.rules.maxCities) errs.push(`ciudades ${p.id}: ${cities}+${p.citiesLeft}`);
+    }
   }
   // Seafarers ships: counted, on water, never sharing an edge with a road, linked to the network
   if (s.ships)
@@ -201,6 +210,10 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
     }
     summary.turns += s.turn;
     if (s.knights) summary.knights = (summary.knights || 0) + Object.keys(s.knights).length;
+    if (s.barbarians) {
+      summary.attacks = (summary.attacks || 0) + s.barbarians.attacks;
+      summary.defenders = (summary.defenders || 0) + s.players.reduce((t, p) => t + p.defenderVP, 0);
+    }
     if (s.config.expansions.citiesKnights) summary.commodities = (summary.commodities || 0) + s.players.reduce((a, p) => a + COMMODITIES.reduce((b, c) => b + p.res[c], 0), 0) + (s.ckProduced || 0);
     const sh = (summary.byShape[label.startsWith('ck:') ? 'ck' : cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
     sh.n++;
@@ -219,6 +232,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
     if (summary.errors > 5) break;
   }
 }
+if (summary.attacks != null) console.log(`🏴‍☠️ ataques bárbaros: ${summary.attacks} · puntos de Defensor de Catan: ${summary.defenders}`);
 if (summary.knights != null) console.log(`⚔️ caballeros en el tablero al final de las partidas de Ciudades y Caballeros: ${summary.knights}`);
 if (summary.ships != null) console.log(`\n⛵ barcos en el mar al final de las partidas de Navegantes: ${summary.ships} · 🏴‍☠️ movimientos del pirata: ${summary.pirate || 0} · 🏝️ puntos por islas nuevas: ${summary.islandVP || 0} · 🌫️ niebla descubierta: ${summary.fogSeen || 0}/${summary.fogAll || 0}`);
 console.log(`\nPartidas: ${summary.games}, terminadas: ${summary.finished}, errores: ${summary.errors}, turnos medios: ${(summary.turns / Math.max(1, summary.games)).toFixed(1)}`);

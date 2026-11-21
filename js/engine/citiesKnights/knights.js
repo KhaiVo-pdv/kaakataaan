@@ -97,7 +97,8 @@ export function knightTargets(s, pid, v) {
   }
   return { move, displace };
 }
-export const canChase = (s, pid, v) => canAct(s, pid, v) && s.board.robber >= 0 && s.board.vertices[v].hexes.includes(s.board.robber);
+// the robber can't be chased while it sleeps (before the first barbarian attack)
+export const canChase = (s, pid, v) => canAct(s, pid, v) && !(s.barbarians && s.barbarians.attacks === 0) && s.board.robber >= 0 && s.board.vertices[v].hexes.includes(s.board.robber);
 
 export const activeStrength = (s, pid) => knightsOf(s, pid).filter(v => s.knights[v].active).reduce((a, v) => a + s.knights[v].level, 0);
 

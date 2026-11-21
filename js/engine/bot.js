@@ -306,7 +306,9 @@ function mainAction(s, pid) {
       }
     }
     const idle = Knights.legalActivations(s, pid);
-    if (idle.length && p.res.wheat >= 2) return { type: 'activateKnight', pid, at: idle[0] };
+    // with the barbarians close, any wheat goes into waking knights up
+    const close = s.barbarians && s.barbarians.track - s.barbarians.pos <= 2;
+    if (idle.length && p.res.wheat >= (close ? 1 : 2)) return { type: 'activateKnight', pid, at: idle[0] };
     const promo = Knights.legalPromotions(s, pid);
     if (promo.length && p.res.sheep >= 2 && p.res.ore >= 2) return { type: 'promoteKnight', pid, at: promo[0] };
     const walls = Improve.legalWalls(s, pid);
@@ -436,6 +438,12 @@ export function botAct(real, pid) {
     if (!s.displaced || s.displaced.pid !== pid) return null;
     const near = v => s.board.vertices[v].adj.filter(u => s.buildings[u] && s.buildings[u].owner === pid).length;
     return { type: 'placeDisplaced', pid, at: best(s.displaced.options, near) };
+  }
+  if (s.phase === 'pillage') {
+    // Cities & Knights barbarians: give up the city that produces least
+    if (!s.pillage || !s.pillage[pid]) return null;
+    const value = v => s.board.vertices[v].hexes.reduce((n, h) => n + tileValue(s, s.board.tiles[h]), 0);
+    return { type: 'pillageCity', pid, at: best(s.pillage[pid], v => -value(v)) };
   }
   if (s.phase === 'aqueduct') {
     // Cities & Knights Aqueduct: take the resource it has least of

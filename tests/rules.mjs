@@ -889,6 +889,7 @@ t('Ciudades y Caballeros: una ciudad junto al bosque da madera + papel; junto a 
       s.phase = 'roll';
       s.current = 0;
       for (const k in s.players[0].res) s.players[0].res[k] = before[k];
+      s.barbarians.pos = 0; // keep the barbarians at sea: this test is about production
       act(s, { type: 'roll', pid: 0 });
       s.pendingDiscards = {};
     } while (s.dice[0] + s.dice[1] !== tile.num && ++tries < 300);
@@ -1154,6 +1155,7 @@ t('Ciudades y Caballeros: un caballero activo junto al ladrón lo expulsa', () =
   const s = ckMain();
   const tile = s.board.tiles.find(t => t.res !== 'desert' && t.num);
   s.board.robber = tile.id;
+  s.barbarians.attacks = 1; // the robber only wakes up after the first barbarian attack
   const v = tile.verts[2];
   s.roads[s.board.vertices[v].edges[0]] = 0;
   Knights.recruit(s, 0, v);
@@ -1163,6 +1165,107 @@ t('Ciudades y Caballeros: un caballero activo junto al ladrón lo expulsa', () =
   eq(s.phase, 'robber');
   ok(!s.knights[v].active, 'el caballero queda inactivo');
 });
+
+// ---- Cities & Knights barbarians ----
+const ckCity = (s, pid, k) => {
+  const v = s.board.vertices.filter(V => V.hexes.length && !s.buildings[V.id] && V.adj.every(w => !s.buildings[w]))[k].id;
+  s.buildings[v] = { owner: pid, type: 'city' };
+  s.players[pid].citiesLeft--;
+  return v;
+};
+const shipRoll = s => {
+  // roll until the event die shows the ship (other faces don't move the barbarians)
+  for (let i = 0; i < 200; i++) {
+    s.phase = 'roll';
+    s.pendingDiscards = {};
+    const pos = s.barbarians.pos, att = s.barbarians.attacks;
+    act(s, { type: 'roll', pid: s.current });
+    if (s.eventDie === 'ship') return;
+    eq(s.barbarians.pos, pos, 'sin barco no se mueven');
+    eq(s.barbarians.attacks, att);
+  }
+};
+
+t('Bárbaros: el barco del dado de evento los acerca un paso', () => {
+  const s = ckMain();
+  eq(s.barbarians.pos, 0);
+  shipRoll(s);
+  eq(s.barbarians.pos, 1);
+});
+
+t('Bárbaros: sin la expansión no existen', () => {
+  const s = fresh();
+  eq(s.barbarians, undefined);
+  eq(s.players[0].defenderVP, undefined);
+});
+
+t('Bárbaros: antes del primer ataque el 7 no mueve el ladrón', () => {
+  const s = ckMain();
+  for (let i = 0; i < 400; i++) {
+    s.phase = 'roll';
+    s.barbarians.pos = 0;
+    for (const p of s.players) for (const r in p.res) p.res[r] = 0;
+    act(s, { type: 'roll', pid: 0 });
+    if (s.dice[0] + s.dice[1] === 7) break;
+  }
+  eq(s.dice[0] + s.dice[1], 7);
+  eq(s.phase, 'main', 'el ladrón duerme');
+});
+
+t('Bárbaros: Catan resiste y el más fuerte es Defensor de Catan (+1 punto)', () => {
+  const s = ckMain();
+  const { path } = ckRoads(s);
+  ckCity(s, 1, 0);
+  Knights.recruit(s, 0, path[2]);
+  Knights.promote(s, 0, path[2]);
+  Knights.activate(s, path[2]);
+  const vp = G.victoryPoints(s, 0);
+  s.barbarians.pos = s.barbarians.track - 1;
+  shipRoll(s);
+  eq(s.barbarians.attacks, 1);
+  eq(s.barbarians.pos, 0, 'el barco vuelve a empezar');
+  ok(s.barbarians.last.won, 'Catan gana (2 ≥ 1)');
+  eq(s.barbarians.last.defender, 0);
+  eq(G.victoryPoints(s, 0), vp + 1);
+  ok(!s.knights[path[2]].active, 'los caballeros quedan inactivos');
+});
+
+t('Bárbaros: si Catan pierde, el más débil con ciudad la pierde (y su muralla)', () => {
+  const s = ckMain();
+  const { path } = ckRoads(s); // first: it puts a settlement on a fixed corner
+  const c0 = ckCity(s, 0, 0);
+  const c1 = ckCity(s, 1, 1);
+  s.walls[c0] = 0;
+  s.players[0].wallsLeft--;
+  Knights.recruit(s, 1, path[2]); // player 1's knight (on player 0's road: fine for the test)
+  Knights.activate(s, path[2]);
+  s.barbarians.pos = s.barbarians.track - 1;
+  const left = s.players[0].citiesLeft;
+  shipRoll(s);
+  ok(!s.barbarians.last.won, 'Catan pierde (1 < 2)');
+  eq(s.barbarians.last.losers, [0]);
+  eq(s.buildings[c0].type, 'settlement', 'la única ciudad cae sola');
+  eq(s.buildings[c1].type, 'city');
+  eq(s.walls[c0], undefined, 'la muralla cae');
+  eq(s.players[0].citiesLeft, left + 1);
+  ok(s.phase !== 'pillage');
+});
+
+t('Bárbaros: con varias ciudades el perdedor elige cuál cae; la metrópolis está a salvo', () => {
+  const s = ckMain();
+  const a = ckCity(s, 0, 0), b = ckCity(s, 0, 1), c = ckCity(s, 0, 2);
+  s.metropolis.trade = { owner: 0, at: c };
+  s.barbarians.pos = s.barbarians.track - 1;
+  shipRoll(s);
+  eq(s.phase, 'pillage');
+  eq(G.pendingActors(s), [0]);
+  eq(s.pillage[0].sort(), [a, b].sort());
+  ok(!act(s, { type: 'pillageCity', pid: 0, at: c }).ok, 'la metrópolis no se puede perder');
+  ok(act(s, { type: 'pillageCity', pid: 0, at: b }).ok);
+  eq(s.buildings[b].type, 'settlement');
+  ok(s.phase !== 'pillage', 'la tirada sigue: ' + s.phase);
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);

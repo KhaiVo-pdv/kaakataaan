@@ -3,6 +3,7 @@
 import { RES, TILE_INFO } from '../engine/constants.js';
 import * as Improve from '../engine/citiesKnights/improvements.js';
 import * as Knights from '../engine/citiesKnights/knights.js';
+import * as Barb from '../engine/citiesKnights/barbarians.js';
 import { COMMODITIES, GATE_INFO, cardsOf } from '../engine/citiesKnights/commodities.js';
 import { t } from '../i18n.js';
 
@@ -26,6 +27,8 @@ export const hasCK = st => !!(st && st.metropolis);
 
 // board interaction: 'wall' -> pick a city for a wall; 'metro:<track>' -> pick the metropolis city
 export function ckInteraction(st, v, ui, { mk, dispatch }) {
+  // the barbarians won: pick which of our cities falls back to a settlement
+  if (hasCK(st) && st.phase === 'pillage') return st.pillage && st.pillage[v] ? mk('city', st.pillage[v], at => dispatch({ type: 'pillageCity', pid: v, at })) : undefined;
   if (!hasCK(st) || st.current !== v || st.phase !== 'main' || !ui.pick) return undefined;
   if (ui.pick === 'wall')
     return mk('city', Improve.legalWalls(st, v), at => {
@@ -43,6 +46,7 @@ export function ckInteraction(st, v, ui, { mk, dispatch }) {
 }
 
 export function ckBanner(st, ui, inter) {
+  if (hasCK(st) && st.phase === 'pillage' && inter && inter.kind === 'city') return t('🔥 Los bárbaros ganaron: elige la ciudad que vuelve a ser poblado');
   if (!hasCK(st) || !inter || inter.kind !== 'city' || !ui.pick) return '';
   if (ui.pick === 'wall') return t('🧱 Elige la ciudad de la muralla (Esc para cancelar)');
   if (ui.pick.startsWith('metro:')) return t('🏙️ Elige la ciudad de tu metrópolis');
@@ -119,6 +123,7 @@ export function ckStats(st, p, { h }) {
   if (metros) out.push(h('span', { class: 'award', title: t('Metrópolis (+2 cada una)') }, `🏙️×${metros}`));
   const walls = Improve.MAX_WALLS - p.wallsLeft;
   if (walls) out.push(h('span', { title: t('Murallas: +2 cartas al límite del 7 cada una') }, `🧱${walls}`));
+  if (p.defenderVP) out.push(h('span', { class: 'award', title: t('Defensor de Catan (+1 cada uno)') }, `🛡️×${p.defenderVP}`));
   return out;
 }
 
@@ -127,6 +132,7 @@ export function ckDescribe(a) {
   if (a.type === 'improve') return t('🏛️ Mejora {track}.', { track: t(Improve.TRACK_INFO[a.track].name) });
   if (a.type === 'buildWall') return t('🧱 Construye una muralla.');
   if (a.type === 'aqueductPick') return t('🟩 Elige un recurso con el acueducto.');
+  if (a.type === 'pillageCity') return t('🏚️ Entrega la ciudad que menos produce.');
   return undefined;
 }
 
@@ -229,4 +235,28 @@ export function knightStats(st, p, { h }) {
   const n = Knights.knightsOf(st, p.id).length;
   if (!n) return [];
   return [h('span', { title: t('Caballeros (fuerza activa)') }, `⚔️${n} (${Knights.activeStrength(st, p.id)})`)];
+}
+
+// ---------- barbarians ----------
+
+// the barbarian ship on its way: step track, plus barbarian strength vs. active knights
+export function barbarianTrack(st, h) {
+  if (!hasCK(st) || !st.barbarians) return null;
+  const b = st.barbarians;
+  const barb = Barb.barbarianStrength(st), catan = Barb.catanStrength(st);
+  const steps = Array.from({ length: b.track }, (_, i) => h('i', { class: 'barb-step' + (i < b.pos ? ' done' : '') + (i === b.track - 1 ? ' land' : '') }));
+  return h('div', {
+    class: 'barb-track' + (b.track - b.pos <= 2 ? ' near' : ''),
+    'data-testid': 'barbarians',
+    title: t('Bárbaros {n}/{t} · fuerza bárbara {b} (ciudades) contra caballeros activos {c}', { n: b.pos, t: b.track, b: barb, c: catan }),
+  }, h('span', null, '🏴‍☠️'), h('span', { class: 'barb-steps' }, steps), h('span', { class: 'barb-vs' + (catan >= barb ? ' ok' : ' bad') }, `🏰${barb} ⚔️${catan}`),
+  b.attacks ? null : h('span', { class: 'barb-sleep', title: t('El ladrón duerme hasta el primer ataque bárbaro') }, '😴🦹'));
+}
+
+// phase text while losers choose their city
+export function pillageWaiting(st, v, h) {
+  if (st.phase !== 'pillage' || !st.pillage) return null;
+  if (st.pillage[v]) return h('div', { class: 'waiting your-turn' }, t('🔥 Toca la ciudad que pierdes'));
+  const names = Object.keys(st.pillage).map(pid => st.players[pid].name).join(', ');
+  return h('div', { class: 'waiting' }, t('🔥 {names} eligen qué ciudad pierden...', { names }));
 }

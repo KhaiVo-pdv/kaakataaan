@@ -395,3 +395,15 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 .btn.ck-kopt > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .btn.ck-kopt .cost { position: static; display: block; }
 .btn.ck-kopt small { display: block; color: var(--muted); font-weight: 400; white-space: normal; }
+
+/* Cities & Knights barbarians: ship track next to the bank */
+.barb-track { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 2px solid #5a4630; background: #2a1f14; border-radius: 4px; }
+.barb-track.near { border-color: #e0533a; animation: barb-pulse 1.2s ease-in-out infinite; }
+.barb-steps { display: inline-flex; gap: 2px; }
+.barb-step { display: inline-block; width: 9px; height: 9px; background: #4a3b2a; border: 1px solid #7a6040; }
+.barb-step.done { background: #e0533a; border-color: #ff8a6a; }
+.barb-step.land { border-color: #ffd36a; }
+.barb-vs.ok { color: #8fd18f; }
+.barb-vs.bad { color: #ff8a6a; }
+.barb-sleep { opacity: .7; font-size: 12px; }
+@keyframes barb-pulse { 50% { box-shadow: 0 0 8px #e0533a; } }

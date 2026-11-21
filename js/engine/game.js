@@ -10,6 +10,7 @@ import * as Islands from './seafarers/islands.js';
 import { COMMODITIES, EVENT_FACES, cardsOf, initCommodities, cityYield } from './citiesKnights/commodities.js';
 import * as Improve from './citiesKnights/improvements.js';
 import * as Knights from './citiesKnights/knights.js';
+import * as Barb from './citiesKnights/barbarians.js';
 
 export const zeroRes = () => ({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
 // every card in a hand: resources, plus Cities & Knights commodities (absent in the base game)
@@ -114,6 +115,7 @@ export function createGame(configIn) {
     initCommodities(s);
     Improve.initImprovements(s);
     Knights.initKnights(s);
+    Barb.initBarbarians(s);
   }
 
   if (M.flipped) {
@@ -223,6 +225,7 @@ export function victoryPoints(s, pid, hidden = true) {
   if (hidden) vp += s.players[pid].dev.filter(c => c.type === 'vp').length;
   vp += s.players[pid].islandVP || 0; // Seafarers island bonus (absent in the base game)
   vp += Improve.metropolisVP(s, pid); // Cities & Knights metropolises (none in the base game)
+  vp += s.players[pid].defenderVP || 0; // Cities & Knights Defender of Catan (absent in the base game)
   return vp;
 }
 
@@ -368,6 +371,7 @@ export function pendingActors(s) {
   if (s.phase === 'discard') return Object.keys(s.pendingDiscards).map(Number).filter(pid => !s.players[pid].retired);
   if (s.phase === 'aqueduct') return Object.keys(s.pendingAqueduct).map(Number).filter(pid => !s.players[pid].retired);
   if (s.phase === 'displace') return s.displaced ? [s.displaced.pid] : [];
+  if (s.phase === 'pillage') return s.pillage ? Object.keys(s.pillage).map(Number).filter(pid => !s.players[pid].retired) : [];
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -941,6 +945,16 @@ H.roll = (s, a) => {
   const power = Math.round(Math.min(1, Math.max(0, +a.power || 0)) * 100) / 100;
   s.fx.push({ kind: 'dice', dice: d, power });
   log(s, msg('🎲 @{p} saca {n}.', { p: a.pid, n: sum }), a.pid);
+  // Cities & Knights: the ship face moves the barbarians first; an attack is fought before production
+  if (s.barbarians && s.eventDie === 'ship' && barbariansSail(s)) {
+    s.pillageRoll = sum;
+    s.phase = 'pillage';
+    return;
+  }
+  afterRoll(s, sum);
+};
+
+function afterRoll(s, sum) {
   if (sum !== 7) {
     const gains = produce(s, sum);
     s.phase = 'main';
@@ -961,7 +975,43 @@ H.roll = (s, a) => {
   }
   s.robberReturn = 'main';
   if (Object.keys(s.pendingDiscards).length) s.phase = 'discard';
-  else s.phase = R.noRobber ? 'main' : 'robber';
+  else s.phase = afterSeven(s);
+};
+
+// where a 7 goes once discards are done: no robber (rule, or C&K before the first barbarian attack) -> main
+const afterSeven = s => (s.config.rules.noRobber || Barb.robberAsleep(s) ? 'main' : 'robber');
+
+// ---- Cities & Knights barbarians ----
+// the ship moves one step; on landing the attack is fought. True while losers must still pick a city.
+function barbariansSail(s) {
+  const r = Barb.advance(s);
+  s.fx.push({ kind: 'barbarians', pos: s.barbarians.pos, attack: !!r });
+  if (!r) {
+    log(s, msg('🏴‍☠️ Los bárbaros se acercan ({n}/{t}).', { n: s.barbarians.pos, t: s.barbarians.track }));
+    return false;
+  }
+  log(s, msg('🏴‍☠️ ¡Atacan los bárbaros! Bárbaros {b} contra caballeros {c}.', { b: r.barb, c: r.catan }));
+  if (r.won) {
+    if (r.defender >= 0) log(s, msg('🛡️ ¡Catan resiste! @{p} es Defensor de Catan (+1 punto).', { p: r.defender }), r.defender);
+    else if (r.tied.length) log(s, msg('🛡️ ¡Catan resiste! Empate entre los mejores defensores: nadie recibe el punto.'));
+    else log(s, msg('🛡️ ¡Catan resiste!'));
+  } else {
+    for (const pid of r.losers) log(s, msg('🔥 Los bárbaros saquean una ciudad de @{p}.', { p: pid }), pid);
+    if (!r.losers.length) log(s, msg('🔥 Catan pierde, pero no hay ciudades que saquear.'));
+  }
+  log(s, msg('🦹 El ladrón ya puede moverse y los caballeros quedan inactivos.'));
+  return !!s.pillage;
+}
+
+H.pillageCity = (s, a) => {
+  if (s.phase !== 'pillage' || !s.pillage || !s.pillage[a.pid]) fail('No tienes que perder ninguna ciudad.');
+  if (!s.pillage[a.pid].includes(a.at)) fail('Elige una de tus ciudades sin metrópolis.');
+  Barb.pillageCity(s, a.pid, a.at);
+  s.fx.push({ kind: 'pillage', pid: a.pid, at: a.at });
+  log(s, msg('🏚️ La ciudad de @{p} vuelve a ser un poblado.', { p: a.pid }), a.pid);
+  if (Object.keys(s.pillage).some(pid => !s.players[pid].retired)) return;
+  s.pillage = null;
+  afterRoll(s, s.pillageRoll);
 };
 
 H.discard = (s, a) => {
@@ -981,7 +1031,7 @@ H.discard = (s, a) => {
   s.fx.push({ kind: 'discard', pid: a.pid, res: Object.fromEntries(cardsOf(s).map(r => [r, res[r] || 0])) });
   delete s.pendingDiscards[a.pid];
   log(s, msg('🗑️ @{p} descarta {n} cartas.', { p: a.pid, n: need }), a.pid);
-  if (!Object.keys(s.pendingDiscards).length) s.phase = s.config.rules.noRobber ? 'main' : 'robber';
+  if (!Object.keys(s.pendingDiscards).length) s.phase = afterSeven(s);
 };
 
 H.moveRobber = (s, a) => {
@@ -1462,6 +1512,13 @@ H.retirePlayer = (s, a) => {
   s.fx.push({ kind: 'retired', pid });
   // keep the game flowing
   delete s.pendingDiscards[pid];
+  if (s.pillage && s.pillage[pid]) {
+    delete s.pillage[pid];
+    if (s.phase === 'pillage' && !Object.keys(s.pillage).length) {
+      s.pillage = null;
+      afterRoll(s, s.pillageRoll);
+    }
+  }
   if (s.displaced && s.displaced.pid === pid) {
     s.players[pid].knightsLeft[s.displaced.level]++;
     s.displaced = null;
@@ -1494,7 +1551,7 @@ H.retirePlayer = (s, a) => {
     }
     return;
   }
-  if (s.phase === 'discard' && !Object.keys(s.pendingDiscards).length) s.phase = s.config.rules.noRobber ? 'main' : 'robber';
+  if (s.phase === 'discard' && !Object.keys(s.pendingDiscards).length) s.phase = afterSeven(s);
   if (s.current === pid && s.phase !== 'gameOver') {
     s.pendingDiscards = {};
     advanceTurn(s);
