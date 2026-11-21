@@ -51,3 +51,76 @@ export function makeMerchant(color) {
   g.scale.setScalar(1.4);
   return g;
 }
+
+// ---- city walls, metropolises, barbarians ----
+const stone = () => mat('#8d8d99');
+const stoneDark = () => mat('#5f5f6b');
+
+// a ring of stone wall segments with little crenels around the foot of a city
+export function makeWall() {
+  const g = new THREE.Group();
+  const N = 10, R = 0.3;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const seg = part(g, new THREE.BoxGeometry(0.17, 0.09, 0.05), i % 2 ? stone() : stoneDark(), 0.045);
+    seg.position.x = Math.cos(a) * R;
+    seg.position.z = Math.sin(a) * R;
+    seg.rotation.y = -a + Math.PI / 2;
+    const cren = part(g, new THREE.BoxGeometry(0.05, 0.04, 0.05), stone(), 0.11);
+    cren.position.x = Math.cos(a) * R;
+    cren.position.z = Math.sin(a) * R;
+  }
+  return g;
+}
+
+// the metropolis: a tall stone tower beside the city with a flag in the track's colour
+export const TRACK_COLOR = { trade: '#e8c547', politics: '#4a8fe0', science: '#4fb36a' };
+export function makeMetro(track, owner) {
+  const g = new THREE.Group();
+  part(g, new THREE.CylinderGeometry(0.09, 0.11, 0.62, 8), stone(), 0.31);
+  part(g, new THREE.CylinderGeometry(0.12, 0.12, 0.06, 8), stoneDark(), 0.64);
+  part(g, new THREE.ConeGeometry(0.12, 0.2, 8), mat(owner), 0.77);
+  part(g, new THREE.CylinderGeometry(0.008, 0.008, 0.3, 4), mat('#3a2a1a'), 1.0);
+  const flag = part(g, new THREE.BoxGeometry(0.16, 0.1, 0.01), mat(TRACK_COLOR[track], { glow: true }), 1.08);
+  flag.position.x = 0.08;
+  return g;
+}
+
+// the barbarian ship: dark red sails, a dragon-ish prow, a row of shields
+export function makeBarbarianShip() {
+  const g = new THREE.Group();
+  part(g, new THREE.BoxGeometry(0.62, 0.1, 0.2), mat('#4a2c1a'), 0.05);
+  const prow = part(g, new THREE.ConeGeometry(0.06, 0.26, 6), mat('#4a2c1a'), 0.14);
+  prow.position.x = 0.36;
+  prow.rotation.z = -0.9;
+  part(g, new THREE.CylinderGeometry(0.012, 0.012, 0.55, 5), mat('#2b1a10'), 0.35);
+  const sail = part(g, new THREE.BoxGeometry(0.02, 0.3, 0.34), mat('#8e1b1b'), 0.38);
+  sail.position.x = 0.02;
+  for (let i = 0; i < 4; i++)
+    for (const side of [-1, 1]) {
+      const sh = part(g, new THREE.CylinderGeometry(0.045, 0.045, 0.015, 8), mat(i % 2 ? '#c9a227' : '#7a7f8c', { metal: 0.5 }), 0.1);
+      sh.rotation.x = Math.PI / 2;
+      sh.position.set(-0.2 + i * 0.13, 0.1, side * 0.105);
+    }
+  g.scale.setScalar(1.5);
+  return g;
+}
+
+// a buoy marking one step of the barbarians' way (red once passed, gold where they land)
+export function makeBuoy(done, land) {
+  const g = new THREE.Group();
+  part(g, new THREE.CylinderGeometry(0.05, 0.07, 0.1, 8), mat(done ? '#e0533a' : land ? '#ffd36a' : '#d9d4c7'), 0.05);
+  if (land) part(g, new THREE.ConeGeometry(0.05, 0.12, 6), mat('#ffd36a', { glow: true }), 0.16);
+  return g;
+}
+
+// where the barbarians sail: an arc across the sea east of the island, step 0 .. track (landing)
+export function barbarianPath(bd, track) {
+  const R = Math.max(...bd.tiles.map(t => Math.hypot(t.x, t.y))) + 1.05;
+  const out = [];
+  for (let i = 0; i <= track; i++) {
+    const a = (-60 + (120 * i) / track) * (Math.PI / 180);
+    out.push({ x: Math.cos(a) * R, z: Math.sin(a) * R, rotY: -(a + Math.PI / 2) });
+  }
+  return out;
+}

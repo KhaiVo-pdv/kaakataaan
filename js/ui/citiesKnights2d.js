@@ -48,3 +48,28 @@ export function drawMerchant(S, U, st) {
   g.append(S('rect', { x: -1.5, y: -4, width: 3, height: 8, fill: '#8a5a1c' }));
   return g;
 }
+
+// the barbarians' way across the sea east of the island: one dot per step (red once passed) and their ship
+export function drawBarbarians(S, U, st) {
+  const b = st.barbarians;
+  if (!b) return null;
+  const bd = st.board;
+  const R = Math.max(...bd.tiles.map(t => Math.hypot(t.x, t.y))) + 1.05;
+  const pt = i => {
+    const a = (-60 + (120 * i) / b.track) * (Math.PI / 180);
+    return [Math.cos(a) * R * U, Math.sin(a) * R * U];
+  };
+  const g = S('g', { class: 'barbarians' });
+  for (let i = 0; i <= b.track; i++) {
+    const [x, y] = pt(i);
+    const land = i === b.track;
+    g.append(S('circle', { cx: x, cy: y, r: U * (land ? 0.2 : 0.14), fill: i > 0 && i <= b.pos ? '#e0533a' : land ? '#ffd36a' : '#d9d4c7', stroke: '#1a1c2c', 'stroke-width': 2 }));
+  }
+  const [x, y] = pt(Math.min(b.pos, b.track));
+  const ship = S('g', { transform: `translate(${x},${y - U * 0.3}) scale(${U / 38})`, filter: 'url(#shadow)' });
+  ship.append(S('path', { d: 'M-18,4 L18,4 L12,12 L-12,12 Z', fill: '#4a2c1a', stroke: '#1a1c2c', 'stroke-width': 2 }));
+  ship.append(S('rect', { x: -1.5, y: -16, width: 3, height: 20, fill: '#2b1a10' }));
+  ship.append(S('path', { d: 'M1,-15 L15,-6 L1,2 Z', fill: '#8e1b1b', stroke: '#1a1c2c', 'stroke-width': 1.5 }));
+  g.append(ship);
+  return g;
+}

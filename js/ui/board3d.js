@@ -24,7 +24,7 @@ import { pxIcon } from './pixel.js';
 import { flagCanvas } from './flag.js';
 import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
-import { makeKnight, makeMerchant } from './citiesKnights3d.js';
+import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
 const TOKEN_SPAN = 0.75; // widest a number token gets on the map, in world units (a hex is 1.73 across)
@@ -1958,7 +1958,7 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p)),
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p)),
       inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b)], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
@@ -2120,6 +2120,35 @@ export class Board3D {
       o.rotation.y = pose.rotY;
       this.boatBobs.push({ obj: o, y: pose.y, ph });
     };
+    const CK_WATER_Y = 0.03; // same water line as the Seafarers ships
+    // Cities & Knights: walls around cities, metropolis towers, the barbarians' way across the sea
+    for (const k in st.walls || {}) {
+      const V = bd.vertices[k];
+      const o = makeWall();
+      o.position.set(V.x, vy(+k) - 0.01, V.y);
+      add(o, 'wall' + k);
+    }
+    for (const tr in st.metropolis || {}) {
+      const m = st.metropolis[tr];
+      if (!m) continue;
+      const V = bd.vertices[m.at];
+      const off = { trade: [0.2, -0.16], politics: [-0.2, -0.16], science: [0, 0.24] }[tr];
+      const o = makeMetro(tr, st.players[m.owner].color);
+      o.position.set(V.x + off[0], vy(m.at) - 0.01, V.y + off[1]);
+      add(o, 'metro' + tr + m.at + m.owner);
+    }
+    if (st.barbarians) {
+      const b = st.barbarians, way = barbarianPath(bd, b.track);
+      way.forEach((p, i) => {
+        const o = makeBuoy(i > 0 && i <= b.pos, i === b.track);
+        float(o, { x: p.x, y: CK_WATER_Y, z: p.z, rotY: 0 }, i * 0.9);
+        add(o, 'buoy' + i + (i <= b.pos ? 'd' : ''));
+      });
+      const at = way[Math.min(b.pos, b.track)];
+      const ship = makeBarbarianShip();
+      float(ship, { x: at.x, y: CK_WATER_Y, z: at.z, rotY: at.rotY }, 0.3);
+      add(ship, 'barbship' + b.pos);
+    }
     if (st.ships)
       for (const k in st.ships) {
         const color = st.players[st.ships[k]].color;
