@@ -10,7 +10,7 @@ import { autoPixelize } from './ui/pixel.js';
 import { t, LANGS, lang, setLang } from './i18n.js';
 import { mascotSvg } from './ui/mascot.js';
 import { music, toggleMusic } from './ui/music.js';
-import { tableDecor, modeCard, colourSwatches } from './ui/menuTable.js';
+import { tableDecor, tableBackdrop, modeCard, colourSwatches } from './ui/menuTable.js';
 import { PLAYER_COLORS } from './engine/config.js';
 
 // A full-screen WebGL canvas behind the menu steals taps AND mouse clicks
@@ -162,10 +162,13 @@ function rememberRoom(code) {
 // "Jugar con amigos": identity, create a room or join one — and the guest's waiting room
 function onlineScreen(root) {
   const params = new URLSearchParams(location.search);
-  const dio = h('div', { class: 'menu-bg3d' });
   const inner = h('div', { class: 'hub-inner' });
-  root.append(h('div', { class: 'online-hub screen' }, dio, inner));
-  if (wantMenuDiorama()) menuDiorama(dio);
+  // the wooden table from the main menu; the optional 3D island (?gfx=3d) keeps its old dark look
+  if (wantMenuDiorama()) {
+    const dio = h('div', { class: 'menu-bg3d' });
+    root.append(h('div', { class: 'online-hub screen' }, dio, inner));
+    menuDiorama(dio);
+  } else root.append(h('div', { class: 'online-hub screen on-table' }, tableBackdrop(), inner));
   const kingdom = myOrDefaultKingdom;
   let capacity = DEFAULT_CAPACITY;
   let busy = false;

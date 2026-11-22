@@ -69,12 +69,23 @@
 
 @media (prefers-reduced-motion: reduce) { .menu-card { transition: none; } }
 
+/* ---- the same table behind the other screens outside a game (.on-table): online hub, game setup ---- */
+.on-table { background: #8a5f3f; }
+.table-backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.table-backdrop .table-wood, .table-backdrop .table-decor { position: absolute; inset: 0; }
+/* in-flow content above the table (the fixed start bar of the setup screen keeps its own position) */
+.on-table > .hub-inner, .on-table > .lobby-head, .on-table > .lobby-grid { position: relative; z-index: 2; }
+.on-table .lobby-head h2 { color: #fff6e6; text-shadow: 0 3px 0 #b13e53, 0 6px 0 #3a1f0e; }
+/* titles and loose text sit straight on the wood: cream with a dark brown outline */
+.on-table .hub-head h2 { color: #fff6e6; text-shadow: 0 4px 0 #b13e53, 0 8px 0 #3a1f0e; }
+.on-table .hub-sub, .on-table .hub-status { color: #fff6e6; text-shadow: 2px 2px 0 #3a1f0e; }
+.on-table .hub-tips span { background: rgba(58, 31, 14, .75); color: #f3dfc0; box-shadow: 0 0 0 2px #3a1f0e; }
+
 /* phones: the kingdom card on top, the two modes side by side, only the board corners stay */
 @media (max-width: 700px) {
   .table-decor .d-board-tl { width: 260px; left: -90px; top: -70px; }
   .table-decor .d-board-br { width: 240px; right: -100px; bottom: -110px; }
-  .table-decor .d-left, .table-decor .d-right { display: none; }
-  .table-center { gap: 18px; }
+  .table-decor .d-left, .table-decor .d-right { display: none; }  .table-center { gap: 18px; }
   .menu-hand { display: grid; grid-template-columns: 1fr 1fr; gap: 24px 18px; width: 100%; padding: 0 10px; box-sizing: border-box; }
   .menu-card, .menu-card.kingdom { width: auto; min-height: 0; transform: rotate(calc(var(--r) * .35)); }
   .menu-card.kingdom { grid-column: 1 / -1; display: grid; grid-template-columns: 112px 1fr; }

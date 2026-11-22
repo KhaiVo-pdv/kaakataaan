@@ -63,6 +63,12 @@ export function tableDecor() {
   return box;
 }
 
+// the same wooden table (planks + props) behind the other screens outside a game (online hub, game
+// setup). Fixed to the viewport so it stays put while the page scrolls; never takes clicks.
+export function tableBackdrop() {
+  return h('div', { class: 'table-backdrop', 'aria-hidden': 'true' }, h('div', { class: 'table-wood' }), tableDecor());
+}
+
 // ---------- the menu cards ----------
 const hx = (x, y, f, r = 22) => `<polygon points="${x},${y - r} ${x + r * 0.87},${y - r / 2} ${x + r * 0.87},${y + r / 2} ${x},${y + r} ${x - r * 0.87},${y + r / 2} ${x - r * 0.87},${y - r / 2}" fill="${f}" stroke="${INK}" stroke-width="3"/>`;
 const hut = (x, y, c) => `<path d="M${x - 9},${y + 7} L${x - 9},${y - 2} L${x},${y - 10} L${x + 9},${y - 2} L${x + 9},${y + 7} Z" fill="${c}" stroke="${INK}" stroke-width="2.5"/>`;

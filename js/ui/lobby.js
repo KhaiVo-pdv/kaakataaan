@@ -13,6 +13,7 @@ import { newSeed } from '../engine/rng.js';
 import { openFlagEditor, flagImg, patternFlag, validFlag, myKingdom, saveMyKingdom } from './flag.js';
 import { t } from '../i18n.js';
 import { roomShareUrl, ONLINE_MAX } from '../net.js';
+import { tableBackdrop } from './menuTable.js';
 
 const CFG_KEY = 'katanittes.lastConfig';
 export const MAPS_KEY = 'katanittes.maps';
@@ -94,7 +95,7 @@ export function lobbyScreen(root, opts = {}) {
   const onlineBox = h('div');
   const view = new BoardView(previewBox, { interactive: false });
 
-  root.append(h('div', { class: 'lobby screen' },
+  root.append(h('div', { class: 'lobby screen on-table' }, tableBackdrop(),
     h('div', { class: 'lobby-head' },
       h('button', { class: 'btn', onclick: () => { if (online && App.net) { if (App.net.guests.some(g => g.connected) && !confirm(t('¿Salir? La sala se cerrará para tus amigos.'))) return; App.net.closeRoom(); } App.net = null; App.go('menu'); } }, t('← Menú')),
       h('h2', null, online ? t('🌐 Sala online') : t('🎮 Nueva partida')),
