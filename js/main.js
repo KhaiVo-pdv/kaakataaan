@@ -10,6 +10,8 @@ import { autoPixelize } from './ui/pixel.js';
 import { t, LANGS, lang, setLang } from './i18n.js';
 import { mascotSvg } from './ui/mascot.js';
 import { music, toggleMusic } from './ui/music.js';
+import { tableDecor, modeCard, colourSwatches } from './ui/menuTable.js';
+import { PLAYER_COLORS } from './engine/config.js';
 
 // A full-screen WebGL canvas behind the menu steals taps AND mouse clicks
 // (GPU compositor layer + touch-action:none). pointer-events:none on the parent
@@ -94,28 +96,30 @@ function menuTop() {
   };
   btn.onclick = () => { toggleMusic(); draw(); };
   draw();
-  return h('div', { class: 'menu-top' }, btn, langPicker());
+  const rules = h('button', { class: 'btn sm', 'data-testid': 'menu-help', title: t('Cómo se juega'), 'aria-label': t('Cómo se juega'), onclick: () => showHelp() }, '❔');
+  return h('div', { class: 'menu-top' }, rules, btn, langPicker());
 }
 
-function kingdomPanel() {
-  const box = h('div', { class: 'menu-kingdom' });
+// "Tu reino" as the player's own card on the table: banner on the faction colour, name, colour swatches
+function kingdomCard() {
+  const box = h('div', { class: 'menu-card kingdom', style: { '--r': '-5deg' } });
   const draw = () => {
     const k = myOrDefaultKingdom();
+    box.style.setProperty('--kc', k.color);
     const nameIn = h('input', { type: 'text', class: 'hub-name', placeholder: t('Tu nombre'), value: k.name || '', maxlength: 16, 'aria-label': t('Tu nombre') });
     nameIn.addEventListener('input', () => {
       const n = nameIn.value.trim();
       storage('katanittes.name', n);
       saveMyKingdom({ ...myOrDefaultKingdom(), name: n });
     });
+    const paint = () => openFlagEditor({ flag: k.flag, color: k.color, name: nameIn.value.trim(), onSave: ({ flag, color }) => { saveMyKingdom({ ...myOrDefaultKingdom(), name: nameIn.value.trim(), flag, color }); draw(); } });
     box.replaceChildren(
-      h('button', { class: 'hub-flag small mk-flag', title: t('Pintar bandera y color del castillo'), onclick: paint }, h('div', { class: 'pole' }), flagImg(k.flag, 36, 'flag-img wave')),
-      h('div', { class: 'mk-info' },
-        h('label', { class: 'section-label' }, h('span', { class: 'swatch', style: { background: k.color } }), t('Tu reino')),
-        nameIn),
-      h('button', { class: 'btn sm', title: t('Pintar bandera y color del castillo'), onclick: paint }, '🎨'));
-    function paint() {
-      openFlagEditor({ flag: k.flag, color: k.color, name: nameIn.value.trim(), onSave: ({ flag, color }) => { saveMyKingdom({ ...myOrDefaultKingdom(), name: nameIn.value.trim(), flag, color }); draw(); } });
-    }
+      h('span', { class: 'mc-band' }, h('span', null, '👑 ' + t('Tu reino')), h('span', null, '★')),
+      h('div', { class: 'mc-art kingdom-art' },
+        h('button', { class: 'mk-flag', title: t('Pintar bandera y color del castillo'), onclick: paint }, flagImg(k.flag, 64, 'flag-img wave')),
+        h('button', { class: 'mc-paint', title: t('Pintar bandera y color del castillo'), 'aria-label': t('Pintar bandera y color del castillo'), onclick: paint }, '🎨')),
+      h('div', { class: 'mc-body' }, nameIn,
+        colourSwatches(PLAYER_COLORS, k.color, color => { saveMyKingdom({ ...myOrDefaultKingdom(), name: nameIn.value.trim(), color }); draw(); })));
   };
   draw();
   return box;
@@ -127,28 +131,25 @@ function menuScreen(root) {
   const hostSess = fresh(storage(HOST_SESSION), 24) ? storage(HOST_SESSION) : null;
   // both can exist (hosted yesterday, joined a friend today): offer both
   const guestSess = fresh(storage(GUEST_SESSION), 6) ? storage(GUEST_SESSION) : null;
-  const icons = ['🌲', '🧱', '🐑', '🌾', '⛰️', '🏠', '🏰', '🎲', '⚔️', '💰', '🛤️', '🙈'];
-  const bg = h('div', { class: 'menu-bg' }, Array.from({ length: 26 }, (_, i) => h('div', {
-    class: 'fhex', style: { left: ((i * 37) % 100) + '%', top: ((i * 53) % 100) + '%', animationDelay: -(i * 0.7) + 's', fontSize: 26 + ((i * 7) % 30) + 'px' },
-  }, icons[i % icons.length])));
-  const dio = h('div', { class: 'menu-bg3d' });
-  root.append(h('div', { class: 'menu screen' }, bg, dio, menuTop(),
-    h('div', { class: 'logo' },
-      h('div', { class: 't1 jit' }, mascotSvg('menu-mascot'), h('span', { class: 't1b' }, 'KAAKATAAAN')),
-      h('div', { class: 'sub' }, t('Colonos, caos y modos que no existen en la caja.'))),
-    kingdomPanel(),
-    h('div', { class: 'menu-buttons' },
-      save ? h('button', { class: 'btn green', onclick: () => App.resume() }, t('▶️ Continuar partida (ronda {n})', { n: save.round || 0 })) : null,
-      hostSess ? h('div', { style: { display: 'flex', gap: '6px' } },
-        h('button', { class: 'btn green', style: { flex: 1 }, onclick: e => reopenRoom(e.currentTarget) }, t('🔁 Reabrir sala {code} (ronda {n})', { code: hostSess.code, n: hostSess.state.round })),
-        h('button', { class: 'btn ghost', title: t('Cerrar esa sala para siempre'), onclick: () => { storage(HOST_SESSION, null); App.go('menu'); } }, '✕')) : null,
-      guestSess ? h('button', { class: 'btn green', onclick: () => backToRoom(guestSess) }, t('📡 Volver a la sala {code}', { code: guestSess.code })) : null,
-      h('button', { class: 'btn primary', 'data-testid': 'play-local', onclick: () => App.go('lobby') }, t('🎮 Jugar local (hotseat + bots)')),
-      h('button', { class: 'btn pink', 'data-testid': 'play-online', onclick: () => App.go('online') }, t('🌐 Jugar online con amigos')),
-      h('button', { class: 'btn', onclick: () => App.go('editor') }, t('✏️ Editor de mapas')),
-      h('button', { class: 'btn', onclick: () => showHelp() }, t('📖 Cómo se juega'))),
-    h('div', { class: 'menu-foot' }, t('Hecho para jugar con amigos · funciona en PC y móvil · sin instalar nada'), creditLine())));
-  if (wantMenuDiorama()) menuDiorama(dio);
+  // a game in progress already: offer to go back to it above the cards
+  const resume = [
+    save ? h('button', { class: 'btn green', onclick: () => App.resume() }, t('▶️ Continuar partida (ronda {n})', { n: save.round || 0 })) : null,
+    hostSess ? h('div', { class: 'resume-pair' },
+      h('button', { class: 'btn green', onclick: e => reopenRoom(e.currentTarget) }, t('🔁 Reabrir sala {code} (ronda {n})', { code: hostSess.code, n: hostSess.state.round })),
+      h('button', { class: 'btn ghost', title: t('Cerrar esa sala para siempre'), onclick: () => { storage(HOST_SESSION, null); App.go('menu'); } }, '✕')) : null,
+    guestSess ? h('button', { class: 'btn green', onclick: () => backToRoom(guestSess) }, t('📡 Volver a la sala {code}', { code: guestSess.code })) : null,
+  ].filter(Boolean);
+  root.append(h('div', { class: 'menu screen table-menu' }, h('div', { class: 'table-wood' }), tableDecor(), menuTop(),
+    h('div', { class: 'table-center' },
+      h('div', { class: 'logo' },
+        h('div', { class: 't1 jit' }, mascotSvg('menu-mascot'), h('span', { class: 't1b' }, 'KAAKATAAAN')),
+        h('div', { class: 'sub' }, t('Colonos, caos y modos que no existen en la caja.'))),
+      resume.length ? h('div', { class: 'menu-resume' }, resume) : null,
+      h('div', { class: 'menu-hand' },
+        kingdomCard(),
+        modeCard({ id: 'local', color: '#d4930f', paper: '#f6e3b0', band: t('Modo'), corner: 'I', tilt: -1.5, title: t('Jugar local'), text: t('En el mismo dispositivo con amigos; los bots llenan los huecos.'), onclick: () => App.go('lobby') }),
+        modeCard({ id: 'online', color: '#b13e53', paper: '#cfe3f7', band: t('Modo'), corner: 'II', tilt: 4, title: t('Jugar online'), text: t('Abre una sala y manda el código a tus amigos.'), onclick: () => App.go('online') })),
+      h('div', { class: 'menu-foot' }, t('Hecho para jugar con amigos · funciona en PC y móvil · sin instalar nada'), creditLine()))));
 }
 
 const RECENT_KEY = 'katanittes.recentRooms';
