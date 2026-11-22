@@ -190,8 +190,8 @@ function patch(mat, opts = {}) {
     float inside = 1.0 - smoothstep(0.8, 0.86, hd);
     float rim = smoothstep(0.66, 0.8, hd) * inside;
     float pulse = 0.82 + 0.18 * sin(uTime * 3.2);
-    vec3 stained = gl_FragColor.rgb * vec3(1.1, 0.36, 0.32) + vec3(0.2, 0.015, 0.0);
-    gl_FragColor.rgb = mix(gl_FragColor.rgb, stained, inside * uRobber.z * (0.55 + 0.45 * rim) * pulse);
+    vec3 stained = gl_FragColor.rgb * vec3(1.15, 0.3, 0.26) + vec3(0.26, 0.01, 0.0);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, stained, inside * uRobber.z * (0.75 + 0.25 * rim) * pulse);
   }
   if (uFogOn > 0.5) {
     vec2 fuv = (vFogW.xz - uFogRect.xy) / uFogRect.zw;
@@ -1372,6 +1372,7 @@ export class Board3D {
     const rt = this.robberTile, ru = U.uRobber.value;
     if (rt && (rt.x !== ru.x || rt.y !== ru.y)) ru.set(rt.x, rt.y, 0);
     ru.z += ((rt ? 1 : 0) - ru.z) * 0.06;
+    if (this.robberHaloKit) this.robberHaloKit.mat.opacity = 0.55 + 0.35 * Math.sin(now * 0.0032);
     if (goldGlow.size) {
       const shine = 0.22 + 0.4 * Math.max(0, Math.sin(t * 2.4)) ** 3;
       for (const m of goldGlow) m.emissiveIntensity = shine;
@@ -2109,8 +2110,17 @@ export class Board3D {
       const o = kit.robber.clone();
       const x = t.x - 0.3, z = t.y + 0.22;
       o.position.set(x, Math.max(this.heightAt(x, z), 0.1), z);
-      o.scale.setScalar(1.3);
+      o.scale.setScalar(1.8);
       add(o, 'robber' + t.id);
+      // a pulsing red ring at the robber's feet so it is easy to spot (shared geometry/material)
+      this.robberHaloKit ||= {
+        geo: new THREE.RingGeometry(0.17, 0.25, 40).rotateX(-Math.PI / 2),
+        mat: new THREE.MeshBasicMaterial({ color: 0xff4a3d, transparent: true, opacity: 0.8, depthWrite: false }),
+      };
+      const halo = new THREE.Mesh(this.robberHaloKit.geo, this.robberHaloKit.mat);
+      halo.position.set(x, o.position.y + 0.03, z);
+      halo.renderOrder = 2;
+      this.dynGroup.add(halo);
     }
 
     // Seafarers: ships on their edges and the pirate on its sea tile, gently bobbing

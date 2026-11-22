@@ -275,6 +275,11 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 @keyframes dropIn { 0% { opacity: 0; translate: 0 -40px; } 100% { opacity: 1; translate: 0 0; } }
 .robber-body { fill: #2d2d35; stroke: #111; stroke-width: 2; }
 .robber { filter: drop-shadow(0 4px 4px rgba(0,0,0,.5)); }
+.robber-body { stroke: #fff6e6; }
+.robber-halo { fill: none; stroke: #ff4a3d; stroke-width: 3; animation: robberPulse 1.6s ease-in-out infinite; }
+.robber-tile { fill: rgba(229, 57, 53, .22); stroke: #e53935; stroke-width: 4; stroke-dasharray: 10 6; pointer-events: none; }
+@keyframes robberPulse { 0%, 100% { opacity: .9; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .robber-halo { animation: none; } }
 .hot-v { fill: #ffe7a3; stroke: #1a1c2c; stroke-width: 4; animation: hotFade 2.4s ease-in-out infinite; pointer-events: none; transform-box: fill-box; transform-origin: center; }
 .hot-e-bg { stroke: #1a1c2c; stroke-width: 18; stroke-linecap: round; opacity: .8; pointer-events: none; animation: hotFade 2.4s ease-in-out infinite; }
 .hot-e { stroke: #ffe7a3; stroke-width: 11; stroke-linecap: round; opacity: .9; animation: hotFade 2.4s ease-in-out infinite; pointer-events: none; }

@@ -268,7 +268,10 @@ export class BoardView {
     // robber
     if (bd.robber >= 0 && !st.config.rules.noRobber && bd.tiles[bd.robber].revealed && !bd.robberHidden) {
       const t = bd.tiles[bd.robber];
-      const g = S('g', { class: 'robber', transform: `translate(${t.x * U - 40},${t.y * U + 6})` });
+      // the robber's tile gets a red stain and outline so the blocked tile is obvious
+      svg.append(S('polygon', { points: hexPoints(t.x * U, t.y * U, U * 0.86), class: 'robber-tile' }));
+      const g = S('g', { class: 'robber', transform: `translate(${t.x * U - 40},${t.y * U + 6}) scale(1.4)` });
+      g.append(S('ellipse', { cx: 0, cy: 22, rx: 20, ry: 7, class: 'robber-halo' }));
       g.append(S('ellipse', { cx: 0, cy: 22, rx: 15, ry: 5, fill: 'rgba(0,0,0,.35)' }));
       g.append(S('path', { d: 'M-12,22 C-14,4 -8,-4 0,-4 C8,-4 14,4 12,22 Z', class: 'robber-body' }));
       g.append(S('circle', { cx: 0, cy: -12, r: 10, class: 'robber-body' }));
