@@ -6,10 +6,10 @@
 import en from './i18n/en.js';
 import vi from './i18n/vi.js';
 
-// The menu offers Vietnamese and English only; the game opens in Vietnamese.
+// The menu offers English and Vietnamese only; the game opens in English unless the player picked one.
 export const LANGS = [
-  { id: 'vi', name: 'Tiếng Việt' },
   { id: 'en', name: 'English' },
+  { id: 'vi', name: 'Tiếng Việt' },
 ];
 // 'es' is the source text itself (no dictionary). It is not in the menu: only automated browser
 // tests (navigator.webdriver) may still ask for it, because they look buttons up by their Spanish text.
@@ -17,14 +17,14 @@ const DICTS = { vi, en, es: {} };
 const KEY = 'katanittes.lang';
 const automated = () => !!(globalThis.navigator && globalThis.navigator.webdriver);
 
-// the saved choice (Vietnamese or English), else Vietnamese (Spanish when there is no browser: tests)
+// the saved choice (English or Vietnamese), else English (Spanish when there is no browser: tests)
 function detect() {
   if (!globalThis.document) return 'es';
   try {
     const saved = localStorage.getItem(KEY);
     if (saved === 'vi' || saved === 'en' || (saved === 'es' && automated())) return saved;
   } catch {}
-  return 'vi';
+  return 'en';
 }
 
 export let lang = detect();
