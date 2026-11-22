@@ -100,3 +100,32 @@
 }
 .table-menu .menu-card .mc-title { font-family: var(--display); font-weight: 700; color: #2a1d14; }
 .table-menu .menu-card .mc-text { font-family: var(--font); }
+
+/* ---- frames on the table: cream playing-card paper like the menu cards (fonts unchanged) ---- */
+.on-table .card {
+  --muted: #6b5440; --steel: #6b5440; --text: #2a1d14;
+  background: #fbf1dc; color: #2a1d14;
+  box-shadow: 0 0 0 3px var(--ink), 0 0 0 7px #fbf1dc, 0 0 0 10px var(--ink), 6px 10px 0 10px rgba(20, 10, 4, .45);
+}
+.on-table .card h3 { color: #2a1d14; text-shadow: none; }
+.on-table .card .rule label span, .on-table .card .mode .flagship { color: #a0620f; }
+.on-table .card .waiting-msg { color: #b13e53 !important; }
+/* the dark boxes inside a frame turn into light paper with an ink outline */
+.on-table .card input[type=text], .on-table .card select, .on-table .card textarea { background: #f1e2c3; color: #2a1d14; box-shadow: inset 0 0 0 3px var(--ink); }
+.on-table .card .pin { color: #2a1d14 !important; box-shadow: inset 0 0 0 3px var(--ink), 0 4px 0 rgba(20, 10, 4, .35) !important; }
+.on-table .card .pin:focus { box-shadow: inset 0 0 0 3px #b13e53, 0 0 0 3px var(--coral) !important; }
+.on-table .card .map-card, .on-table .card .mode, .on-table .card .stepper, .on-table .card .guest, .on-table .card .seat, .on-table .card .seat-name {
+  background: #f1e2c3; color: #2a1d14; box-shadow: 0 0 0 3px var(--ink); }
+.on-table .card .map-card.on, .on-table .card .mode.on { background: #ffe6a8; box-shadow: 0 0 0 3px var(--ink), 0 0 0 6px #d4930f; }
+.on-table .card .seat.host, .on-table .card .guest.host { box-shadow: 0 0 0 3px #d4930f; }
+.on-table .card .seat.me { box-shadow: 0 0 0 3px #1e88e5; }
+.on-table .card .seat-name.taken { color: #237a46; box-shadow: inset 0 0 0 3px #237a46; }
+.on-table .card .seat-q { color: #a08568; }
+.on-table .card .pill, .on-table .card .tag:not(.ok):not(.no) { background: #f1e2c3; color: #2a1d14; box-shadow: 0 0 0 2px var(--ink); }
+.on-table .card .tag.ok { color: #237a46; }
+.on-table .card .chip:not(.on), .on-table .card .cap:not(.on) { background: #f1e2c3; color: #2a1d14; }
+.on-table .card .cap:not(.on):hover, .on-table .card .chip:not(.on):hover { background: #ffe6a8; }
+.on-table .card .btn.ghost { background: #e7d3ad; color: #2a1d14; }
+.on-table .card :not(.on) > .switch:not(.on) { background: #c9b28c; }
+.on-table .card .room-state.on { background: #d8efd9; color: #237a46; }
+.on-table .card .room-state.off { background: #f6d6dc; color: #b13e53; }
