@@ -1153,4 +1153,5 @@ export default {
   "Jugar local": "Chơi tại chỗ",
   "Jugar online": "Chơi online",
   "Modo": "Chế độ",
+  "necesitas ciudad": "cần thành phố",
 };

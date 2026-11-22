@@ -923,7 +923,7 @@ function fillActions(bar, st, v, locked) {
     buildBtn('city', t('Ciudad'), '🏰', p.citiesLeft, () => G.legalCities(st, v)),
     ...Sea.seaButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }),
     ...CK.ckButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openImprove: () => openImprove(v) }),
-    ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a) }),
+    ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a), costIcons }),
     ...CK.progressButtons(st, v, ui, { h, dispatch: a => App.dispatch(a) }),
     CK.hasCK(st) ? '' : h('button', {
       class: 'btn', disabled: !st.devDeck.length || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),

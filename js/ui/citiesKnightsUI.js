@@ -73,10 +73,19 @@ export function ckBanner(st, ui, inter) {
 // main-phase buttons: improvements (opens the panel) and city walls
 export function ckButtons(st, v, ui, { h, rerender, costIcons, canAfford, openImprove }) {
   if (!hasCK(st)) return [];
-  // one button for the city: improvements, metropolises and walls live in its panel
+  // one button for the city: improvements, metropolises and walls live in its panel.
+  // Its cost line shows the cheapest next improvement; the tooltip lists every cost.
+  const p = st.players[v];
+  const next = Improve.TRACKS.filter(tr => p.improve[tr] < Improve.MAX_LEVEL).map(tr => ({ tr, cost: Improve.improveCost(st, v, tr) }));
+  const cheapest = next.length ? next.reduce((a, b) => (Object.values(b.cost)[0] < Object.values(a.cost)[0] ? b : a)) : null;
+  const hasCity = Object.values(st.buildings).some(b => b.owner === v && b.type === 'city');
+  const line = !hasCity ? t('necesitas ciudad') : cheapest ? costIcons(cheapest.cost) : '—';
+  const tip = [t('Mejoras de ciudad y murallas'),
+    ...next.map(({ tr, cost }) => `${Improve.TRACK_INFO[tr].icon} ${t(Improve.TRACK_INFO[tr].name)} ${p.improve[tr] + 1}: ${costIcons(cost)}`),
+    `🧱 ${t('Muralla')}: ${costIcons(Improve.WALL_COST)}`].join('\n');
   return [
-    h('button', { class: 'btn' + (ui.pick === 'wall' || (ui.pick || '').startsWith('metro:') ? ' active' : ''), 'data-testid': 'improve', title: t('Mejoras de ciudad y murallas'), onclick: e => { e.stopPropagation(); openImprove(); } },
-      h('span', { class: 'bicon' }, '🏛️'), h('span', null, t('Mejoras'))),
+    h('button', { class: 'btn' + (ui.pick === 'wall' || (ui.pick || '').startsWith('metro:') ? ' active' : ''), 'data-testid': 'improve', title: tip, onclick: e => { e.stopPropagation(); openImprove(); } },
+      h('span', { class: 'bicon' }, '🏛️'), h('span', null, t('Mejoras'), h('span', { class: 'cost' }, line))),
   ];
 }
 
@@ -199,10 +208,15 @@ export function knightBanner(st, v, ui, inter) {
 }
 
 // the knights button and, while a knight is chosen next to the robber, the "chase the robber" button
-export function knightButtons(st, v, ui, { h, openKnights, dispatch }) {
+export function knightButtons(st, v, ui, { h, openKnights, dispatch, costIcons }) {
   if (!hasCK(st)) return [];
-  const out = [h('button', { class: 'btn' + (['knight', 'promote', 'activate', 'knightAct'].includes(ui.pick) ? ' active' : ''), 'data-testid': 'knights', onclick: e => { e.stopPropagation(); openKnights(); } },
-    h('span', { class: 'bicon' }, '⚔️'), h('span', null, t('Caballeros')))];
+  // cost line: recruiting; the tooltip lists recruit / activate / promote
+  const tip = [t('Caballeros'),
+    `${t('Reclutar')}: ${costIcons(Knights.KNIGHT_COST)}`,
+    `${t('Activar')}: ${costIcons(Knights.ACTIVATE_COST)}`,
+    `${t('Ascender')}: ${costIcons(Knights.KNIGHT_COST)}`].join('\n');
+  const out = [h('button', { class: 'btn' + (['knight', 'promote', 'activate', 'knightAct'].includes(ui.pick) ? ' active' : ''), 'data-testid': 'knights', title: tip, onclick: e => { e.stopPropagation(); openKnights(); } },
+    h('span', { class: 'bicon' }, '⚔️'), h('span', null, t('Caballeros'), h('span', { class: 'cost' }, costIcons(Knights.KNIGHT_COST))))];
   if (ui.pick === 'knightAct' && ui.knightFrom != null && Knights.canChase(st, v, ui.knightFrom))
     out.push(h('button', { class: 'btn pink', 'data-testid': 'knight-chase', onclick: e => {
       e.stopPropagation();

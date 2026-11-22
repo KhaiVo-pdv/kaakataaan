@@ -1154,4 +1154,5 @@ export default {
   "Jugar local": "Play local",
   "Jugar online": "Play online",
   "Modo": "Mode",
+  "necesitas ciudad": "needs a city",
 };
