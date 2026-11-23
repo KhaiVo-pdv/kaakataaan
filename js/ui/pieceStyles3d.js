@@ -5,12 +5,13 @@
 // The roof always carries the player's colour, so ownership stays readable in every style.
 // Material names follow the kit ('Timber', 'StoneDark', 'Glass') so the ADHD gold trims still apply.
 import * as THREE from 'three';
+import { TRACK_COLOR } from './citiesKnights3d.js';
 
 const mats = new Map();
 function mat(name, color, opts = {}) {
   const k = name + color + JSON.stringify(opts);
   if (!mats.has(k)) {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? 0.75, metalness: opts.metal || 0, flatShading: true });
+    const m = new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? 0.75, metalness: opts.metal || 0, flatShading: true, emissive: opts.glow ? color : '#000000', emissiveIntensity: opts.glow ? 0.9 : 0 });
     m.name = name;
     mats.set(k, m);
   }
@@ -200,4 +201,179 @@ const BUILDERS = { dinh, castle, eastern, viking };
 export function makeStyledBuilding(style, type, color) {
   const make = BUILDERS[style];
   return make ? make(type, color) : null;
+}
+
+// ---------------- Cities & Knights metropolis, per style ----------------
+// A tall landmark beside the city. Every style keeps the glowing flag in the improvement track's
+// colour (trade / politics / science) on top, so you can still tell which metropolis it is.
+// Same size class as the generic tower in citiesKnights3d.js (about 0.9 tall before the flag).
+
+// four-sided curved roof (the curved profile crossed with itself) of size w at height y
+function curvedRoof4(g, roof, w, h, y, lift) {
+  put(g, curved(w, h, w * 0.8, lift), roof, 0, y);
+  put(g, curved(w, h, w * 0.8, lift), roof, 0, y, 0, Math.PI / 2);
+}
+// flag pole with the track flag, standing at height y
+function trackFlag(g, track, y, x = 0) {
+  put(g, cyl(0.006, 0.006, 0.26, 5), mat('Pole', '#3a2a1a'), x, y);
+  put(g, box(0.15, 0.09, 0.01), mat('TrackFlag', TRACK_COLOR[track] || '#ffffff', { glow: true }), x + 0.075, y + 0.16);
+}
+
+function dinhMetro(track, color) {
+  // a bell tower (gác chuông): open wooden ground floor, then three stacked curved roofs with curled corners
+  const g = new THREE.Group();
+  const roof = mat('Player', color), wood = mat('Timber', WOOD), plinth = mat('StoneDark', STONE_DARK), wall = mat('Plaster', CREAM), gold = mat('Ornament', GOLD, { metal: 0.4, rough: 0.4 });
+  put(g, box(0.3, 0.04, 0.3), plinth);
+  for (const x of [-0.1, 0.1]) for (const z of [-0.1, 0.1]) put(g, cyl(0.012, 0.012, 0.18, 6), wood, x, 0.04, z);
+  put(g, cyl(0.04, 0.05, 0.07, 10), mat('Bell', '#b8862f', { metal: 0.7, rough: 0.35 }), 0, 0.12); // the bell
+  // roof, wall band, roof, wall band, roof: the top always ends with a roof
+  const tiers = [[0.38, 0.1], [0.3, 0.09], [0.22, 0]];
+  let y = 0.22;
+  for (const [w, wallH] of tiers) {
+    curvedRoof4(g, roof, w, w * 0.3, y, w * 0.13);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const tip = put(g, cone(0.012, 0.06, 6), roof, sx * w * 0.5, y + 0.02, sz * w * 0.38);
+      tip.rotation.set(sz * 0.6, 0, -sx * 0.9);
+    }
+    y += w * 0.22;
+    if (wallH) put(g, box(w * 0.5, wallH, w * 0.5), wall, 0, y);
+    y += wallH;
+  }
+  put(g, cached('pearl', () => new THREE.SphereGeometry(0.018, 10, 8)), gold, 0, y + 0.02);
+  trackFlag(g, track, y + 0.03, 0.03);
+  return g;
+}
+
+function castleMetro(track, color) {
+  // a great round keep with battlements and a pointed roof
+  const g = new THREE.Group();
+  const roof = mat('Player', color), stone = mat('Stone', STONE), dark = mat('StoneDark', STONE_DARK), win = mat('Glass', '#2b3040', { rough: 0.3 });
+  put(g, cyl(0.15, 0.16, 0.05, 14), dark);
+  put(g, cyl(0.11, 0.13, 0.58, 14), stone, 0, 0.05);
+  put(g, cyl(0.145, 0.145, 0.05, 14), dark, 0, 0.63);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    put(g, box(0.04, 0.05, 0.04), stone, Math.cos(a) * 0.125, 0.68, Math.sin(a) * 0.125, -a);
+  }
+  for (const y of [0.25, 0.45]) put(g, box(0.035, 0.06, 0.005), win, 0, y, 0.122);
+  put(g, cone(0.1, 0.22, 14), roof, 0, 0.68);
+  trackFlag(g, track, 0.88);
+  return g;
+}
+
+function easternMetro(track, color) {
+  // a slender five-tier pagoda
+  const g = new THREE.Group();
+  const roof = mat('Player', color), wall = mat('Plaster', PLASTER), base = mat('StoneDark', STONE_DARK), gold = mat('Ornament', GOLD, { metal: 0.5, rough: 0.35 });
+  put(g, box(0.26, 0.04, 0.26), base);
+  let y = 0.04;
+  for (let i = 0; i < 5; i++) {
+    const w = 0.18 - i * 0.025, h = 0.09 - i * 0.008, rw = w + 0.12;
+    put(g, box(w, h, w), wall, 0, y);
+    y += h;
+    curvedRoof4(g, roof, rw, rw * 0.25, y, rw * 0.12);
+    y += rw * 0.17;
+  }
+  put(g, cyl(0.005, 0.014, 0.12, 6), gold, 0, y);
+  trackFlag(g, track, y + 0.02, 0.02);
+  return g;
+}
+
+function vikingMetro(track, color) {
+  // a wooden watchtower: four posts, a platform and a lookout hut with a steep roof and carved horns
+  const g = new THREE.Group();
+  const roof = mat('Player', color), wood = mat('Timber', WOOD_DARK), plank = mat('Plaster', WOOD), base = mat('StoneDark', STONE_DARK);
+  put(g, box(0.28, 0.03, 0.28), base);
+  for (const x of [-0.1, 0.1]) for (const z of [-0.1, 0.1]) put(g, box(0.03, 0.5, 0.03), wood, x, 0.03, z);
+  for (const y of [0.18, 0.36]) {
+    // cross braces
+    for (const sz of [-0.1, 0.1]) { const b = put(g, box(0.22, 0.02, 0.02), wood, 0, y, sz); b.rotation.z = 0.5; }
+  }
+  put(g, box(0.3, 0.03, 0.3), plank, 0, 0.53);
+  put(g, box(0.2, 0.12, 0.2), plank, 0, 0.56);
+  put(g, pyramid(0.28, 0.28, 0.2), roof, 0, 0.68);
+  for (const sgn of [-1, 1]) {
+    const h = put(g, box(0.014, 0.09, 0.014), wood, 0, 0.84, sgn * 0.02);
+    h.rotation.x = sgn * 0.5;
+  }
+  trackFlag(g, track, 0.88, 0.03);
+  return g;
+}
+
+const METROS = { dinh: dinhMetro, castle: castleMetro, eastern: easternMetro, viking: vikingMetro };
+
+// the styled metropolis for this owner's style, or null for 'classic' (board3d then uses makeMetro)
+export function makeStyledMetro(style, track, color) {
+  const make = METROS[style];
+  if (!make) return null;
+  const g = make(track, color);
+  g.scale.setScalar(1.25); // like the generic metropolis tower
+  return g;
+}
+
+// ---------------- Cities & Knights city wall, per style ----------------
+// A ring around the foot of the city, same radius as the generic wall in citiesKnights3d.js (0.3).
+// Wall tops carry the owner's colour where the style has a roof or cap, like the houses.
+const WALL_R = 0.3;
+// place n pieces evenly on the ring; make(i) builds one piece standing at the origin, facing outwards
+function ring(g, n, make) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const p = make(i);
+    p.position.set(Math.cos(a) * WALL_R, p.position.y, Math.sin(a) * WALL_R);
+    p.rotation.y = -a + Math.PI / 2;
+    g.add(p);
+  }
+}
+// a small group holding one wall piece; each part is [geometry, material, y, optional y-rotation]
+const piece = (...parts) => {
+  const p = new THREE.Group();
+  for (const [geo, m, y, ry = 0] of parts) put(p, geo, m, 0, y, 0, ry);
+  return p;
+};
+
+function dinhWall(color) {
+  // yellow brick wall with a little tiled cap in the owner's colour
+  const g = new THREE.Group();
+  const brick = mat('Brick', '#d9a85b'), cap = mat('Player', color);
+  ring(g, 10, () => piece([box(0.17, 0.07, 0.04), brick, 0], [box(0.19, 0.02, 0.06), cap, 0.07]));
+  return g;
+}
+
+function castleWall(color) {
+  // tall stone wall with crenels and three small round turrets with pointed roofs
+  const g = new THREE.Group();
+  const stone = mat('Stone', STONE), dark = mat('StoneDark', STONE_DARK), roof = mat('Player', color);
+  ring(g, 10, i => piece([box(0.17, 0.1, 0.05), i % 2 ? stone : dark, 0], [box(0.05, 0.04, 0.05), stone, 0.1]));
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2 + Math.PI / 10;
+    const t = piece([cyl(0.035, 0.04, 0.15, 10), stone, 0], [cone(0.045, 0.07, 10), roof, 0.15]);
+    t.position.set(Math.cos(a) * WALL_R, 0, Math.sin(a) * WALL_R);
+    g.add(t);
+  }
+  return g;
+}
+
+function easternWall(color) {
+  // whitewashed wall on a stone footing, capped with tiles in the owner's colour
+  const g = new THREE.Group();
+  const wall = mat('Plaster', PLASTER), base = mat('StoneDark', STONE_DARK), cap = mat('Player', color);
+  ring(g, 10, () => piece([box(0.18, 0.02, 0.05), base, 0], [box(0.17, 0.06, 0.035), wall, 0.02], [gable(0.07, 0.03, 0.19), cap, 0.08, Math.PI / 2]));
+  return g;
+}
+
+function vikingWall() {
+  // a palisade of sharpened wooden stakes
+  const g = new THREE.Group();
+  const wood = mat('Timber', WOOD_DARK), tip = mat('Plaster', WOOD);
+  ring(g, 26, i => piece([cyl(0.017, 0.019, 0.09 + (i % 3) * 0.012, 6), wood, 0], [cone(0.018, 0.035, 6), tip, 0.09 + (i % 3) * 0.012]));
+  return g;
+}
+
+const WALLS = { dinh: dinhWall, castle: castleWall, eastern: easternWall, viking: vikingWall };
+
+// the styled city wall for this owner's style, or null for 'classic' (board3d then uses makeWall)
+export function makeStyledWall(style, color) {
+  const make = WALLS[style];
+  return make ? make(color) : null;
 }

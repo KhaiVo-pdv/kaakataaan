@@ -126,7 +126,7 @@ export function openFlagEditor({ flag, color, style, name, title = tk('Tu reino'
   function drawStyles() {
     clear(styleBox).append(...PIECE_STYLES.map(k => {
       const b = h('button', { class: 'style-opt' + (k === sty ? ' on' : ''), title: STYLE_NAMES[k], 'aria-label': STYLE_NAMES[k], 'aria-pressed': String(k === sty), onclick: () => { sty = k; drawStyles(); } });
-      b.innerHTML = styleIcon(k, col);
+      b.innerHTML = `<span class="style-pics">${styleIcon(k, col)}${styleIcon(k, col, 'city')}</span>`; // house + city
       b.append(h('span', null, STYLE_NAMES[k]));
       return b;
     }));

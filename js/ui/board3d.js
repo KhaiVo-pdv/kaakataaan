@@ -24,7 +24,7 @@ import { pxIcon } from './pixel.js';
 import { flagCanvas } from './flag.js';
 import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
-import { makeStyledBuilding } from './pieceStyles3d.js';
+import { makeStyledBuilding, makeStyledMetro, makeStyledWall } from './pieceStyles3d.js';
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
@@ -2141,7 +2141,8 @@ export class Board3D {
     // Cities & Knights: walls around cities, metropolis towers, the barbarians' way across the sea
     for (const k in st.walls || {}) {
       const V = bd.vertices[k];
-      const o = makeWall();
+      const owner = st.players[st.walls[k]];
+      const o = (owner && makeStyledWall(owner.style, owner.color)) || makeWall(); // kingdom piece style
       o.position.set(V.x, vy(+k) - 0.01, V.y);
       add(o, 'wall' + k);
     }
@@ -2150,7 +2151,8 @@ export class Board3D {
       if (!m) continue;
       const V = bd.vertices[m.at];
       const off = { trade: [0.2, -0.16], politics: [-0.2, -0.16], science: [0, 0.24] }[tr];
-      const o = makeMetro(tr, st.players[m.owner].color);
+      const owner = st.players[m.owner];
+      const o = makeStyledMetro(owner.style, tr, owner.color) || makeMetro(tr, owner.color); // kingdom piece style
       o.position.set(V.x + off[0], vy(m.at) - 0.01, V.y + off[1]);
       add(o, 'metro' + tr + m.at + m.owner);
     }
