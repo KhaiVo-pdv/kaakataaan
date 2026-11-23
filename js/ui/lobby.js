@@ -6,6 +6,7 @@ import { EXPANSIONS, seafarersOn, citiesKnightsOn } from '../engine/expansions.j
 import { SCENARIOS } from '../engine/seafarers/scenarios.js';
 import { showSeafarersHelp } from './seafarersHelp.js';
 import { showCitiesKnightsHelp } from './citiesKnightsHelp.js';
+import { showHelp } from './help.js';
 import { SHAPES, generateBoard } from '../engine/board.js';
 import { DEV_DECKS, TILE_INFO } from '../engine/constants.js';
 import { createGame } from '../engine/game.js';
@@ -99,6 +100,8 @@ export function lobbyScreen(root, opts = {}) {
     h('div', { class: 'lobby-head' },
       h('button', { class: 'btn', onclick: () => { if (online && App.net) { if (App.net.guests.some(g => g.connected) && !confirm(t('¿Salir? La sala se cerrará para tus amigos.'))) return; App.net.closeRoom(); } App.net = null; App.go('menu'); } }, t('← Menú')),
       h('h2', null, online ? t('🌐 Sala online') : t('🎮 Nueva partida')),
+      // how to play, with both expansion rule guides (same as the main menu's ❔)
+      h('button', { class: 'btn sm', 'data-testid': 'lobby-help', title: t('Cómo se juega'), 'aria-label': t('Cómo se juega'), onclick: () => showHelp({ seafarers: true, citiesKnights: true }) }, '❔'),
       h('button', { class: 'btn sm', onclick: () => { cfg = localConfig(); if (online) cfg.players.forEach((p, i) => { if (i && p.kind === 'human') p.kind = 'remote'; }); refresh(); } }, t('↺ Restablecer'))),
     h('div', { class: 'lobby-grid' }, left,
       h('div', { class: 'preview-card' }, onlineBox, h('div', { class: 'card' },

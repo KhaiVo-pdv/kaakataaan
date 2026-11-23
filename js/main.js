@@ -96,7 +96,8 @@ function menuTop() {
   };
   btn.onclick = () => { toggleMusic(); draw(); };
   draw();
-  const rules = h('button', { class: 'btn sm', 'data-testid': 'menu-help', title: t('Cómo se juega'), 'aria-label': t('Cómo se juega'), onclick: () => showHelp() }, '❔');
+  // from the main menu, always offer both expansion rule guides (in a game they show only for the active expansion)
+  const rules = h('button', { class: 'btn sm', 'data-testid': 'menu-help', title: t('Cómo se juega'), 'aria-label': t('Cómo se juega'), onclick: () => showHelp({ seafarers: true, citiesKnights: true }) }, '❔');
   return h('div', { class: 'menu-top' }, rules, btn, langPicker());
 }
 
