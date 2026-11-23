@@ -3,7 +3,8 @@
 import { RES, COSTS, DEV_DECKS, EVENTS, TILE_INFO, DEV_INFO } from './constants.js';
 import { rand, randInt, shuffle, pick } from './rng.js';
 import { generateBoard } from './board.js';
-import { normalizeExpansions, seafarersOn, citiesKnightsOn } from './expansions.js';
+import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn } from './expansions.js';
+import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -156,6 +157,7 @@ export function createGame(configIn) {
   if (M.fog) log(s, '🌑 Niebla de guerra: solo ves lo que rodea a tus piezas.');
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
   if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
+  if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
   return s;
 }
 

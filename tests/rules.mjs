@@ -2,7 +2,7 @@
 import * as G from '../js/engine/game.js';
 import { defaultConfig } from '../js/engine/config.js';
 import { botAct } from '../js/engine/bot.js';
-import { seafarersOn, citiesKnightsOn, EXPANSIONS } from '../js/engine/expansions.js';
+import { seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, EXPANSIONS } from '../js/engine/expansions.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
@@ -435,7 +435,7 @@ function botGame(mut) {
 }
 
 t('expansiones: todas apagadas por defecto', () => {
-  eq(defaultConfig().expansions, { seafarers: false, citiesKnights: false, scenario: 'newShores' });
+  eq(defaultConfig().expansions, { seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: 'newShores', tbScenario: 'fishermen' });
   ok(!seafarersOn(G.createGame(defaultConfig())), 'Navegantes apagado');
 });
 
@@ -444,7 +444,7 @@ t('expansiones: config antigua (sin bloque) = expansiones apagadas, partida idé
   const off = botGame(c => (c.expansions = { seafarers: false }));
   eq(off, legacy, 'misma partida');
   const s = G.createGame((() => { const c = defaultConfig(); delete c.expansions; return c; })());
-  eq(s.config.expansions, { seafarers: false, citiesKnights: false, scenario: 'newShores' }, 'se rellena el bloque');
+  eq(s.config.expansions, { seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: 'newShores', tbScenario: 'fishermen' }, 'se rellena el bloque');
 });
 
 t('Navegantes: el interruptor llega al estado', () => {
@@ -855,6 +855,31 @@ t('expansiones: solo una a la vez', () => {
   both.expansions = { seafarers: true, citiesKnights: true, scenario: 'newShores' };
   const s = G.createGame(both);
   ok(seafarersOn(s) && !citiesKnightsOn(s), 'una config con las dos se queda con Navegantes');
+});
+
+t('Mercaderes y Bárbaros: interruptor, escenario y una expansión a la vez', () => {
+  const c = defaultConfig();
+  const tb = EXPANSIONS.find(x => x.id === 'tradersBarbarians');
+  ok(tb && !tb.get(c), 'apagada por defecto');
+  EXPANSIONS.find(x => x.id === 'citiesKnights').set(c, true);
+  tb.set(c, true);
+  ok(c.expansions.tradersBarbarians && !c.expansions.citiesKnights && !c.expansions.seafarers, 'encenderla apaga las otras');
+  eq(c.rules.vpTarget, 10, 'pescadores: 10 puntos');
+  EXPANSIONS.find(x => x.id === 'seafarers').set(c, true);
+  ok(!c.expansions.tradersBarbarians, 'Navegantes la apaga');
+  tb.set(c, true);
+  tb.set(c, false);
+  eq(c.rules.vpTarget, 10, 'apagada vuelve a 10');
+  // a scenario that isn't playable yet falls back to the fishermen
+  const c2 = defaultConfig();
+  c2.expansions = { tradersBarbarians: true, tbScenario: 'caravans' };
+  const s = G.createGame(c2);
+  ok(tradersBarbariansOn(s) && !seafarersOn(s) && !citiesKnightsOn(s), 'solo Mercaderes y Bárbaros');
+  eq(tbScenarioOn(s), 'fishermen', 'escenario no disponible -> pescadores');
+  ok(s.log.some(l => JSON.stringify(l).includes('Mercaderes y Bárbaros')), 'aviso en el historial');
+  const all = defaultConfig();
+  all.expansions = { seafarers: false, citiesKnights: true, tradersBarbarians: true };
+  ok(citiesKnightsOn(G.createGame(all)) && !tradersBarbariansOn(G.createGame(all)), 'con C&K y T&B se queda C&K');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

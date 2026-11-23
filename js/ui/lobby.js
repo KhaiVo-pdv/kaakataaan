@@ -2,7 +2,8 @@ import { App } from '../app.js';
 import { h, s as S, clear, storage, toast } from './dom.js';
 import { BoardView } from './boardView.js';
 import { defaultConfig, MODES, PRESETS, PLAYER_COLORS, BOT_NAMES } from '../engine/config.js';
-import { EXPANSIONS, seafarersOn, citiesKnightsOn } from '../engine/expansions.js';
+import { EXPANSIONS, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn } from '../engine/expansions.js';
+import { TB_SCENARIOS } from '../engine/tradersBarbarians/scenarios.js';
 import { SCENARIOS } from '../engine/seafarers/scenarios.js';
 import { showSeafarersHelp } from './seafarersHelp.js';
 import { showCitiesKnightsHelp } from './citiesKnightsHelp.js';
@@ -354,7 +355,30 @@ export function lobbyScreen(root, opts = {}) {
         const on = ex.get(cfg);
         return h('div', { class: 'mode' + (on ? ' on' : ''), 'data-testid': 'expansion-' + ex.id, onclick: () => { ex.set(cfg, !on); refresh(); } },
           h('div', { class: 'mi' }, ex.icon), h('div', null, h('b', null, t(ex.name)), h('small', null, t(ex.desc))), h('div', { class: 'switch' }));
-      }))));
+      })),
+      tradersBarbariansOn(cfg) ? tbScenarioPicker() : null));
+
+    // Traders & Barbarians: pick one scenario (it plays on the map chosen above)
+    function tbScenarioPicker() {
+      const cur = tbScenarioOn(cfg);
+      const sc = TB_SCENARIOS[cur];
+      return h('div', { 'data-testid': 'tb-scenarios' },
+        h('h3', { style: { marginTop: '12px' } }, t('🐟 Escenario de Mercaderes y Bárbaros')),
+        h('div', { class: 'modes' }, Object.entries(TB_SCENARIOS).map(([k, x]) => h('div', {
+          class: 'mode' + (cur === k ? ' on' : ''), 'data-testid': 'tb-scenario-' + k,
+          style: x.ready ? null : { opacity: 0.5, cursor: 'not-allowed' },
+          title: x.ready ? t(x.desc) : t('Próximamente'),
+          onclick: () => {
+            if (!x.ready) return toast(`${x.icon} ${t(x.name)}: ${t('Próximamente')}`);
+            cfg.expansions.tbScenario = k; cfg.rules.vpTarget = x.vp; refresh();
+          },
+        }, h('div', { class: 'mi' }, x.icon),
+          h('div', null, h('b', null, t(x.name)), h('small', null, x.ready ? t(x.desc) : t('Próximamente'))))),
+        ),
+        h('p', { style: { color: 'var(--muted)', fontSize: '12px', margin: '6px 0 0' } },
+          t('Para {a}-{b} jugadores · {vp} puntos para ganar', { a: sc.players[0], b: sc.players[1], vp: sc.vp }),
+          cfg.players.length > sc.players[1] ? h('b', { style: { color: 'var(--warn, #ef7d57)' } }, ' · ' + t('⚠️ Demasiados jugadores para este escenario')) : null));
+    }
 
     // rules
     const R = cfg.rules;
