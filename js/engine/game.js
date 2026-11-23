@@ -5,6 +5,7 @@ import { rand, randInt, shuffle, pick } from './rng.js';
 import { generateBoard } from './board.js';
 import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn } from './expansions.js';
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
+import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -126,6 +127,7 @@ export function createGame(configIn) {
     s.devDeck = []; // progress cards replace the development cards
     s.devTotal = 0;
   }
+  if (tbScenarioOn(s) === 'fishermen') Fish.initFishermen(s, rng);
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -158,6 +160,11 @@ export function createGame(configIn) {
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
   if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
+  if (s.fishermen) {
+    if (board.lake >= 0) log(s, '🏞️ Un lago sustituye al desierto: da pescado con 2, 3, 11 y 12.');
+    else log(s, '🏞️ Sin desierto en este mapa: no hay lago.');
+    log(s, msg('🎣 {n} caladeros en la costa: {nums}.', { n: board.fishing.length, nums: board.fishing.map(f => f.num).sort((a, b) => a - b).join(', ') }));
+  }
   return s;
 }
 

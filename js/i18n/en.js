@@ -1176,4 +1176,7 @@ export default {
   "Un lago sustituye al desierto y seis caladeros rodean la isla. Pesca fichas de pescado y gástalas en ventajas. ¡Cuidado con la bota vieja!": "A lake replaces the desert and six fishing grounds ring the island. Catch fish tokens and spend them on perks. Beware the old boot!",
   "🐟 Escenario de Mercaderes y Bárbaros": "🐟 Traders & Barbarians scenario",
   "🐟 Expansión Mercaderes y Bárbaros activada: {n}.": "🐟 Traders & Barbarians expansion on: {n}.",
+  "🎣 {n} caladeros en la costa: {nums}.": "🎣 {n} fishing grounds on the coast: {nums}.",
+  "🏞️ Un lago sustituye al desierto: da pescado con 2, 3, 11 y 12.": "🏞️ A lake replaces the desert: it yields fish on 2, 3, 11 and 12.",
+  "🏞️ Sin desierto en este mapa: no hay lago.": "🏞️ No desert on this map: no lake.",
 };

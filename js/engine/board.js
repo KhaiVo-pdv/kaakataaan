@@ -1,6 +1,7 @@
 import { RES } from './constants.js';
 import { rand, randInt, shuffle } from './rng.js';
-import { seafarersOn } from './expansions.js';
+import { seafarersOn, tbScenarioOn } from './expansions.js';
+import { addFishermen } from './tradersBarbarians/fishermen.js';
 import { buildScenario } from './seafarers/scenarios.js';
 import { makeSea, addSeaGraph, findIslands } from './seafarers/board.js';
 
@@ -392,6 +393,8 @@ export function generateBoard(config, rng) {
       pirate: pirate ? pirate.id : -1,
     };
   }
+  // Traders & Barbarians, Fishermen: lake + fishing grounds, drawn after the normal board
+  if (tbScenarioOn(config) === 'fishermen') Object.assign(extra, addFishermen({ tiles, sea, vertices }, rng, { corner, pkey }));
 
   const all = [...tiles, ...sea];
   const bounds = {

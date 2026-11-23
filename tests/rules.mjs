@@ -4,6 +4,7 @@ import { defaultConfig } from '../js/engine/config.js';
 import { botAct } from '../js/engine/bot.js';
 import { seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, EXPANSIONS } from '../js/engine/expansions.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
+import * as Fish from '../js/engine/tradersBarbarians/fishermen.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -880,6 +881,30 @@ t('Mercaderes y Bárbaros: interruptor, escenario y una expansión a la vez', ()
   const all = defaultConfig();
   all.expansions = { seafarers: false, citiesKnights: true, tradersBarbarians: true };
   ok(citiesKnightsOn(G.createGame(all)) && !tradersBarbariansOn(G.createGame(all)), 'con C&K y T&B se queda C&K');
+});
+
+t('Pescadores: lago, 6 caladeros y bolsa de 30 fichas', () => {
+  for (const [shape, np, seed] of [['classic', 4, 3], ['classic', 3, 77], ['big', 4, 5], ['extended', 4, 9], ['mini', 3, 21], ['pangea', 4, 42]]) {
+    const c = defaultConfig();
+    c.seed = seed; c.map.shape = shape; c.players = c.players.slice(0, np);
+    c.expansions = { tradersBarbarians: true, tbScenario: 'fishermen' };
+    const s = G.createGame(c), b = s.board;
+    const lake = b.tiles[b.lake];
+    ok(lake && lake.lake && lake.res === 'desert' && !lake.num, shape + ': el desierto es el lago (sin número)');
+    eq(b.tiles.filter(t => t.lake).length, 1, shape + ': un solo lago');
+    eq(b.fishing.length, 6, shape + ': 6 caladeros');
+    eq(b.fishing.map(f => f.num).sort((x, y) => x - y), Fish.FISHING_NUMS, shape + ': números 4,5,6,8,9,10');
+    const vs = b.fishing.flatMap(f => f.verts);
+    ok(new Set(vs).size === vs.length, shape + ': ningún cruce en dos caladeros');
+    ok(b.fishing.every(f => f.verts.length >= 2 && f.verts.every(v => b.vertices[v].hexes.length < 3)), shape + ': caladeros en la costa');
+    if (shape === 'classic') ok(b.fishing.every(f => f.verts.length === 3), 'clásico: cada caladero toca 3 cruces');
+    eq(s.fishermen.bag.length, 30, shape + ': 30 fichas');
+    eq(s.fishermen.bag.filter(x => x === Fish.BOOT).length, 1, shape + ': una bota vieja');
+    eq(s.fishermen.bag.reduce((a, x) => a + x, 0), 11 + 20 + 24, shape + ': 11×1 + 10×2 + 8×3');
+    ok(s.players.every(p => Array.isArray(p.fish) && !p.fish.length) && s.fishermen.boot === -1, shape + ': nadie tiene pescado al empezar');
+  }
+  const base = G.createGame(defaultConfig());
+  ok(!('fishermen' in base) && !('fishing' in base.board) && !('lake' in base.board) && base.players.every(p => !('fish' in p)), 'el juego base no tiene datos de pescadores');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

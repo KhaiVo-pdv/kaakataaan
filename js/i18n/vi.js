@@ -1175,4 +1175,7 @@ export default {
   "Un lago sustituye al desierto y seis caladeros rodean la isla. Pesca fichas de pescado y gástalas en ventajas. ¡Cuidado con la bota vieja!": "Hồ nước thay cho sa mạc, sáu bãi cá bao quanh đảo. Bắt thẻ cá rồi tiêu để lấy lợi thế. Coi chừng chiếc ủng cũ!",
   "🐟 Escenario de Mercaderes y Bárbaros": "🐟 Kịch bản Traders & Barbarians",
   "🐟 Expansión Mercaderes y Bárbaros activada: {n}.": "🐟 Đã bật bản mở rộng Traders & Barbarians: {n}.",
+  "🎣 {n} caladeros en la costa: {nums}.": "🎣 {n} bãi cá ven biển: {nums}.",
+  "🏞️ Un lago sustituye al desierto: da pescado con 2, 3, 11 y 12.": "🏞️ Hồ nước thay cho sa mạc: cho cá khi tung ra 2, 3, 11 và 12.",
+  "🏞️ Sin desierto en este mapa: no hay lago.": "🏞️ Bản đồ này không có sa mạc nên không có hồ.",
 };
