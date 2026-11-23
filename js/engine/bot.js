@@ -5,7 +5,9 @@ import {
   canAfford, handSize, victoryPoints, tradeRatio, playableDev, pendingActors,
   legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities,
   legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets, playableProgress,
+  fishPerkReason, bootReceivers,
 } from './game.js';
+import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
@@ -390,6 +392,34 @@ function tryProgressPlay(s, pid) {
   return null;
 }
 
+// Fishermen: pass the old boot on, then spend fish on the most useful perk we can afford
+function tryFish(s, pid) {
+  if (!s.fishermen) return null;
+  const p = s.players[pid];
+  const takers = bootReceivers(s, pid);
+  if (takers.length) return { type: 'giveBoot', pid, to: best(takers, o => victoryPoints(s, o, false) + noise(s, o) * 0.1) };
+  const f = fishCount(p);
+  const can = perk => f >= FISH_PERKS[perk] && !fishPerkReason(s, pid, perk);
+  const robberOnMe = s.board.robber >= 0 && s.board.tiles[s.board.robber].verts.some(v => s.buildings[v] && s.buildings[v].owner === pid);
+  if (robberOnMe && can('robber')) return { type: 'spendFish', pid, perk: 'robber' };
+  if (can('dev')) return { type: 'spendFish', pid, perk: 'dev' };
+  if (can('road') && p.settlementsLeft > 0 && !legalSettlements(s, pid).length && bestRoad(s, pid) !== null) return { type: 'spendFish', pid, perk: 'road' };
+  if (can('resource')) {
+    // only when one card completes what we are saving for
+    const t = chooseTarget(s, pid);
+    const need = t && missing(p.res, t.cost);
+    if (need && need.n === 1) {
+      const r = Object.keys(need.m)[0];
+      if (s.bank[r] > 0) return { type: 'spendFish', pid, perk: 'resource', res: r };
+    }
+  }
+  if (f === 3 && can('steal')) {
+    const rivals = s.players.filter(o => o.id !== pid && !o.retired && handSize(o.res) > 0).map(o => o.id);
+    return { type: 'spendFish', pid, perk: 'steal', target: best(rivals, o => handSize(s.players[o].res) + victoryPoints(s, o, false) + noise(s, o) * 0.1) };
+  }
+  return null;
+}
+
 function mainAction(s, pid) {
   const p = s.players[pid];
   const L = lvl(s, pid);
@@ -406,6 +436,8 @@ function mainAction(s, pid) {
   if (dev) return dev;
   const prog = tryProgressPlay(s, pid); // Cities & Knights
   if (prog) return prog;
+  const fish = tryFish(s, pid); // Traders & Barbarians: Fishermen
+  if (fish) return fish;
 
   if (p.citiesLeft > 0 && canAfford(p.res, COSTS.city)) {
     const prod = production(s, pid);

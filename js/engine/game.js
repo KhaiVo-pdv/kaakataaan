@@ -514,7 +514,8 @@ function updateLargestArmy(s, pid) {
 function checkWin(s) {
   if (s.phase === 'setup' || s.phase === 'gameOver') return;
   const vp = victoryPoints(s, s.current);
-  if (vp >= s.config.rules.vpTarget) {
+  // Fishermen: the holder of the old boot needs one more point
+  if (vp >= s.config.rules.vpTarget + Fish.bootPenalty(s, s.current)) {
     s.winner = s.current;
     s.phase = 'gameOver';
     s.trade = null;
@@ -1016,6 +1017,7 @@ function progressDrawn(s, pid, id) {
 function afterRoll(s, sum) {
   if (sum !== 7) {
     const gains = produce(s, sum);
+    if (s.fishermen) fishProduction(s, sum);
     s.phase = 'main';
     // Cities & Knights Aqueduct: whoever got nothing picks a resource first
     if (s.pendingAqueduct && Improve.aqueductAfterRoll(s, gains)) s.phase = 'aqueduct';
@@ -1044,6 +1046,98 @@ const afterSeven = s => {
     return 'main';
   }
   return s.config.rules.noRobber || Barb.robberAsleep(s) ? 'main' : 'robber';
+};
+
+// ---- Traders & Barbarians: Fishermen ----
+function fishProduction(s, sum) {
+  for (const { pid, n } of Fish.fishYield(s, sum)) {
+    const got = Fish.drawFish(s, pid, n);
+    if (got.fish.length) {
+      log(s, msg('🎣 @{p} pesca {n} fichas de pescado.', { p: pid, n: got.fish.length }), pid);
+      s.fx.push({ kind: 'fish', pid, n: got.fish.length });
+    }
+    if (got.boot) {
+      log(s, msg('👢 @{p} saca la bota vieja: necesita 1 punto más para ganar.', { p: pid }), pid);
+      s.fx.push({ kind: 'boot', pid });
+    }
+  }
+}
+
+// Why `pid` can't buy a fish perk right now ('' = allowed). Checks the board, not the fish in hand.
+export function fishPerkReason(s, pid, perk) {
+  const p = s.players[pid];
+  switch (perk) {
+    case 'robber': return s.board.robber >= 0 && !s.config.rules.noRobber ? '' : tk('El ladrón no está en el tablero.');
+    case 'steal': return s.players.some(o => o.id !== pid && !o.retired && handSize(o.res) > 0) ? '' : tk('Nadie tiene cartas que robar.');
+    case 'resource': return RES.some(r => s.bank[r] > 0) ? '' : tk('El banco está vacío.');
+    case 'road': return p.roadsLeft > 0 && legalRoads(s, pid).length ? '' : tk('No puedes construir caminos.');
+    case 'dev': return s.devDeck.length ? '' : tk('No quedan cartas de desarrollo.');
+  }
+  return tk('Ventaja desconocida.');
+}
+
+H.spendFish = (s, a) => {
+  if (!s.fishermen) fail('No hay pescado en esta partida.');
+  assertMain(s, a);
+  const cost = Fish.FISH_PERKS[a.perk];
+  if (!cost) fail('Ventaja desconocida.');
+  const why = fishPerkReason(s, a.pid, a.perk);
+  if (why) fail(why);
+  const p = s.players[a.pid];
+  if (a.perk === 'steal') {
+    const v = s.players[a.target];
+    if (!v || v.id === a.pid || v.retired || handSize(v.res) <= 0) fail('Elige a un rival con cartas.');
+  }
+  if (a.perk === 'resource' && (!RES.includes(a.res) || s.bank[a.res] <= 0)) fail('Elige un recurso que tenga el banco.');
+  if (!Fish.pickTokens(p.fish, cost)) fail('No tienes suficiente pescado.');
+  const paid = Fish.payFish(s, a.pid, cost);
+  s.fx.push({ kind: 'fishSpent', pid: a.pid, perk: a.perk, n: paid });
+  switch (a.perk) {
+    case 'robber':
+      s.board.robber = -1; // it comes back with the next 7 or knight
+      log(s, msg('🎣 @{p} paga {n} peces y saca al ladrón del tablero.', { p: a.pid, n: paid }), a.pid);
+      break;
+    case 'steal': {
+      const r = stealRandom(s, a.target, a.pid);
+      s.fx.push({ kind: 'steal', from: a.target, to: a.pid, res: r });
+      log(s, msg('🎣 @{p} paga {n} peces y roba una carta a @{v}.', { p: a.pid, n: paid, v: a.target }), a.pid);
+      break;
+    }
+    case 'resource':
+      giveFromBank(s, a.pid, a.res, 1);
+      s.fx.push({ kind: 'fromBank', pid: a.pid, res: [a.res] });
+      log(s, msg('🎣 @{p} paga {n} peces y toma {r} del banco.', { p: a.pid, n: paid, r: resName(a.res) }), a.pid);
+      break;
+    case 'road':
+      s.freeRoads = 1;
+      s.phase = 'roadBuilding';
+      log(s, msg('🎣 @{p} paga {n} peces por un camino gratis.', { p: a.pid, n: paid }), a.pid);
+      break;
+    case 'dev': {
+      const type = s.devDeck.pop();
+      p.dev.push({ type, turn: s.turn });
+      s.fx.push({ kind: 'devBought', pid: a.pid, type });
+      log(s, msg('🎣 @{p} paga {n} peces por una carta de desarrollo.', { p: a.pid, n: paid }), a.pid);
+      break;
+    }
+  }
+};
+
+// The old boot's holder may pass it to a player with as many or more (visible) points
+export function bootReceivers(s, pid) {
+  if (!s.fishermen || s.fishermen.boot !== pid) return [];
+  const mine = victoryPoints(s, pid, false);
+  return s.players.filter(o => o.id !== pid && !o.retired && victoryPoints(s, o.id, false) >= mine).map(o => o.id);
+}
+
+H.giveBoot = (s, a) => {
+  if (!s.fishermen) fail('No hay pescado en esta partida.');
+  assertMain(s, a);
+  if (s.fishermen.boot !== a.pid) fail('No tienes la bota vieja.');
+  if (!bootReceivers(s, a.pid).includes(a.to)) fail('Solo puedes dársela a alguien con tantos puntos como tú o más.');
+  s.fishermen.boot = a.to;
+  s.fx.push({ kind: 'boot', pid: a.to, from: a.pid });
+  log(s, msg('👢 @{p} le pasa la bota vieja a @{v}.', { p: a.pid, v: a.to }), a.pid);
 };
 
 // ---- Cities & Knights barbarians ----

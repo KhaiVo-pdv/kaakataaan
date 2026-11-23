@@ -6,7 +6,7 @@
 //     res 'desert' so the robber and the renderers keep working; it yields fish on LAKE_NUMS.
 //   - six fishing grounds (`board.fishing`) on coastal sea hexes, numbers 4,5,6,8,9,10. Each one
 //     touches 3 coastal intersections (`verts`), like the boxed sea-frame pieces.
-// State (`s.fishermen`): the face-down token bag and who holds the old boot.
+// State (`s.fishermen`): the face-down token bag, the spent pile and who holds the old boot.
 // Each player gets `p.fish`: the values of the fish tokens in hand (1, 2 or 3).
 
 import { rand, shuffle } from '../rng.js';
@@ -80,9 +80,98 @@ export function buildFishBag(rng) {
 
 // Adds the Fishermen fields to a new game state. Base games never get these keys.
 export function initFishermen(s, rng) {
-  s.fishermen = { bag: buildFishBag(rng), boot: -1 };
+  s.fishermen = { bag: buildFishBag(rng), spent: [], boot: -1 };
   for (const p of s.players) p.fish = [];
 }
 
 // Total fish a player holds.
 export const fishCount = p => (p.fish || []).reduce((a, v) => a + v, 0);
+
+// ---------------- rules ----------------
+
+// What fish buy (cost in fish). Change is never given back.
+export const FISH_PERKS = { robber: 2, steal: 3, resource: 4, road: 5, dev: 7 };
+
+// The tokens (indices into p.fish) to pay `cost` with: least overpaid fish first, then fewest tokens.
+// null when the player can't pay.
+export function pickTokens(fish, cost) {
+  // best[sum] = indices reaching exactly that sum with fewest tokens (sums capped at cost + 2)
+  const cap = cost + 2;
+  let best = new Map([[0, []]]);
+  fish.forEach((v, i) => {
+    const next = new Map(best);
+    for (const [sum, idx] of best) {
+      const t = Math.min(cap, sum + v);
+      const cand = [...idx, i];
+      const cur = next.get(t);
+      if (!cur || cand.length < cur.length) next.set(t, cand);
+    }
+    best = next;
+  });
+  for (let sum = cost; sum <= cap; sum++) if (best.has(sum)) return best.get(sum);
+  return null;
+}
+
+// Draws one token from the bag; the spent pile is reshuffled into the bag when it runs out.
+function drawToken(s) {
+  const F = s.fishermen;
+  if (!F.bag.length && F.spent.length) {
+    F.bag = shuffle(s.rng, F.spent);
+    F.spent = [];
+  }
+  return F.bag.length ? F.bag.pop() : null;
+}
+
+// Who fishes on this roll: [{ pid, n }] in turn order from the current player.
+// Fishing grounds whose number came up, and the lake on 2/3/11/12 (unless the robber sits on it).
+// Settlements draw 1 token per place, cities 2.
+export function fishYield(s, sum) {
+  const bd = s.board;
+  const per = s.players.map(() => 0);
+  const places = bd.fishing.filter(f => f.num === sum).map(f => f.verts);
+  if (bd.lake >= 0 && LAKE_NUMS.includes(sum) && bd.robber !== bd.lake) places.push(bd.tiles[bd.lake].verts);
+  for (const verts of places)
+    for (const v of verts) {
+      const b = s.buildings[v];
+      if (b && !s.players[b.owner].retired) per[b.owner] += b.type === 'city' ? 2 : 1;
+    }
+  const n = s.players.length;
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const pid = (s.current + k) % n;
+    if (per[pid]) out.push({ pid, n: per[pid] });
+  }
+  return out;
+}
+
+// Gives `n` tokens to `pid`. Returns { fish: [values], boot: true if the old boot was drawn }.
+export function drawFish(s, pid, n) {
+  const got = { fish: [], boot: false };
+  for (let i = 0; i < n; i++) {
+    const tok = drawToken(s);
+    if (tok === null) break;
+    if (tok === BOOT) {
+      s.fishermen.boot = pid;
+      got.boot = true;
+    } else {
+      s.players[pid].fish.push(tok);
+      got.fish.push(tok);
+    }
+  }
+  return got;
+}
+
+// Removes the paid tokens from the hand into the spent pile; returns how many fish were paid.
+export function payFish(s, pid, cost) {
+  const p = s.players[pid];
+  const idx = pickTokens(p.fish, cost);
+  if (!idx) return 0;
+  const set = new Set(idx);
+  const paid = p.fish.filter((_, i) => set.has(i));
+  p.fish = p.fish.filter((_, i) => !set.has(i));
+  s.fishermen.spent.push(...paid);
+  return paid.reduce((a, v) => a + v, 0);
+}
+
+// The old boot: its holder needs one more victory point to win.
+export const bootPenalty = (s, pid) => (s.fishermen && s.fishermen.boot === pid ? 1 : 0);

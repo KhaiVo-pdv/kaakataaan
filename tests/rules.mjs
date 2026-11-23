@@ -907,6 +907,131 @@ t('Pescadores: lago, 6 caladeros y bolsa de 30 fichas', () => {
   ok(!('fishermen' in base) && !('fishing' in base.board) && !('lake' in base.board) && base.players.every(p => !('fish' in p)), 'el juego base no tiene datos de pescadores');
 });
 
+// ---------- Traders & Barbarians: Fishermen rules ----------
+const fishGame = () => fresh(c => { c.expansions = { tradersBarbarians: true, tbScenario: 'fishermen' }; });
+// rig the bag: the next tokens drawn are `vals` (last element is drawn first)
+const rigBag = (s, vals) => { s.fishermen.bag = s.fishermen.bag.filter(x => x !== Fish.BOOT || !vals.includes(Fish.BOOT)).slice(0, 30 - vals.length).concat(vals); };
+
+t('Pescadores: caladero da 1 ficha al poblado y 2 a la ciudad; el lago con 2/3/11/12', () => {
+  const s = fishGame(), b = s.board;
+  const f = b.fishing.find(x => x.num === 6);
+  s.buildings[f.verts[0]] = { owner: 1, type: 'settlement' };
+  s.buildings[f.verts[2]] = { owner: 2, type: 'city' };
+  rigBag(s, [1, 1, 1]);
+  eq(Fish.fishYield(s, 6).map(x => [x.pid, x.n]), [[1, 1], [2, 2]], 'quién pesca con un 6');
+  eq(Fish.fishYield(s, 8).filter(x => x.pid === 1 || x.pid === 2).length, 0, 'otro número: nada');
+  const lake = b.tiles[b.lake];
+  s.buildings[lake.verts[0]] = { owner: 3, type: 'settlement' };
+  b.robber = -1;
+  eq(Fish.fishYield(s, 11).find(x => x.pid === 3)?.n, 1, 'el lago da pescado con 11');
+  b.robber = b.lake;
+  ok(!Fish.fishYield(s, 11).some(x => x.pid === 3), 'el ladrón en el lago lo bloquea');
+  const got = Fish.drawFish(s, 1, 2);
+  eq(got.fish.length, 2, 'roba 2 fichas de la bolsa');
+  eq(s.players[1].fish.length, 2, 'y van a su mano');
+});
+
+t('Pescadores: la bota vieja se queda aparte y exige 1 punto más', () => {
+  const s = fishGame();
+  rigBag(s, [Fish.BOOT]);
+  const got = Fish.drawFish(s, 0, 1);
+  ok(got.boot && s.fishermen.boot === 0 && !s.players[0].fish.length, 'la bota no es pescado');
+  // exactly 10 points: 5 cities on separate tiles, then build a road to trigger the win check
+  const tenVP = boot => {
+    const g = fishGame();
+    let n = 0;
+    for (const t of g.board.tiles) {
+      if (n === 5) break;
+      const v = t.verts.find(x => g.board.vertices[x].adj.every(u => !g.buildings[u]) && !g.buildings[x]);
+      if (v === undefined) continue;
+      g.buildings[v] = { owner: 0, type: 'city' };
+      n++;
+    }
+    eq(G.victoryPoints(g, 0), 10, '10 puntos');
+    g.fishermen.boot = boot;
+    give(g, 0, { wood: 1, brick: 1 });
+    ok(act(g, { type: 'build', pid: 0, what: 'road', at: G.legalRoads(g, 0)[0] }).ok, 'construye');
+    return g.phase === 'gameOver';
+  };
+  ok(tenVP(-1), 'sin la bota 10 puntos ganan');
+  ok(!tenVP(0), 'con la bota 10 puntos no bastan');
+  ok(tenVP(1), 'la bota de otro no te afecta');
+});
+
+t('Pescadores: gastar pescado (sin cambio) en cada ventaja', () => {
+  const s = fishGame();
+  const p = s.players[0];
+  // robber: 2 fish
+  p.fish = [3];
+  ok(act(s, { type: 'spendFish', pid: 0, perk: 'robber' }).ok, 'quitar el ladrón');
+  eq(s.board.robber, -1, 'ladrón fuera del tablero');
+  eq(p.fish, [], 'pagó la ficha de 3 (sin cambio)');
+  eq(s.fishermen.spent, [3], 'la ficha va al montón de gastadas');
+  ok(!act(s, { type: 'spendFish', pid: 0, perk: 'robber' }).ok, 'no se puede quitar dos veces');
+  // steal: 3 fish
+  p.fish = [1, 2];
+  give(s, 1, { ore: 1 });
+  ok(act(s, { type: 'spendFish', pid: 0, perk: 'steal', target: 1 }).ok, 'robar');
+  eq(p.res.ore, 1, 'robó el mineral');
+  p.fish = [2, 2];
+  ok(!act(s, { type: 'spendFish', pid: 0, perk: 'steal', target: 1 }).ok, 'no se roba a quien no tiene cartas');
+  // resource: 4 fish, pays the cheapest exact combo
+  p.fish = [3, 1, 2, 2];
+  ok(act(s, { type: 'spendFish', pid: 0, perk: 'resource', res: 'wheat' }).ok, 'recurso del banco');
+  eq(p.res.wheat, 1, 'recibió trigo');
+  eq(p.fish.reduce((a, v) => a + v, 0), 4, 'pagó exactamente 4 de 8');
+  ok(!act(s, { type: 'spendFish', pid: 0, perk: 'resource', res: 'gold' }).ok, 'recurso inválido');
+  // dev card: 7 fish
+  p.fish = [3, 3, 1];
+  const deck = s.devDeck.length;
+  ok(act(s, { type: 'spendFish', pid: 0, perk: 'dev' }).ok, 'carta de desarrollo');
+  eq(s.devDeck.length, deck - 1, 'sale del mazo');
+  eq(p.dev.length, 1, 'a su mano');
+  // not enough fish
+  p.fish = [3, 3];
+  ok(!act(s, { type: 'spendFish', pid: 0, perk: 'dev' }).ok, '6 peces no bastan para 7');
+  ok(!act(s, { type: 'spendFish', pid: 1, perk: 'robber' }).ok, 'solo en tu turno');
+});
+
+t('Pescadores: camino gratis por 5 peces', () => {
+  const s = fishGame();
+  const v = s.board.tiles[0].verts[0];
+  s.buildings[v] = { owner: 0, type: 'settlement' };
+  s.players[0].fish = [3, 2];
+  ok(act(s, { type: 'spendFish', pid: 0, perk: 'road' }).ok, 'pagar 5');
+  eq(s.phase, 'roadBuilding', 'construye un camino gratis');
+  const e = G.legalRoads(s, 0)[0];
+  const left = s.players[0].roadsLeft;
+  ok(act(s, { type: 'build', pid: 0, what: 'road', at: e }).ok, 'coloca el camino');
+  eq(s.players[0].roadsLeft, left - 1, 'un camino menos');
+  eq(s.phase, 'main', 'solo uno');
+});
+
+t('Pescadores: el pescado no cuenta para el 7 ni se puede robar', () => {
+  const s = fishGame();
+  s.players[1].fish = [3, 3, 3, 3, 3, 3, 3, 3];
+  give(s, 1, { wood: 2 });
+  eq(G.handSize(s.players[1].res), 2, 'solo cartas en la mano');
+});
+
+t('Pescadores: pasar la bota a quien tenga tantos puntos o más', () => {
+  const s = fishGame();
+  s.fishermen.boot = 0;
+  s.buildings[s.board.tiles[0].verts[0]] = { owner: 0, type: 'settlement' };
+  s.buildings[s.board.tiles[5].verts[0]] = { owner: 1, type: 'city' };
+  eq(G.bootReceivers(s, 0), [1], 'solo el jugador 1 tiene puntos >= 1');
+  ok(!act(s, { type: 'giveBoot', pid: 0, to: 2 }).ok, 'no a alguien con menos puntos');
+  ok(act(s, { type: 'giveBoot', pid: 0, to: 1 }).ok, 'sí al de la ciudad');
+  eq(s.fishermen.boot, 1, 'la bota cambia de manos');
+  ok(!act(s, { type: 'giveBoot', pid: 0, to: 1 }).ok, 'ya no la tiene');
+});
+
+t('Pescadores: no hay acciones de pescado en el juego base', () => {
+  const s = fresh();
+  ok(!act(s, { type: 'spendFish', pid: 0, perk: 'robber' }).ok, 'spendFish falla');
+  ok(!act(s, { type: 'giveBoot', pid: 0, to: 1 }).ok, 'giveBoot falla');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {

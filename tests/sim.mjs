@@ -16,6 +16,17 @@ const SF_GAMES = Math.ceil(GAMES / 5);
 const scenarios = Object.keys(SCENARIOS);
 // and one Cities & Knights game per 5 base games, on the normal maps
 const CK_GAMES = Math.ceil(GAMES / 5);
+// and one Traders & Barbarians (Fishermen) game per 5 base games, on the normal maps
+const TB_GAMES = Math.ceil(GAMES / 5);
+function makeFishermenConfig(i) {
+  const c = makeConfig(i);
+  c.players = c.players.slice(0, 3 + (i % 2));
+  if (!['classic', 'big', 'extended', 'pangea', 'ring'].includes(c.map.shape)) c.map.shape = 'classic';
+  c.expansions = { tradersBarbarians: true, tbScenario: 'fishermen' };
+  c.rules.vpTarget = 10;
+  c.map.shape = 'tb:' + c.map.shape; // a label for the summary; stripped below
+  return c;
+}
 function makeCitiesKnightsConfig(i) {
   const c = makeConfig(i);
   c.expansions = { seafarers: false, citiesKnights: true, scenario: 'newShores' };
@@ -99,6 +110,14 @@ function check(s, where) {
       if (tot !== COMMODITY_BANK) errs.push(`conservación ${c}: ${tot}`);
       if (s.bank[c] < 0 || s.players.some(p => p.res[c] < 0)) errs.push(`${c} negativo`);
     }
+  // Fishermen: the 30 tokens (29 fish + the boot) are never created or lost
+  if (s.fishermen) {
+    const F = s.fishermen;
+    const toks = F.bag.length + F.spent.length + s.players.reduce((a, p) => a + p.fish.length, 0) + (F.boot >= 0 ? 1 : 0);
+    if (toks !== 30) errs.push(`fichas de pescado: ${toks} != 30`);
+    if (F.bag.includes(0) === (F.boot >= 0)) errs.push('la bota vieja está a la vez en la bolsa y en una mano (o en ninguna)');
+    if (s.players.some(p => p.fish.some(v => v < 1 || v > 3))) errs.push('ficha de pescado inválida en una mano');
+  }
   // Cities & Knights improvements: levels 0-5, metropolises and walls on their owners' cities
   if (s.metropolis) {
     for (const p of s.players) for (const tr in p.improve) if (p.improve[tr] < 0 || p.improve[tr] > 5) errs.push(`nivel ${tr} ${p.id}`);
@@ -154,16 +173,16 @@ function check(s, where) {
   // dev cards conservation
   const devHeld = s.players.reduce((a, p) => a + p.dev.length, 0);
   if (devHeld + s.devDeck.length > s.devTotal) errs.push('cartas de desarrollo duplicadas');
-  if (s.phase !== 'gameOver' && s.phase !== 'setup' && victoryPoints(s, s.current) >= R.vpTarget) errs.push('ganador no detectado');
+  if (s.phase !== 'gameOver' && s.phase !== 'setup' && victoryPoints(s, s.current) >= R.vpTarget + (s.fishermen && s.fishermen.boot === s.current ? 1 : 0)) errs.push('ganador no detectado');
   if (s.phase === 'discard' && !Object.keys(s.pendingDiscards).length) errs.push('fase descarte vacía');
   if (errs.length) throw new Error(`[${where}] ` + errs.join('; '));
 }
 
 const summary = { games: 0, finished: 0, turns: 0, byShape: {}, winnerVP: [], errors: 0 };
-for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
-  const cfg = i < GAMES ? makeConfig(i) : i < GAMES + SF_GAMES ? makeSeafarersConfig(i) : makeCitiesKnightsConfig(i);
+for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES; i++) {
+  const cfg = i < GAMES ? makeConfig(i) : i < GAMES + SF_GAMES ? makeSeafarersConfig(i) : i < GAMES + SF_GAMES + CK_GAMES ? makeCitiesKnightsConfig(i) : makeFishermenConfig(i);
   const label = cfg.map.shape;
-  if (label.startsWith('ck:')) cfg.map.shape = label.slice(3);
+  if (label.startsWith('ck:') || label.startsWith('tb:')) cfg.map.shape = label.slice(3);
   let s;
   try {
     s = createGame(cfg);
@@ -223,7 +242,12 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
       summary.progress = (summary.progress || 0) + 54 - Object.values(s.progress).reduce((n, d) => n + d.length, 0);
     }
     if (s.config.expansions.citiesKnights) summary.commodities = (summary.commodities || 0) + s.players.reduce((a, p) => a + COMMODITIES.reduce((b, c) => b + p.res[c], 0), 0) + (s.ckProduced || 0);
-    const sh = (summary.byShape[label.startsWith('ck:') ? 'ck' : cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
+    if (s.fishermen) {
+      summary.fishSpent = (summary.fishSpent || 0) + s.log.filter(l => JSON.stringify(l).includes('paga')).length;
+      summary.boots = (summary.boots || 0) + (s.fishermen.boot >= 0 ? 1 : 0);
+      summary.bootWins = (summary.bootWins || 0) + (s.winner >= 0 && s.fishermen.boot === s.winner ? 1 : 0);
+    }
+    const sh = (summary.byShape[label.startsWith('ck:') ? 'ck' : label.startsWith('tb:') ? 'tb' : cfg.map.shape] ||= { n: 0, done: 0, turns: 0 });
     sh.n++;
     sh.turns += s.turn;
     if (s.phase === 'gameOver') {
@@ -242,6 +266,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES; i++) {
 }
 if (summary.attacks != null) console.log(`🏴‍☠️ ataques bárbaros: ${summary.attacks} · puntos de Defensor de Catan: ${summary.defenders} · cartas de progreso robadas: ${summary.progress} · jugadas: ${summary.played}`);
 if (summary.knights != null) console.log(`⚔️ caballeros en el tablero al final de las partidas de Ciudades y Caballeros: ${summary.knights}`);
+if (summary.fishSpent != null) console.log(`🎣 pescadores: ${summary.fishSpent} compras con pescado · bota vieja repartida en ${summary.boots} partidas · ganadas con la bota: ${summary.bootWins}`);
 if (summary.ships != null) console.log(`\n⛵ barcos en el mar al final de las partidas de Navegantes: ${summary.ships} · 🏴‍☠️ movimientos del pirata: ${summary.pirate || 0} · 🏝️ puntos por islas nuevas: ${summary.islandVP || 0} · 🌫️ niebla descubierta: ${summary.fogSeen || 0}/${summary.fogAll || 0}`);
 console.log(`\nPartidas: ${summary.games}, terminadas: ${summary.finished}, errores: ${summary.errors}, turnos medios: ${(summary.turns / Math.max(1, summary.games)).toFixed(1)}`);
 for (const [k, v] of Object.entries(summary.byShape)) console.log(`  ${k.padEnd(9)} ${v.done}/${v.n} terminadas, ${(v.turns / v.n).toFixed(0)} turnos`);
