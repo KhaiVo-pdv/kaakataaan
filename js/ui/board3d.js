@@ -24,6 +24,7 @@ import { pxIcon } from './pixel.js';
 import { flagCanvas } from './flag.js';
 import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
+import { makeStyledBuilding } from './pieceStyles3d.js';
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
@@ -1961,7 +1962,7 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p)),
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
       inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b)], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
@@ -2073,15 +2074,19 @@ export class Board3D {
       const V = bd.vertices[vid];
       const lv = ghost ? 0 : this.goldLevel(st.players[owner]);
       const trims = [...(lv >= 1 ? ['Timber'] : []), ...(lv >= 3 ? ['Glass', 'StoneDark'] : [])];
-      const o = gild(tinted(type === 'city' ? kit.city : kit.house, colors(st.players[owner].color)), trims, lv >= 5);
-      if (lv >= 4) o.add(type === 'city' ? goldKnob(KNOB_CITY[0], KNOB_CITY[1], KNOB_CITY[2], lv >= 5) : goldKnob(KNOB_HOUSE[0], KNOB_HOUSE[1], KNOB_HOUSE[2], lv >= 5));
+      const pl = st.players[owner];
+      // kingdom piece style (pieceStyles.js): code-built houses, or the Blender kit for 'classic'
+      const styled = makeStyledBuilding(pl.style, type, pl.color);
+      const o = gild(styled ? styled.obj : tinted(type === 'city' ? kit.city : kit.house, colors(pl.color)), trims, lv >= 5);
+      const knob = styled ? styled.knob : type === 'city' ? KNOB_CITY : KNOB_HOUSE;
+      if (lv >= 4) o.add(goldKnob(knob[0], knob[1], knob[2], lv >= 5));
       o.position.set(V.x, vy(vid) - 0.01, V.y);
       o.rotation.y = ((vid * 2.39996) % 6.28) * 0.4;
-      const pl = st.players[owner];
       if (pl.flag) {
-        // the painted kingdom flag replaces the model's plain pennant
+        // the painted kingdom flag replaces the model's plain pennant (styled houses have none)
         o.traverse(m => m.isMesh && m.material && m.material.name === 'Banner' && (m.visible = false));
-        o.add(type === 'city' ? banner(pl.flag, -0.06, 0.03, 0.78, 1.7) : banner(pl.flag, 0.1, 0.07, 0.36));
+        if (styled) o.add(banner(pl.flag, ...styled.flag));
+        else o.add(type === 'city' ? banner(pl.flag, -0.06, 0.03, 0.78, 1.7) : banner(pl.flag, 0.1, 0.07, 0.36));
       }
       if (ghost) ghostify(o);
       o.scale.setScalar(type === 'city' ? 1.25 : 1.45);

@@ -6,6 +6,7 @@ import { botAct } from './engine/bot.js';
 import { toast, storage } from './ui/dom.js';
 import { sfx } from './ui/sfx.js';
 import { tx } from './i18n.js';
+import { giveBotsStyles } from './ui/pieceStyles.js';
 
 export const SAVE_KEY = 'katanittes.save.v1';
 
@@ -50,6 +51,7 @@ export const App = {
   },
 
   startGame(config) {
+    giveBotsStyles(config.players);
     this.config = config;
     this.state = createGame(config);
     this.viewer = -1;

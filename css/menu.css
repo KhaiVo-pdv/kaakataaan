@@ -129,3 +129,5 @@
 .on-table .card :not(.on) > .switch:not(.on) { background: #c9b28c; }
 .on-table .card .room-state.on { background: #d8efd9; color: #237a46; }
 .on-table .card .room-state.off { background: #f6d6dc; color: #b13e53; }
+/* the kingdom editor opened from the wooden-table screens: paper style buttons */
+.style-opt:not(.on) { background: #f1e2c3; color: #2a1d14; }

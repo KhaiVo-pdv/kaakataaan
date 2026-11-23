@@ -12,6 +12,7 @@ import { DEV_DECKS, TILE_INFO } from '../engine/constants.js';
 import { createGame } from '../engine/game.js';
 import { newSeed } from '../engine/rng.js';
 import { openFlagEditor, flagImg, patternFlag, validFlag, myKingdom, saveMyKingdom } from './flag.js';
+import { validStyle } from './pieceStyles.js';
 import { t } from '../i18n.js';
 import { roomShareUrl, ONLINE_MAX } from '../net.js';
 import { tableBackdrop } from './menuTable.js';
@@ -87,7 +88,7 @@ export function lobbyScreen(root, opts = {}) {
   } else cfg.players.forEach(p => { if (p.kind === 'remote') p.kind = 'human'; });
   // every kingdom has a banner; seat 0 uses the one this device remembers
   const mine = myKingdom();
-  if (mine && cfg.players[0] && cfg.players[0].kind === 'human') Object.assign(cfg.players[0], { name: mine.name || cfg.players[0].name, color: mine.color || cfg.players[0].color, flag: mine.flag });
+  if (mine && cfg.players[0] && cfg.players[0].kind === 'human') Object.assign(cfg.players[0], { name: mine.name || cfg.players[0].name, color: mine.color || cfg.players[0].color, flag: mine.flag, style: validStyle(mine.style) });
   cfg.players.forEach((p, i) => { if (!validFlag(p.flag)) p.flag = patternFlag(p.color, i); });
 
   const left = h('div');
@@ -226,18 +227,19 @@ export function lobbyScreen(root, opts = {}) {
           : h('button', {
             class: 'btn sm flag-btn', title: t('Bandera y color del castillo'),
             onclick: () => openFlagEditor({
-              flag: p.flag, color: p.color, name: p.name,
-              onSave: ({ flag, color }) => {
+              flag: p.flag, color: p.color, style: p.style, name: p.name,
+              onSave: ({ flag, color, style }) => {
                 p.flag = flag;
                 p.color = color;
+                p.style = style;
                 const twin = cfg.players.find(o => o !== p && o.color.toLowerCase() === color.toLowerCase());
                 if (twin) toast(t('⚠️ {name} ya usa ese color de castillo: cambia uno para distinguirlos', { name: twin.name }), 'error', 4000);
-                if (p.kind === 'human' && i === 0) saveMyKingdom({ name: p.name, flag, color });
+                if (p.kind === 'human' && i === 0) saveMyKingdom({ ...myKingdom(), name: p.name, flag, color, style });
                 refresh();
               },
             }),
           }, flagImg(p.flag, 26)),
-        p.kind === 'remote' ? h('div', { class: 'seat-name' + (guestFor(i) ? ' taken' : '') }, guestFor(i) ? guestFor(i).name : t('Asiento libre para un amigo')) : h('input', { type: 'text', value: p.name, maxlength: 16, onchange: e => { p.name = e.target.value.trim() || t('Jugador {n}', { n: i + 1 }); if (p.kind === 'human' && i === 0) saveMyKingdom({ name: p.name, flag: p.flag, color: p.color }); save(); } }),
+        p.kind === 'remote' ? h('div', { class: 'seat-name' + (guestFor(i) ? ' taken' : '') }, guestFor(i) ? guestFor(i).name : t('Asiento libre para un amigo')) : h('input', { type: 'text', value: p.name, maxlength: 16, onchange: e => { p.name = e.target.value.trim() || t('Jugador {n}', { n: i + 1 }); if (p.kind === 'human' && i === 0) saveMyKingdom({ ...myKingdom(), name: p.name, flag: p.flag, color: p.color }); save(); } }),
         hostSeat ? h('div', { class: 'pill' }, t('👑 Tú (anfitrión)')) : h('select', {
           onchange: e => {
             const [k, l] = e.target.value.split(':');

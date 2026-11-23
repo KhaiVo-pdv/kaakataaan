@@ -1154,4 +1154,10 @@ export default {
   "Jugar online": "Chơi online",
   "Modo": "Chế độ",
   "necesitas ciudad": "cần thành phố",
+  "Estilo de tus casas": "Kiểu nhà của bạn",
+  "Clásico": "Cổ điển",
+  "Đình (aldea vietnamita)": "Đình làng Việt",
+  "Castillo de piedra": "Lâu đài đá",
+  "Pagoda oriental": "Phương Đông",
+  "Vikingo": "Viking",
 };

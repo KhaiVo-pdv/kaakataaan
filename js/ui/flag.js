@@ -4,6 +4,7 @@
 // old 12x12 pixel format (144 hex digits) is still understood.
 import { h, clear, storage } from './dom.js';
 import { t, tk } from '../i18n.js';
+import { PIECE_STYLES, validStyle, styleIcon } from './pieceStyles.js';
 
 export const FLAG_PAL = ['#1a1c2c', '#5d275d', '#b13e53', '#ef7d57', '#ffcd75', '#a7f070', '#38b764', '#257179',
   '#29366f', '#3b5dc9', '#41a6f6', '#73eff7', '#f4f4f4', '#94b0c2', '#566c86', '#333c57'];
@@ -116,8 +117,21 @@ export function saveMyKingdom(k) {
 }
 
 // ---------------- the paint editor ----------------
-export function openFlagEditor({ flag, color, name, title = tk('Tu reino'), onSave }) {
+export function openFlagEditor({ flag, color, style, name, title = tk('Tu reino'), onSave }) {
   let col = color || '#e53935';
+  let sty = validStyle(style); // kingdom piece style: how this kingdom's houses look on the 3D board
+  // style picker: one button per piece style, drawn in the castle colour
+  const styleBox = h('div', { class: 'chips style-pick' });
+  const STYLE_NAMES = { classic: t('Clásico'), dinh: t('Đình (aldea vietnamita)'), castle: t('Castillo de piedra'), eastern: t('Pagoda oriental'), viking: t('Vikingo') };
+  function drawStyles() {
+    clear(styleBox).append(...PIECE_STYLES.map(k => {
+      const b = h('button', { class: 'style-opt' + (k === sty ? ' on' : ''), title: STYLE_NAMES[k], 'aria-label': STYLE_NAMES[k], 'aria-pressed': String(k === sty), onclick: () => { sty = k; drawStyles(); } });
+      b.innerHTML = styleIcon(k, col);
+      b.append(h('span', null, STYLE_NAMES[k]));
+      return b;
+    }));
+  }
+
   let ink = '#000000';
   let size = SIZES[2];
   let tool = 'pen';
@@ -264,6 +278,7 @@ export function openFlagEditor({ flag, color, name, title = tk('Tu reino'), onSa
   };
 
   function drawPreview() {
+    drawStyles();
     const url = canvas.toDataURL();
     preview.innerHTML = `<svg viewBox="0 0 130 118" width="168" height="152">
       <rect x="18" y="62" width="84" height="42" fill="#b7ae9c" stroke="#1a1c2c" stroke-width="3"/>
@@ -322,9 +337,10 @@ export function openFlagEditor({ flag, color, name, title = tk('Tu reino'), onSa
         h('div', null, h('div', { class: 'section-label' }, t('Color de tu castillo')),
           h('div', { class: 'chips' }, presets.map(p => h('button', { class: 'sw big', style: { background: p }, onclick: () => { col = p; castleIn.value = p; drawPreview(); } })), castleIn)),
         h('div', null, h('div', { class: 'section-label' }, t('Así se verá')), preview)),
+      h('div', null, h('div', { class: 'section-label' }, t('Estilo de tus casas')), styleBox),
       h('div', { class: 'row' },
         h('button', { class: 'btn ghost', onclick: close }, t('Cancelar')),
-        h('button', { class: 'btn primary', onclick: () => { const res = { flag: exportFlag(), color: col }; close(); onSave && onSave(res); } }, t('✅ Guardar reino')))));
+        h('button', { class: 'btn primary', onclick: () => { const res = { flag: exportFlag(), color: col, style: sty }; close(); onSave && onSave(res); } }, t('✅ Guardar reino')))));
   document.body.append(ov);
   drawUI();
   drawPreview();

@@ -113,7 +113,7 @@ function kingdomCard() {
       storage('katanittes.name', n);
       saveMyKingdom({ ...myOrDefaultKingdom(), name: n });
     });
-    const paint = () => openFlagEditor({ flag: k.flag, color: k.color, name: nameIn.value.trim(), onSave: ({ flag, color }) => { saveMyKingdom({ ...myOrDefaultKingdom(), name: nameIn.value.trim(), flag, color }); draw(); } });
+    const paint = () => openFlagEditor({ flag: k.flag, color: k.color, style: k.style, name: nameIn.value.trim(), onSave: ({ flag, color, style }) => { saveMyKingdom({ ...myOrDefaultKingdom(), name: nameIn.value.trim(), flag, color, style }); draw(); } });
     box.replaceChildren(
       h('span', { class: 'mc-band' }, h('span', null, '👑 ' + t('Tu reino')), h('span', null, '★')),
       h('div', { class: 'mc-art kingdom-art' },
@@ -263,7 +263,7 @@ function onlineScreen(root) {
         await App.net.host();
         const cfg = storage('katanittes.lastConfig');
         if (cfg && cfg.players) {
-          cfg.players[0] = { ...cfg.players[0], name: n, kind: 'human', color: kingdom().color, flag: kingdom().flag };
+          cfg.players[0] = { ...cfg.players[0], name: n, kind: 'human', color: kingdom().color, flag: kingdom().flag, style: kingdom().style || null };
           storage('katanittes.lastConfig', cfg);
         }
         App.go('lobby', { online: 'host', capacity: Math.min(capacity, ONLINE_MAX) });
@@ -327,7 +327,7 @@ function onlineScreen(root) {
             h('div', { class: 'kingdom-info' },
               h('label', { class: 'section-label' }, t('Nombre')), nameIn,
               h('div', { class: 'castle-line' }, h('span', { class: 'swatch', style: { background: k.color } }), h('span', null, t('Color de tu castillo'))))),
-          h('button', { class: 'btn', onclick: () => openFlagEditor({ flag: k.flag, color: k.color, name: nameIn.value.trim(), onSave: ({ flag, color }) => { saveMyKingdom({ ...kingdom(), name: nameIn.value.trim(), flag, color }); draw(); } }) }, t('🎨 Pintar bandera y castillo'))),
+          h('button', { class: 'btn', onclick: () => openFlagEditor({ flag: k.flag, color: k.color, style: k.style, name: nameIn.value.trim(), onSave: ({ flag, color, style }) => { saveMyKingdom({ ...kingdom(), name: nameIn.value.trim(), flag, color, style }); draw(); } }) }, t('🎨 Pintar bandera y castillo'))),
         h('div', { class: 'card hub-card create-card' },
           h('h3', null, t('👑 Crear sala')),
           h('p', null, t('Tú eliges el mapa y los modos. Tu navegador hace de servidor: déjalo abierto mientras juegan.')),

@@ -72,7 +72,7 @@ export function createGame(configIn) {
     rng,
     board,
     players: config.players.map((p, i) => ({
-      id: i, name: p.name, color: p.color, kind: p.kind, level: p.level || 'normal', flag: p.flag || null, retired: false,
+      id: i, name: p.name, color: p.color, kind: p.kind, level: p.level || 'normal', flag: p.flag || null, style: p.style || null, retired: false,
       res: zeroRes(), dev: [], knights: 0, roadLen: 0,
       roadsLeft: R.maxRoads, settlementsLeft: R.maxSettlements, citiesLeft: R.maxCities,
       stats: { gained: 0, stolen: 0, lost: 0 },

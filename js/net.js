@@ -11,6 +11,7 @@ import { App } from './app.js';
 import { applyAction, createGame } from './engine/game.js';
 import { toast, storage } from './ui/dom.js';
 import { t, tk, tx } from './i18n.js';
+import { validStyle, giveBotsStyles } from './ui/pieceStyles.js';
 
 // Kaakataaan uses its own room namespace so its rooms never mix with the original Katanittes
 // (different rules: Seafarers, languages), even when a room code happens to match.
@@ -426,7 +427,7 @@ export class Net {
       g.lastPong = Date.now();
       g.sentStatic = false;
       g.leaving = false;
-      if (!inGame) Object.assign(g, { name, flag: msg.flag || g.flag, color: msg.color || g.color });
+      if (!inGame) Object.assign(g, { name, flag: msg.flag || g.flag, color: msg.color || g.color, style: validStyle(msg.style || g.style) });
       toast(inGame ? t('🟢 {name} volvió a la sala', { name: g.name }) : t('🟢 {name} entró a la sala', { name: g.name }), 'good');
       this.cancelVote(g.seat);
       clearTimeout(this.timers.get(g.seat));
@@ -448,7 +449,7 @@ export class Net {
       if (inGame) return refuse('started', tk('La partida ya empezó.'));
       if (!this.open) return refuse('closed', tk('🔒 La sala está cerrada: el anfitrión no acepta más jugadores.'));
       if (this.guests.filter(x => x.connected).length >= this.capacity - 1) return refuse('full', { t: tk('La sala está llena ({n} jugadores).'), p: { n: this.capacity } });
-      g = { token, name, flag: msg.flag || null, color: msg.color || null, conn, seat: null, connected: true, lastPong: Date.now() };
+      g = { token, name, flag: msg.flag || null, color: msg.color || null, style: validStyle(msg.style), conn, seat: null, connected: true, lastPong: Date.now() };
       this.guests.push(g);
       toast(t('🟢 {name} entró a la sala', { name }), 'good');
     }
@@ -589,6 +590,7 @@ export class Net {
       p.kind = 'human';
       p.remote = true;
       if (g.flag) p.flag = g.flag;
+      p.style = validStyle(g.style);
       let color = g.color || p.color;
       if (used.has(color)) color = palette.find(c => !used.has(c)) || color;
       used.add(color);
@@ -603,6 +605,7 @@ export class Net {
     });
     this.guests = this.guests.filter(g => g.seat != null);
     App.mySeat = 0;
+    giveBotsStyles(config.players);
     App.config = config;
     App.state = createGame(config);
     App.go('game');
@@ -740,7 +743,7 @@ export class Net {
             this.retry();
           }
         }, PING_MS);
-        c.send({ type: 'hello', name: this.name, token: myToken(), flag: this.kingdom.flag, color: this.kingdom.color });
+        c.send({ type: 'hello', name: this.name, token: myToken(), flag: this.kingdom.flag, color: this.kingdom.color, style: this.kingdom.style || null });
         this.onStatus('connected');
         if (App.onMeta) App.onMeta();
         finish(res);

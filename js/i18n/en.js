@@ -1155,4 +1155,10 @@ export default {
   "Jugar online": "Play online",
   "Modo": "Mode",
   "necesitas ciudad": "needs a city",
+  "Estilo de tus casas": "Your house style",
+  "Clásico": "Classic",
+  "Đình (aldea vietnamita)": "Vietnamese đình",
+  "Castillo de piedra": "Stone castle",
+  "Pagoda oriental": "Eastern pagoda",
+  "Vikingo": "Viking",
 };
