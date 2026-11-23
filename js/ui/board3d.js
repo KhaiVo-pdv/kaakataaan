@@ -28,11 +28,13 @@ import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeB
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
 const TOKEN_SPAN = 0.75; // widest a number token gets on the map, in world units (a hex is 1.73 across)
-export const SETTINGS = { pixel: 1, tiltShift: true, quality: 'high', ao: true, outline: true };
-// phones and small screens start on the light preset
-if (typeof matchMedia === 'function' && (matchMedia('(pointer: coarse)').matches || innerWidth < 900)) Object.assign(SETTINGS, { quality: 'low', ao: false });
+// every 3D graphics option starts OFF; players turn on what they want in the in-game menu
+export const SETTINGS = { pixel: 1, tiltShift: false, quality: 'low', ao: false, outline: false };
+// saved choices live under a new key, so everyone starts from the all-off defaults once
+// (the old 'katanittes.gfx' key is ignored)
+const GFX_KEY = 'kaakataaan.gfx';
 try {
-  Object.assign(SETTINGS, JSON.parse(localStorage.getItem('katanittes.gfx') || '{}'));
+  Object.assign(SETTINGS, JSON.parse(localStorage.getItem(GFX_KEY) || '{}'));
 } catch {}
 
 const INR = Math.sqrt(3) / 2; // hex inradius
@@ -868,7 +870,7 @@ export class Board3D {
   setGraphics(opts) {
     Object.assign(SETTINGS, opts);
     try {
-      localStorage.setItem('katanittes.gfx', JSON.stringify(SETTINGS));
+      localStorage.setItem(GFX_KEY, JSON.stringify(SETTINGS));
     } catch {}
     this.setupPasses();
   }

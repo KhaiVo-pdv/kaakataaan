@@ -1,0 +1,247 @@
+/* ==========================================================================
+   Kaakataaan in-game "wooden table" theme.
+   Matches the main menu / lobby (css/menu.css): light wooden table, cream paper
+   cards, ink outlines. Loaded last; every rule is scoped to .game.wood-table so
+   the menu, lobby and map editor are not affected.
+   ========================================================================== */
+.game.wood-table {
+  --wood-paper: #fbf1dc;      /* card paper */
+  --wood-paper-2: #f1e2c3;    /* inset paper (inputs, chips) */
+  --wood-text: #2a1d14;       /* text on paper */
+  --wood-muted: #6b5440;      /* secondary text on paper */
+  --wood-dark: #6b4226;       /* dark wood strips and frames */
+  --wood-edge: #3a1f0e;       /* deepest wood shadow */
+  --wood-cream: #fff6e6;      /* light text on wood */
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(255, 214, 150, .18) 0%, rgba(0, 0, 0, 0) 55%),
+    repeating-linear-gradient(90deg, rgba(60, 30, 10, .18) 0 3px, transparent 3px 160px),
+    repeating-linear-gradient(0deg, #a87750 0 6px, #9f6f49 6px 14px, #ab7a53 14px 22px, #9a6b46 22px 30px);
+}
+
+/* ---------- top bar: a dark wood strip ---------- */
+.game.wood-table .topbar {
+  background: repeating-linear-gradient(0deg, #7a4e30 0 6px, #734929 6px 12px);
+  box-shadow: 0 3px 0 var(--wood-edge), 0 7px 0 rgba(20, 10, 4, .35);
+  color: var(--wood-cream);
+}
+.game.wood-table .brand { color: var(--wood-cream); text-shadow: 0 3px 0 #b13e53, 0 5px 0 var(--wood-edge); }
+.game.wood-table .turn-info { color: var(--wood-cream); text-shadow: 2px 2px 0 var(--wood-edge); }
+.game.wood-table .dice-sum { color: var(--wood-cream); text-shadow: 3px 3px 0 var(--wood-edge); }
+.game.wood-table .dice-sum.seven { color: #ffb199; }
+.game.wood-table .die { box-shadow: 0 0 0 3px var(--ink), inset -3px -3px 0 #d8c7a3; background: var(--wood-paper); }
+.game.wood-table .die.red-die { background: #ffd9cc; }
+
+/* paper buttons, like the menu's top buttons */
+.game.wood-table .topbar .btn,
+.game.wood-table .zoom-ctrl .btn {
+  background: var(--wood-paper); color: var(--wood-text); text-shadow: none;
+  box-shadow: 0 0 0 3px var(--ink), 3px 4px 0 3px rgba(20, 10, 4, .4);
+}
+.game.wood-table .topbar .btn:hover:not(:disabled),
+.game.wood-table .zoom-ctrl .btn:hover:not(:disabled) { background: #ffe6a8; }
+
+/* ---------- board: the 3D map sits in a wooden frame on the table ---------- */
+.game.wood-table .game-main { padding: 18px 14px 18px 18px; gap: 18px; }
+.game.wood-table .board-wrap {
+  box-shadow: 0 0 0 3px var(--ink), 0 0 0 9px var(--wood-dark), 0 0 0 12px var(--ink), 6px 10px 0 12px rgba(20, 10, 4, .4);
+}
+/* the dice history chips on the board read as small paper slips */
+.game.wood-table .roll-log { background: rgba(251, 241, 220, .9); color: var(--wood-text); }
+
+@media (max-width: 860px) {
+  .game.wood-table .game-main { padding: 14px 12px; gap: 16px; }
+}
+
+/* ---------- side panel: player cards + bank + log laid on the table ---------- */
+.game.wood-table .side { background: transparent; box-shadow: none; padding-left: 0; gap: 10px; }
+.game.wood-table .players { padding: 6px 4px 6px 6px; gap: 12px; }
+
+/* each player is a paper card with a band in the player's colour across the top */
+.game.wood-table .pcard {
+  background: var(--wood-paper); color: var(--wood-text); padding-top: 14px;
+  box-shadow: 0 0 0 3px var(--ink), inset 0 7px 0 var(--pc), inset 0 10px 0 var(--ink), 4px 6px 0 3px rgba(20, 10, 4, .4);
+  transition: transform .15s ease;
+}
+/* whose turn it is: the card lifts off the table with a ring in the player's colour */
+.game.wood-table .pcard.current {
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 3px var(--ink), 0 0 0 7px var(--pc), 0 0 0 10px var(--ink), inset 0 7px 0 var(--pc), inset 0 10px 0 var(--ink), 6px 10px 0 10px rgba(20, 10, 4, .35);
+}
+.game.wood-table .pcard.winner { background: #ffe6a8; }
+.game.wood-table .pcard .name { color: var(--wood-text); }
+.game.wood-table .pcard .name small { color: var(--wood-muted); }
+.game.wood-table .pcard .vp { color: #a0620f; text-shadow: 2px 2px 0 rgba(58, 31, 14, .25); }
+.game.wood-table .pcard .vp small { color: var(--wood-muted); }
+.game.wood-table .pcard .stats { color: var(--wood-muted); }
+.game.wood-table .pcard .stats .award { color: #a0620f; }
+.game.wood-table .players.compact .pcard { padding-top: 12px; }
+
+/* bank: a thin paper slip under the cards */
+.game.wood-table .bank-info {
+  margin: 0 6px; padding: 5px 10px; background: var(--wood-paper-2); color: var(--wood-text);
+  box-shadow: 0 0 0 3px var(--ink), 3px 4px 0 3px rgba(20, 10, 4, .35);
+}
+
+/* log: a paper sheet */
+.game.wood-table .log {
+  margin: 4px 6px 8px; background: var(--wood-paper); color: var(--wood-text);
+  box-shadow: 0 0 0 3px var(--ink), 4px 6px 0 3px rgba(20, 10, 4, .4);
+}
+.game.wood-table .log div { border-bottom: 1px dotted rgba(107, 84, 64, .35); }
+/* player names keep their colour; a thin ink outline keeps light colours (white, yellow) readable on paper */
+.game.wood-table .pname {
+  filter: none;
+  text-shadow: 1px 0 0 var(--ink), -1px 0 0 var(--ink), 0 1px 0 var(--ink), 0 -1px 0 var(--ink);
+}
+
+/* ---------- action bar: a dark wood strip like the top bar ---------- */
+.game.wood-table .actionbar {
+  background: repeating-linear-gradient(0deg, #7a4e30 0 6px, #734929 6px 12px);
+  box-shadow: 0 -3px 0 var(--wood-edge), 0 -7px 0 rgba(20, 10, 4, .3);
+  color: var(--wood-cream);
+}
+.game.wood-table .actionbar .waiting { color: var(--wood-cream); text-shadow: 2px 2px 0 var(--wood-edge); }
+
+/* ordinary buttons become paper; primary (sand), green, pink and the blinking "active" keep their colour */
+.game.wood-table .actionbar .btn:not(.primary):not(.green):not(.pink) {
+  background: var(--wood-paper); color: var(--wood-text); text-shadow: none;
+  box-shadow: 0 0 0 3px var(--ink), inset -3px -3px 0 #d8c7a3, 3px 4px 0 3px rgba(20, 10, 4, .4);
+}
+.game.wood-table .actionbar .btn:not(.primary):not(.green):not(.pink):hover:not(:disabled) { background: #ffe6a8; }
+.game.wood-table .actionbar .btn.active:not(.primary):not(.green):not(.pink) {
+  box-shadow: 0 0 0 3px var(--ink), 0 0 0 6px var(--sand), inset -3px -3px 0 #d8c7a3;
+}
+.game.wood-table .actionbar .btn:disabled { background: #cdb894; color: #6b5440; opacity: .7; }
+.game.wood-table .actionbar .cost { opacity: .85; }
+
+/* chips (bot speed control) on paper */
+.game.wood-table .actionbar .chip { background: var(--wood-paper-2); color: var(--wood-text); }
+.game.wood-table .actionbar .chip.on { background: var(--sand); color: var(--ink); }
+
+/* "what can I build" preview: paper tags, the affordable ones turn light green */
+.game.wood-table .afford-item { background: var(--wood-paper-2); color: var(--wood-muted); }
+.game.wood-table .afford-item.half { color: var(--wood-text); }
+.game.wood-table .afford-item.ok { background: #d9f2c4; color: #1f4a2a; }
+
+/* resource and development cards keep their colours; they just sit on the wood with a deeper shadow */
+.game.wood-table .hand .rcard,
+.game.wood-table .actionbar .dcard { filter: drop-shadow(3px 4px 0 rgba(20, 10, 4, .35)); }
+
+@media (max-width: 860px) {
+  .game.wood-table .actionbar { background: repeating-linear-gradient(0deg, #7a4e30 0 6px, #734929 6px 12px); }
+}
+
+/* ---------- messages on the board: turn banner and trade offer ---------- */
+/* turn banner: a paper slip pinned on the board (the yellow "your turn" version stays yellow) */
+.game.wood-table .banner {
+  background: var(--wood-paper); color: var(--wood-text);
+  box-shadow: 0 0 0 3px var(--ink), 4px 6px 0 3px rgba(20, 10, 4, .4);
+}
+.game.wood-table .banner.mine { background: #ffcd75; color: var(--ink); }
+
+/* trade offer: a paper card with a gold edge */
+.game.wood-table .offer {
+  background: var(--wood-paper); color: var(--wood-text);
+  box-shadow: 0 0 0 3px var(--ink), 0 0 0 7px #d4930f, 0 0 0 10px var(--ink), 8px 10px 0 8px rgba(20, 10, 4, .4);
+}
+.game.wood-table .offer .tag { color: var(--wood-muted); }
+.game.wood-table .offer .btn:not(.primary):not(.green):not(.pink) {
+  background: var(--wood-paper-2); color: var(--wood-text); text-shadow: none;
+  box-shadow: 0 0 0 3px var(--ink), 3px 4px 0 2px rgba(20, 10, 4, .35);
+}
+
+/* ---------- pop-ups outside the game box (toasts, big announcements, pass-the-device screen) ----------
+   They are appended to <body>, not inside .game, so they are themed only while a wood-table game is open. */
+body:has(.game.wood-table) .toast {
+  background: var(--wood-paper, #fbf1dc); color: #2a1d14;
+  box-shadow: 0 0 0 3px #1a1c2c, 4px 6px 0 3px rgba(20, 10, 4, .4);
+}
+body:has(.game.wood-table) .toast.error { background: #ffd9cc; color: #7a1f2e; box-shadow: 0 0 0 3px #1a1c2c, 0 0 0 6px #b13e53, 4px 6px 0 6px rgba(20, 10, 4, .35); }
+body:has(.game.wood-table) .toast.good { background: #d9f2c4; color: #1f4a2a; box-shadow: 0 0 0 3px #1a1c2c, 0 0 0 6px #38b764, 4px 6px 0 6px rgba(20, 10, 4, .35); }
+body:has(.game.wood-table) .announce > div {
+  background: #fbf1dc; color: #2a1d14;
+  box-shadow: 0 0 0 4px #1a1c2c, 0 0 0 10px #6b4226, 0 0 0 14px #1a1c2c, 10px 14px 0 14px rgba(20, 10, 4, .4);
+}
+body:has(.game.wood-table) .announce .at { color: #2a1d14; text-shadow: 3px 3px 0 #ffcd75; }
+body:has(.game.wood-table) .announce .ad { color: #6b5440; }
+body:has(.game.wood-table) .pass-screen {
+  background: repeating-linear-gradient(0deg, #a87750 0 6px, #9f6f49 6px 14px, #ab7a53 14px 22px, #9a6b46 22px 30px);
+  color: #fff6e6;
+}
+body:has(.game.wood-table) .pass-screen .big { text-shadow: 0 4px 0 #b13e53, 0 8px 0 #3a1f0e; }
+
+/* ---------- dialogs: menu, trade, discard, game over, help, Seafarers and C&K panels ----------
+   The overlay is a sibling of .game (not inside it), so it is scoped the same way as the toasts. */
+body:has(.game.wood-table) {
+  --wood-paper: #fbf1dc; --wood-paper-2: #f1e2c3; --wood-text: #2a1d14; --wood-muted: #6b5440;
+  --wood-dark: #6b4226; --wood-edge: #3a1f0e; --wood-cream: #fff6e6;
+}
+body:has(.game.wood-table) .overlay { background: rgba(40, 20, 8, .55); }
+body:has(.game.wood-table) .overlay .modal {
+  background: var(--wood-paper); color: var(--wood-text);
+  box-shadow: 0 0 0 3px var(--ink), 0 0 0 9px var(--wood-dark), 0 0 0 12px var(--ink), 10px 14px 0 12px rgba(20, 10, 4, .4);
+}
+body:has(.game.wood-table) .overlay .modal h2 { color: var(--wood-text); text-shadow: 3px 3px 0 #ffcd75; }
+body:has(.game.wood-table) .overlay .modal h3 { color: #a0620f; }
+body:has(.game.wood-table) .overlay .modal p,
+body:has(.game.wood-table) .overlay .muted,
+body:has(.game.wood-table) .overlay .section-label,
+body:has(.game.wood-table) .overlay .waiting { color: var(--wood-muted); }
+body:has(.game.wood-table) .overlay .help-body li { color: var(--wood-text); }
+body:has(.game.wood-table) .overlay .help-body a { color: #b13e53; }
+
+/* buttons inside dialogs: paper; primary / green / pink keep their colour */
+body:has(.game.wood-table) .overlay .btn:not(.primary):not(.green):not(.pink) {
+  background: var(--wood-paper-2); color: var(--wood-text); text-shadow: none;
+  box-shadow: 0 0 0 3px var(--ink), inset -3px -3px 0 #d8c7a3, 3px 4px 0 2px rgba(20, 10, 4, .35);
+}
+body:has(.game.wood-table) .overlay .btn:not(.primary):not(.green):not(.pink):hover:not(:disabled) { background: #ffe6a8; }
+body:has(.game.wood-table) .overlay .btn.ghost { background: #e7d3ad; }
+body:has(.game.wood-table) .overlay .btn:disabled { opacity: .5; }
+body:has(.game.wood-table) .overlay .btn small,
+body:has(.game.wood-table) .overlay .btn.ck-kopt small { color: var(--wood-muted); }
+body:has(.game.wood-table) .overlay .chip { background: var(--wood-paper-2); color: var(--wood-text); }
+body:has(.game.wood-table) .overlay .chip.on { background: var(--sand); color: var(--ink); }
+body:has(.game.wood-table) .overlay .pill,
+body:has(.game.wood-table) .overlay .tag { background: var(--wood-paper-2); color: var(--wood-text); }
+body:has(.game.wood-table) .overlay .tag.ok { background: #d9f2c4; color: #1f4a2a; }
+body:has(.game.wood-table) .overlay .tag.no { background: #ffd9cc; color: #7a1f2e; }
+
+/* trade / discard steppers: small paper boxes */
+body:has(.game.wood-table) .overlay .stepper { background: var(--wood-paper-2); box-shadow: inset 0 0 0 3px var(--ink); }
+body:has(.game.wood-table) .overlay .stepper .have { color: var(--wood-muted); }
+
+/* Cities & Knights: improvement tracks, knights, walls, progress cards */
+body:has(.game.wood-table) .overlay .ck-track { background: var(--wood-paper-2); }
+body:has(.game.wood-table) .overlay .ck-pip { background: #e2cfa8; color: var(--wood-muted); }
+body:has(.game.wood-table) .overlay .ck-pip.ab { outline-color: rgba(58, 31, 14, .45); }
+body:has(.game.wood-table) .overlay .ck-pip.on { background: var(--sand); color: var(--ink); }
+body:has(.game.wood-table) .overlay .ck-ability { color: var(--wood-muted); }
+body:has(.game.wood-table) .overlay .ck-ability.got { color: #237a46; }
+body:has(.game.wood-table) .overlay .ck-wall { background: var(--wood-paper-2); border-color: var(--wood-dark); }
+body:has(.game.wood-table) .overlay .ck-wall small { color: var(--wood-muted); }
+body:has(.game.wood-table) .overlay .pwhy { color: #b13e53 !important; }
+
+/* Cities & Knights barbarian tracker on the board: a paper card instead of a dark box */
+.game.wood-table .barb-hud { background: var(--wood-paper); color: var(--wood-text); border: 0; box-shadow: 0 0 0 3px var(--ink), 4px 6px 0 3px rgba(20, 10, 4, .4); }
+.game.wood-table .barb-hud.near { box-shadow: 0 0 0 3px var(--ink), 0 0 0 6px #e0533a, 4px 6px 0 6px rgba(20, 10, 4, .4); }
+.game.wood-table .barb-title b { color: #a0620f; }
+.game.wood-table .barb-hud.near .barb-title b { color: #b13e53; }
+.game.wood-table .barb-step { background: #e2cfa8; border-color: #b39a72; }
+.game.wood-table .barb-step.done { background: #e0533a; border-color: #b13e53; }
+.game.wood-table .barb-vs.ok { color: #237a46; }
+.game.wood-table .barb-vs.bad { color: #b13e53; }
+.game.wood-table .barb-track { background: var(--wood-paper-2); border-color: var(--wood-dark); color: var(--wood-text); }
+
+/* ---------- small screens ---------- */
+/* phase text next to the player name ("Đặt quân ban đầu"): the default grey is too faint on wood */
+.game.wood-table .phase-tag { color: #f3dfc0; text-shadow: 1px 1px 0 var(--wood-edge); }
+
+/* phone held sideways: little height, so the whole side column scrolls as one
+   (instead of the player list getting squeezed under the bank and the log) */
+@media (max-width: 860px) and (orientation: landscape) {
+  .game.wood-table .game-main { padding: 12px 10px 12px 14px; gap: 14px; }
+  .game.wood-table .side { overflow-y: auto; gap: 8px; }
+  .game.wood-table .players { flex: none; overflow: visible; min-height: min-content; padding: 6px 14px 4px 6px; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+  .game.wood-table .log { flex: none; max-height: 90px; }
+}

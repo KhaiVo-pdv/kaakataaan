@@ -9,7 +9,7 @@ import { play } from './sfx.js';
 import { showHelp } from './help.js';
 import { toggleMusic } from './music.js';
 import { flagImg } from './flag.js';
-import { iconSet, setIconSet, ICON_SETS, pxIcon, pixelize } from './pixel.js';
+import { pxIcon, pixelize } from './pixel.js';
 import { mountAdhd, updateAdhd, adhdButton, celebrate, disposeAdhd } from './adhd.js';
 import { t, tx, tk } from '../i18n.js';
 import * as Sea from './seafarersUI.js';
@@ -56,7 +56,8 @@ export function gameScreen(root) {
       h('button', { class: 'btn', title: t('Acercar'), onclick: () => ui.board && ui.board.setZoom(ui.board.zoom * 1.25) }, '+'),
       h('button', { class: 'btn', title: t('Alejar'), onclick: () => ui.board && ui.board.setZoom(ui.board.zoom / 1.25) }, '−'),
       h('button', { class: 'btn', title: t('Centrar'), onclick: () => ui.board && ui.board.resetView() }, '⤢')));
-  root.append(h('div', { class: 'game screen', 'data-testid': 'game-screen' },
+  // 'wood-table': the wooden-table look shared with the main menu (css/game-table.css)
+  root.append(h('div', { class: 'game screen wood-table', 'data-testid': 'game-screen' },
     topbar,
     h('main', { class: 'game-main' }, boardWrap, h('aside', { class: 'side', 'data-testid': 'side' }, els.players, els.bank, els.log)),
     els.actionbar), els.overlay, els.pass);
@@ -1315,8 +1316,7 @@ function openMenu() {
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_AO() ? ' on' : ''), onclick: () => { ui.board3d.setGraphics({ ao: !ui.board3d.constructor.SETTINGS_AO() }); renderModal(App.state); } }, t('🌑 Oclusión ambiental')),
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_Q() === 'high' ? ' on' : ''), onclick: () => { ui.board3d.setGraphics({ quality: ui.board3d.constructor.SETTINGS_Q() === 'high' ? 'low' : 'high' }); toast(t('Calidad cambiada: se aplica al recargar el mapa')); renderModal(App.state); } }, t('✨ Alta calidad')),
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_OUTLINE() ? ' on' : ''), title: t('Contorno fino del color de cada jugador, visible a través de montañas y árboles'), onclick: () => { ui.board3d.setGraphics({ outline: !ui.board3d.constructor.SETTINGS_OUTLINE() }); renderModal(App.state); } }, t('🔲 Contorno de piezas')))) : null,
-      h('div', null, h('div', { class: 'section-label' }, t('Iconos de recursos')), h('div', { class: 'gfx-row' },
-        ICON_SETS.map(k => [k, { render: t('🧊 3D (Blender)'), pico: t('🆕 Pixel PICO'), classic: t('🕹️ Clásicos') }[k]]).map(([k, l]) => h('button', { class: 'chip' + (iconSet() === k ? ' on' : ''), onclick: () => { setIconSet(k); if (ui.board3d) ui.board3d.staticKey = ''; render(App.state); } }, l)))),
+      // resource icons are always the classic set (see pixel.js), so there is no picker here
       h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state) }); } }, t('📖 Cómo se juega')),
       h('button', { class: 'btn', onclick: () => { const on = App.toggleSound(); toast(on ? t('🔊 Sonido activado') : t('🔇 Sonido desactivado')); } }, t('🔊 Sonido on/off')),
       h('button', { class: 'btn', onclick: () => { const on = toggleMusic(); toast(on ? t('🎵 Música activada') : t('🎵 Música desactivada')); } }, t('🎵 Música on/off')),

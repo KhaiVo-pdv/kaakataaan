@@ -274,28 +274,15 @@ const SPRITES_PICO = {
   ],
 };
 
-// which icon set the interface uses (menu toggle):
-//   'render'  3D models rendered by Blender with a pixel camera (tools/blender/make_icons.py), default
+// which icon set the interface uses. The code still knows three sets:
+//   'render'  3D models rendered by Blender with a pixel camera (tools/blender/make_icons.py)
 //   'pico'    hand-drawn, PICO-8-like palette with a sticker border
 //   'classic' the original hand-drawn Sweetie-16 sprites
-export const ICON_SETS = ['render', 'pico', 'classic'];
-const SET_KEY = 'katanittes.icons';
-const pickSet = n => (ICON_SETS.includes(n) ? n : 'render');
-let iconSetName = (() => {
-  try {
-    return pickSet(localStorage.getItem(SET_KEY));
-  } catch {
-    return 'render';
-  }
-})();
+// Kaakataaan always uses 'classic': the picker was removed from the menu and any old
+// saved choice (localStorage 'katanittes.icons') is ignored.
+export const ICON_SETS = ['classic'];
+const iconSetName = 'classic';
 export const iconSet = () => iconSetName;
-export function setIconSet(name) {
-  iconSetName = pickSet(name);
-  try {
-    localStorage.setItem(SET_KEY, iconSetName);
-  } catch {}
-  cache.clear();
-}
 
 const cache = new Map();
 
