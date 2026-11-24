@@ -8,6 +8,7 @@ import * as Fish from '../js/engine/tradersBarbarians/fishermen.js';
 import * as Rivers from '../js/engine/tradersBarbarians/rivers.js';
 import * as Caravans from '../js/engine/tradersBarbarians/caravans.js';
 import * as Traders from '../js/engine/tradersBarbarians/traders.js';
+import * as EvCards from '../js/engine/eventCards.js';
 import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
@@ -1688,6 +1689,47 @@ t('Capitán del puerto: puntos de puerto, al menos 3, el que lo tiene lo conserv
   s.buildings[portV[6]].type = 'city';
   act(s, { type: 'endTurn', pid: 1 });
   eq(s.harbormaster.owner, 1, 'pasa al que tiene más');
+});
+
+t('Cartas de evento: 36 cartas como dos dados, año nuevo, epidemia y ladrón que huye', () => {
+  eq(G.createGame(defaultConfig()).eventDeck, undefined, 'el juego base no tiene mazo');
+  const count = {};
+  for (const c of EvCards.EVENT_CARDS) count[c.num] = (count[c.num] || 0) + 1;
+  for (let n = 2; n <= 12; n++) eq(count[n], 6 - Math.abs(7 - n), 'el ' + n + ' sale como con dos dados');
+  ok(EvCards.EVENT_CARDS.every(c => c.red >= 1 && c.red <= 6 && c.num - c.red >= 1 && c.num - c.red <= 6), 'dados válidos');
+  eq(EvCards.EVENT_CARDS.filter(c => !c.event).length, 16, '16 sin evento');
+  const c = defaultConfig(); c.rules.diceMode = 'eventCards';
+  const s = G.createGame(c);
+  eq(s.eventDeck.length, 37, '36 cartas + año nuevo');
+  eq(s.eventDeck[EvCards.LEFT_OUT], EvCards.NEW_YEAR, 'el año nuevo encima de 5 cartas');
+  // 31 draws, then the New Year reshuffles
+  let ny = 0;
+  for (let i = 0; i < 31; i++) { const r = EvCards.drawEventCard(s); if (r.newYear) ny++; }
+  eq(ny, 0, '31 cartas sin año nuevo');
+  ok(EvCards.drawEventCard(s).newYear, 'la 32ª trae el año nuevo');
+  // rolling draws a card: the dice follow it
+  s.phase = 'roll'; s.current = 0; s.round = 5; s.turn = 5;
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'roba carta');
+  ok(s.eventCard && s.dice[0] + s.dice[1] === s.eventCard.num && s.dice[1] === s.eventCard.red, 'los dados son los de la carta');
+  // epidemic: a city gives 1
+  const s2 = G.createGame(c), b = s2.board;
+  const tile = b.tiles.find(t => t.num === 6);
+  s2.buildings = { [tile.verts[0]]: { owner: 1, type: 'city' } };
+  if (b.robber === tile.id) b.robber = -1;
+  for (const r of Object.keys(s2.players[1].res)) s2.players[1].res[r] = 0;
+  s2.eventDeck.push(EvCards.EVENT_CARDS.find(x => x.num === 6 && x.event === 'epidemic').id);
+  s2.phase = 'roll'; s2.current = 0;
+  ok(act(s2, { type: 'roll', pid: 0 }).ok, 'epidemia');
+  eq(s2.players[1].res[tile.res], 1, 'la ciudad da solo 1');
+  // robber flees to the desert
+  const s3 = G.createGame(c), b3 = s3.board;
+  const land = b3.tiles.find(t => t.res !== 'desert' && t.num);
+  b3.robber = land.id;
+  s3.eventDeck.push(EvCards.EVENT_CARDS.find(x => x.event === 'robberFlees').id);
+  s3.phase = 'roll'; s3.current = 0;
+  ok(act(s3, { type: 'roll', pid: 0 }).ok, 'huye');
+  const desert = b3.tiles.find(t => t.res === 'desert');
+  eq(b3.robber, desert ? desert.id : -1, 'al desierto');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

@@ -10,6 +10,7 @@ import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
 import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
 import * as Traders from './tradersBarbarians/traders.js';
+import * as EvCards from './eventCards.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -118,6 +119,7 @@ export function createGame(configIn) {
   s.devDeck = buildDevDeck(config, n, rng);
   s.devTotal = s.devDeck.length;
   if (config.rules.harbormaster) s.harbormaster = { owner: -1, count: 0 }; // Harbormaster variant (base games never get this key)
+  if (config.rules.diceMode === 'eventCards') s.eventDeck = EvCards.newEventDeck(rng); // Catan Event Cards variant: cards instead of dice
   if (seafarersOn(s)) {
     Ships.initShips(s);
     Islands.initIslands(s);
@@ -626,7 +628,7 @@ function produce(s, sum) {
     for (const v of t.verts) {
       const b = s.buildings[v];
       if (!b || s.players[b.owner].retired) continue;
-      const amt = (b.type === 'city' ? 2 : 1) * mult;
+      const amt = (b.type === 'city' && !(s.eventCard && s.eventCard.event === 'epidemic') ? 2 : 1) * mult; // Event Cards epidemic: cities give 1
       let r = t.res;
       if (r === 'gold') {
         // gold gives the resource the player has least of (hand + pending gains)
@@ -634,7 +636,8 @@ function produce(s, sum) {
         r = RES.reduce((best, x) => (p.res[x] + gains[b.owner][x] < p.res[best] + gains[b.owner][best] ? x : best), RES[0]);
       }
       // Cities & Knights: a city by forest / pasture / mountains takes 1 resource + 1 commodity
-      const got = ck && b.type === 'city' && t.res !== 'gold' ? cityYield(r, mult) : { [r]: amt };
+      const epidemic = s.eventCard && s.eventCard.event === 'epidemic'; // Event Cards: C&K cities make no commodity either
+      const got = ck && b.type === 'city' && t.res !== 'gold' && !epidemic ? cityYield(r, mult) : { [r]: amt };
       for (const [c, n] of Object.entries(got)) {
         gains[b.owner][c] += n;
         (from[b.owner][c] ||= []).push(t.id);
@@ -1035,11 +1038,12 @@ H.moveShip = (s, a) => {
 H.roll = (s, a) => {
   if (s.phase !== 'roll') fail('Ahora no se tiran dados.');
   if (a.pid !== s.current) fail('No es tu turno.');
-  let d = s.alchemy || rollDice(s); // C&K Alchemist: the player chose the number dice
+  let d = s.alchemy || throwDice(s, a.pid); // C&K Alchemist: the player chose the number dice
+  if (s.alchemy) s.eventCard = null;
   delete s.alchemy;
   if (s.traders) while (d[0] + d[1] === 2 || d[0] + d[1] === 12) { // Traders & Barbarians: 2 and 12 are rolled again
     log(s, msg('🎲 Sale {n}: se vuelve a tirar.', { n: d[0] + d[1] }), a.pid);
-    d = rollDice(s);
+    d = throwDice(s, a.pid);
   }
   const sum = d[0] + d[1];
   s.dice = d;
@@ -1096,7 +1100,36 @@ function progressDrawn(s, pid, id) {
   else log(s, msg('📜 @{p} roba una carta de progreso ({track}).', { p: pid, track: Improve.TRACK_INFO[c.track].name }), pid);
 }
 
+// the dice, or (Catan Event Cards variant) the next event card: [white, red]
+function throwDice(s, pid) {
+  if (!s.eventDeck) return rollDice(s);
+  const { card, newYear } = EvCards.drawEventCard(s);
+  if (newYear) {
+    log(s, '🎆 ¡Año nuevo! Se barajan las cartas de evento.');
+    s.fx.push({ kind: 'newYear' });
+  }
+  s.eventCard = card;
+  const info = EvCards.eventInfo(card.event);
+  s.fx.push({ kind: 'eventCard', id: card.id, event: card.event });
+  if (card.event) log(s, msg('🃏 Carta de evento: {icon} {name}.', { icon: info.icon, name: info.name }), pid);
+  return [card.num - card.red, card.red];
+}
+
+// Catan Event Cards: the events that need no choice happen before production (the rest come next)
+function eventCardEffect(s) {
+  const card = s.eventCard;
+  if (!card || !card.event) return;
+  if (card.event === 'robberFlees') {
+    if (s.barbAttack || s.traders || s.config.rules.noRobber) return; // no robber in these games
+    const desert = s.board.tiles.find(t => t.res === 'desert' && t.revealed !== false && t.id !== s.board.robber && !(s.caravans && t.oasis)); // never the Caravans oasis
+    s.board.robber = desert ? desert.id : -1;
+    s.fx.push({ kind: 'robber', tile: s.board.robber });
+    log(s, desert ? '🏃 El ladrón huye al desierto.' : '🏃 El ladrón huye del tablero.');
+  } else if (card.event !== 'robberAttack' && card.event !== 'epidemic') log(s, '🚧 Este evento tendrá efecto en la próxima versión.');
+}
+
 function afterRoll(s, sum) {
+  if (s.eventCard) eventCardEffect(s); // Catan Event Cards
   if (sum !== 7) {
     const gains = produce(s, sum);
     if (s.fishermen) fishProduction(s, sum);

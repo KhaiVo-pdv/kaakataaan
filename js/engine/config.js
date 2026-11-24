@@ -34,6 +34,8 @@ export const MODES = [
   { id: 'events', icon: '🎲', name: 'Eventos por ronda', desc: 'Cada ronda sale un evento: sequía, terremoto, mercado negro, tormenta, plaga...', get: c => c.modes.events, set: (c, v) => (c.modes.events = v) },
   { id: 'chaos', icon: '🌀', name: 'Tierra viva', desc: 'Cada 3 rondas los números (o los recursos) del mapa se barajan.', get: c => c.modes.chaosEvery > 0, set: (c, v) => (c.modes.chaosEvery = v ? 3 : 0) },
   { id: 'balancedDice', icon: '🃏', name: 'Dados equilibrados', desc: 'Los dados salen de un mazo de 36 cartas: la estadística se cumple.', get: c => c.rules.diceMode === 'balanced', set: (c, v) => (c.rules.diceMode = v ? 'balanced' : 'random') },
+  // Catan Event Cards (Traders & Barbarians variant): replaces the balanced dice (same field)
+  { id: 'eventCards', icon: '📜', name: 'Cartas de evento', desc: 'En vez de dados se roba una carta: da el número y a veces un evento (epidemia, ladrón que huye, año abundante...). El año nuevo baraja el mazo.', get: c => c.rules.diceMode === 'eventCards', set: (c, v) => (c.rules.diceMode = v ? 'eventCards' : 'random') },
   { id: 'friendlyRobber', icon: '😇', name: 'Ladrón amable', desc: 'El ladrón no puede atacar a jugadores con 2 puntos o menos.', get: c => c.rules.friendlyRobber, set: (c, v) => (c.rules.friendlyRobber = v) },
   // Harbormaster (Traders & Barbarians variant, works with any game): the target goes up by 1 with it
   { id: 'harbormaster', icon: '⚓', name: 'Capitán del puerto', desc: 'Poblado junto a un puerto = 1 punto de puerto, ciudad = 2. Quien tenga más (al menos 3) gana 2 puntos. Se juega a 1 punto más.', get: c => !!c.rules.harbormaster, set: (c, v) => { if (v !== !!c.rules.harbormaster) c.rules.vpTarget += v ? 1 : -1; c.rules.harbormaster = v; } },

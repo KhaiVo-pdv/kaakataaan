@@ -19,6 +19,7 @@ import * as Riv from './riversUI.js';
 import * as Car from './caravansUI.js';
 import * as BaUI from './barbarianAttackUI.js';
 import * as TrUI from './tradersUI.js';
+import { eventInfo } from '../engine/eventCards.js';
 
 let ui = null;
 
@@ -262,6 +263,15 @@ function handleFx(st) {
         break;
       case 'gold':
         Riv.riverFx(st, f, v, { toast }); // Traders & Barbarians: Rivers
+        break;
+      case 'eventCard': { // Catan Event Cards
+        if (!f.event) break;
+        const info = eventInfo(f.event);
+        toast(`${info.icon} ${t(info.name)}: ${t(info.desc)}`, f.event === 'robberAttack' ? 'error' : 'info', 3500);
+        break;
+      }
+      case 'newYear':
+        toast(t('🎆 ¡Año nuevo! Se barajan las cartas de evento.'), 'info', 2500);
         break;
       case 'harbormaster': // Harbormaster variant
         toast(t('⚓ {name} es el Capitán del puerto: +2 puntos', { name: st.players[f.pid].name }), 'good', 3000);
@@ -650,6 +660,11 @@ function renderTop(st) {
   clear(e.dice);
   if (st.dice) {
     const sum = st.dice[0] + st.dice[1];
+    if (st.eventCard) { // Catan Event Cards: the card instead of the dice
+      const info = eventInfo(st.eventCard.event);
+      e.dice.append(h('div', { class: 'event-card' + (st.eventCard.event ? ' has-event' : ''), 'data-testid': 'event-card', title: `${t(info.name)}: ${t(info.desc)}`, onclick: () => toast(`${info.icon} ${t(info.name)}: ${t(info.desc)}`, 'info', 5000) },
+        h('b', null, sum), h('span', null, info.icon)), CK.eventDieBadge(st, h, { toast }) || '');
+    } else
     e.dice.append(dieFace(st.dice[0]), dieFace(st.dice[1], true), CK.eventDieBadge(st, h, { toast }) || '', h('div', { class: 'dice-sum' + (sum === 7 ? ' seven' : '') }, sum));
     if (ui.diceAnim) {
       e.dice.classList.remove('rolling');

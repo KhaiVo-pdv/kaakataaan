@@ -14,7 +14,7 @@ const LANGS = ['vi', 'en'];
 const STR = String.raw`('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|\x60(?:\\.|[^\x60\\])*\x60)`;
 const CALLS = [new RegExp(String.raw`\b(?:t|tk|msg|fail)\(\s*` + STR, 'g'), new RegExp(String.raw`\blog\(\s*s\s*,\s*` + STR, 'g')];
 const DATA = new RegExp(String.raw`\b(?:name|desc)\s*:\s*` + STR, 'g');
-const DATA_FILES = ['engine/constants.js', 'engine/config.js', 'engine/board.js', 'engine/expansions.js', 'engine/seafarers/scenarios.js', 'engine/tradersBarbarians/scenarios.js', 'engine/citiesKnights/commodities.js'];
+const DATA_FILES = ['engine/constants.js', 'engine/config.js', 'engine/board.js', 'engine/expansions.js', 'engine/seafarers/scenarios.js', 'engine/tradersBarbarians/scenarios.js', 'engine/citiesKnights/commodities.js', 'engine/eventCards.js'];
 
 const files = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
   const p = path.join(dir, e.name);
