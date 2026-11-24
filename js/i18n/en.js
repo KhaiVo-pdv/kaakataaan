@@ -1584,4 +1584,10 @@ export default {
   "📖 Reglas de Mercaderes y bárbaros": "📖 Traders & Barbarians rules",
   "🛒 Lleva mercancías con tu carromato entre las plazas: cada entrega da 1 punto y oro.": "🛒 Carry commodities between the plazas with your wagon: each delivery gives 1 point and gold.",
   "🛒 Reglas de Mercaderes y bárbaros": "🛒 Traders & Barbarians rules",
+  "Capitán del puerto": "Harbormaster",
+  "Poblado junto a un puerto = 1 punto de puerto, ciudad = 2. Quien tenga más (al menos 3) gana 2 puntos. Se juega a 1 punto más.": "Settlement at a harbor = 1 harbor point, city = 2. Whoever has the most (at least 3) gets 2 points. The game goes to 1 more point.",
+  "Puntos de puerto: poblado junto a un puerto 1, ciudad 2. Capitán del puerto (al menos 3): +2": "Harbor points: settlement at a harbor 1, city 2. Harbormaster (at least 3): +2",
+  "⚓ @{p} es el Capitán del puerto ({n} puntos de puerto): +2 puntos.": "⚓ @{p} is the Harbormaster ({n} harbor points): +2 points.",
+  "⚓ Nadie es Capitán del puerto por ahora.": "⚓ Nobody is the Harbormaster for now.",
+  "⚓ {name} es el Capitán del puerto: +2 puntos": "⚓ {name} is the Harbormaster: +2 points",
 };

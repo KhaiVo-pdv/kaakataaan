@@ -263,6 +263,9 @@ function handleFx(st) {
       case 'gold':
         Riv.riverFx(st, f, v, { toast }); // Traders & Barbarians: Rivers
         break;
+      case 'harbormaster': // Harbormaster variant
+        toast(t('⚓ {name} es el Capitán del puerto: +2 puntos', { name: st.players[f.pid].name }), 'good', 3000);
+        break;
       case 'baCard': { // Barbarian Attack: the card is revealed
         const info = BaUI.CARD_INFO[f.type];
         toast(`${info.icon} ${t(info.name)} — ${t(info.text)}`, 'info', 3500);
@@ -828,6 +831,7 @@ function renderPlayers(st, v) {
         ...BaUI.baStats(st, p, { h }), // Barbarian Attack: gold, knights, prisoners
         ...TrUI.tradersStats(st, p, { h }), // Traders & Barbarians: wagon, cargo, deliveries
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
+        st.harbormaster ? h('span', { class: st.harbormaster.owner === p.id ? 'award' : '', title: t('Puntos de puerto: poblado junto a un puerto 1, ciudad 2. Capitán del puerto (al menos 3): +2') }, `⚓${G.harborPoints(st, p.id)}`) : null, // Harbormaster variant
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
         st.pendingDiscards[p.id] ? h('span', { style: { color: 'var(--red)' } }, `🗑️ ${st.pendingDiscards[p.id]}`) : null));
     const g = ui.gains.filter(x => x.pid === p.id);

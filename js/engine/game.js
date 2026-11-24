@@ -117,6 +117,7 @@ export function createGame(configIn) {
   };
   s.devDeck = buildDevDeck(config, n, rng);
   s.devTotal = s.devDeck.length;
+  if (config.rules.harbormaster) s.harbormaster = { owner: -1, count: 0 }; // Harbormaster variant (base games never get this key)
   if (seafarersOn(s)) {
     Ships.initShips(s);
     Islands.initIslands(s);
@@ -268,6 +269,7 @@ export function victoryPoints(s, pid, hidden = true) {
   if (s.rivers) vp += Rivers.wealthVP(s, pid); // Rivers: Wealthiest Settler +1 / Poor Settler -2
   if (s.barbAttack) vp += BarbAttack.prisonerVP(s.players[pid]); // Barbarian Attack: 2 prisoners = 1 VP
   if (s.traders) vp += Traders.wagonVP(s, pid); // Traders & Barbarians: deliveries + the last wagon upgrade
+  if (s.harbormaster && s.harbormaster.owner === pid) vp += HARBORMASTER_VP; // Harbormaster variant
   if (s.caravans) vp += Caravans.camelVP(s, pid); // Caravans: buildings between two camels +1
   return vp;
 }
@@ -537,6 +539,39 @@ function updateLongestRoad(s) {
     } else log(s, '🛣️ Nadie tiene el Camino más largo ahora.');
   }
   s.longestRoad = { owner, len: owner >= 0 ? lens[owner] : 0 };
+}
+
+// ---- Harbormaster variant (config.rules.harbormaster): settlement at a harbour = 1 harbour point,
+// city = 2; the most points (3 or more) hold the Harbormaster card (2 VP). The holder keeps it on a
+// tie; when someone else leads alone it moves, and a tie for the lead without the holder sets it aside.
+export const HARBORMASTER_VP = 2;
+export const HARBORMASTER_MIN = 3;
+export function harborPoints(s, pid) {
+  let n = 0;
+  for (const v in s.buildings) {
+    const b = s.buildings[v];
+    if (b.owner !== pid || s.board.vertices[v].port == null) continue;
+    if (s.barbAttack && BarbAttack.buildingConquered(s, +v)) continue; // Barbarian Attack: a conquered harbour doesn't count
+    n += b.type === 'settlement' ? 1 : 2;
+  }
+  return n;
+}
+function updateHarbormaster(s) {
+  const H0 = s.harbormaster, pts = s.players.map(p => (p.retired ? 0 : harborPoints(s, p.id)));
+  const max = Math.max(...pts);
+  let owner;
+  if (H0.owner >= 0 && pts[H0.owner] >= HARBORMASTER_MIN && pts[H0.owner] === max) owner = H0.owner;
+  else {
+    const top = s.players.filter(p => pts[p.id] === max && max >= HARBORMASTER_MIN);
+    owner = top.length === 1 ? top[0].id : -1;
+  }
+  if (owner !== H0.owner) {
+    if (owner >= 0) {
+      log(s, msg('⚓ @{p} es el Capitán del puerto ({n} puntos de puerto): +2 puntos.', { p: owner, n: pts[owner] }), owner);
+      s.fx.push({ kind: 'harbormaster', pid: owner });
+    } else log(s, '⚓ Nadie es Capitán del puerto por ahora.');
+  }
+  s.harbormaster = { owner, count: owner >= 0 ? pts[owner] : 0 };
 }
 
 function updateLargestArmy(s, pid) {
@@ -2582,6 +2617,7 @@ export function applyAction(s, a) {
     if (s.trade && a.pid === s.current && !TRADE_ACTIONS.has(a.type)) s.trade = null;
     h(s, a);
     s.actions++;
+    if (s.harbormaster && s.phase !== 'gameOver') updateHarbormaster(s); // Harbormaster variant
     checkWin(s);
     return { ok: true };
   } catch (e) {

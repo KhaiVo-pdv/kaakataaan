@@ -17,7 +17,7 @@ export function defaultConfig() {
     rules: {
       vpTarget: 10, handLimit: 7, setupRounds: 2, setupCity: false, friendlyRobber: false, robberGrace: 0,
       startBonus: 0, productionMult: 1, devDeck: 'normal', diceMode: 'random',
-      maxRoads: 15, maxSettlements: 5, maxCities: 4, randomStart: true, noRobber: false,
+      maxRoads: 15, maxSettlements: 5, maxCities: 4, randomStart: true, noRobber: false, harbormaster: false,
     },
     // expansions (see expansions.js): all off = the base game
     expansions: defaultExpansions(),
@@ -35,6 +35,8 @@ export const MODES = [
   { id: 'chaos', icon: '🌀', name: 'Tierra viva', desc: 'Cada 3 rondas los números (o los recursos) del mapa se barajan.', get: c => c.modes.chaosEvery > 0, set: (c, v) => (c.modes.chaosEvery = v ? 3 : 0) },
   { id: 'balancedDice', icon: '🃏', name: 'Dados equilibrados', desc: 'Los dados salen de un mazo de 36 cartas: la estadística se cumple.', get: c => c.rules.diceMode === 'balanced', set: (c, v) => (c.rules.diceMode = v ? 'balanced' : 'random') },
   { id: 'friendlyRobber', icon: '😇', name: 'Ladrón amable', desc: 'El ladrón no puede atacar a jugadores con 2 puntos o menos.', get: c => c.rules.friendlyRobber, set: (c, v) => (c.rules.friendlyRobber = v) },
+  // Harbormaster (Traders & Barbarians variant, works with any game): the target goes up by 1 with it
+  { id: 'harbormaster', icon: '⚓', name: 'Capitán del puerto', desc: 'Poblado junto a un puerto = 1 punto de puerto, ciudad = 2. Quien tenga más (al menos 3) gana 2 puntos. Se juega a 1 punto más.', get: c => !!c.rules.harbormaster, set: (c, v) => { if (v !== !!c.rules.harbormaster) c.rules.vpTarget += v ? 1 : -1; c.rules.harbormaster = v; } },
   { id: 'noRobber', icon: '🚫', name: 'Sin ladrón', desc: 'Sacar 7 solo obliga a descartar. Nadie roba.', get: c => c.rules.noRobber, set: (c, v) => (c.rules.noRobber = v) },
   { id: 'setupCity', icon: '🏰', name: 'Ciudad inicial', desc: 'Tu segunda colocación inicial es directamente una ciudad.', get: c => c.rules.setupCity, set: (c, v) => (c.rules.setupCity = v) },
   { id: 'doubleProd', icon: '⚡', name: 'Turbo', desc: 'Toda la producción es doble. Partidas explosivas.', get: c => c.rules.productionMult > 1, set: (c, v) => (c.rules.productionMult = v ? 2 : 1) },

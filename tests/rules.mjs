@@ -1,6 +1,6 @@
 // Targeted rule tests. Usage: node tests/rules.mjs
 import * as G from '../js/engine/game.js';
-import { defaultConfig } from '../js/engine/config.js';
+import { defaultConfig, MODES } from '../js/engine/config.js';
 import { botAct } from '../js/engine/bot.js';
 import { seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, EXPANSIONS } from '../js/engine/expansions.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
@@ -1651,6 +1651,43 @@ t('Mercaderes y bárbaros: sin 2 ni 12, el 7 y el caballero mueven bárbaros, es
   ok(act(s3, { type: 'playDev', pid: 0, card: 'swiftJourney' }).ok, 'viaje rápido');
   eq(Traders.mpLeft(s3, 0), 4, '4 puntos más');
   ok(!Traders.stopped(s3, 0), 'puede salir de la plaza');
+});
+
+t('Capitán del puerto: puntos de puerto, al menos 3, el que lo tiene lo conserva en empate', () => {
+  const base = G.createGame(defaultConfig());
+  ok(base.harbormaster === undefined, 'el juego base no lo tiene');
+  const c = defaultConfig();
+  const hm = MODES.find(m => m.id === 'harbormaster');
+  hm.set(c, true);
+  eq(c.rules.vpTarget, 11, 'se juega a 1 punto más');
+  hm.set(c, true);
+  eq(c.rules.vpTarget, 11, 'no suma dos veces');
+  const s = G.createGame(c), b = s.board;
+  s.phase = 'main'; s.current = 0; s.turn = 5;
+  s.buildings = {}; s.roads = {};
+  const portV = b.vertices.filter(v => v.port != null).map(v => v.id);
+  const vp0 = G.victoryPoints(s, 0);
+  s.buildings[portV[0]] = { owner: 0, type: 'settlement' };
+  s.buildings[portV[2]] = { owner: 0, type: 'settlement' };
+  act(s, { type: 'endTurn', pid: 0 }); // any action refreshes the card
+  eq(G.harborPoints(s, 0), 2, '2 poblados = 2 puntos');
+  eq(s.harbormaster.owner, -1, 'menos de 3: nadie');
+  s.current = 0; s.phase = 'main';
+  s.buildings[portV[0]].type = 'city';
+  act(s, { type: 'endTurn', pid: 0 });
+  eq(G.harborPoints(s, 0), 3, 'ciudad = 2');
+  eq(s.harbormaster.owner, 0, 'con 3 es Capitán');
+  eq(G.victoryPoints(s, 0), vp0 + 3 + 2, 'ciudad + poblado + 2 del Capitán');
+  // a rival ties: the holder keeps it; then leads alone: it moves
+  s.current = 1; s.phase = 'main';
+  s.buildings[portV[4]] = { owner: 1, type: 'city' };
+  s.buildings[portV[6]] = { owner: 1, type: 'settlement' };
+  act(s, { type: 'endTurn', pid: 1 });
+  eq(s.harbormaster.owner, 0, 'empate: lo conserva');
+  s.current = 1; s.phase = 'main';
+  s.buildings[portV[6]].type = 'city';
+  act(s, { type: 'endTurn', pid: 1 });
+  eq(s.harbormaster.owner, 1, 'pasa al que tiene más');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

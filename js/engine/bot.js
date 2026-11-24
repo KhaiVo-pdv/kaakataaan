@@ -74,6 +74,7 @@ function vertexScore(s, pid, v, prod) {
   if (V.port !== null && V.port !== undefined) {
     const port = s.board.ports[V.port];
     score += port.type === 'any' ? 1 : prod[port.type] >= 4 ? 2.2 : 0.4;
+    if (s.harbormaster) score += 0.8; // Harbormaster variant: harbour points are worth chasing
   }
   return score;
 }

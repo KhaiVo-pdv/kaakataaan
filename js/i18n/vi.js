@@ -1583,4 +1583,10 @@ export default {
   "📖 Reglas de Mercaderes y bárbaros": "📖 Luật Traders & Barbarians",
   "🛒 Lleva mercancías con tu carromato entre las plazas: cada entrega da 1 punto y oro.": "🛒 Dùng xe chở hàng giữa các quảng trường: mỗi lần giao được 1 điểm và vàng.",
   "🛒 Reglas de Mercaderes y bárbaros": "🛒 Luật Traders & Barbarians",
+  "Capitán del puerto": "Trưởng cảng",
+  "Poblado junto a un puerto = 1 punto de puerto, ciudad = 2. Quien tenga más (al menos 3) gana 2 puntos. Se juega a 1 punto más.": "Nhà cạnh cảng = 1 điểm cảng, thành phố = 2. Ai nhiều nhất (ít nhất 3) được 2 điểm thắng. Cần thêm 1 điểm để thắng.",
+  "Puntos de puerto: poblado junto a un puerto 1, ciudad 2. Capitán del puerto (al menos 3): +2": "Điểm cảng: nhà cạnh cảng 1, thành phố 2. Trưởng cảng (ít nhất 3): +2",
+  "⚓ @{p} es el Capitán del puerto ({n} puntos de puerto): +2 puntos.": "⚓ @{p} trở thành Trưởng cảng ({n} điểm cảng): +2 điểm.",
+  "⚓ Nadie es Capitán del puerto por ahora.": "⚓ Hiện chưa ai là Trưởng cảng.",
+  "⚓ {name} es el Capitán del puerto: +2 puntos": "⚓ {name} là Trưởng cảng: +2 điểm",
 };
