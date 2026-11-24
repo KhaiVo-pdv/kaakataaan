@@ -783,9 +783,10 @@ export function botAct(real, pid) {
     case 'robber':
       return robber(s, pid);
     case 'roadBuilding': {
-      const e = bestRoad(s, pid);
+      const roadsLeft = s.players[pid].roadsLeft > 0; // out of roads: ships only (Seafarers), else stop
+      const e = roadsLeft ? bestRoad(s, pid) : null;
       if (e !== null) return { type: 'build', pid, what: 'road', at: e };
-      const any = legalRoads(s, pid);
+      const any = roadsLeft ? legalRoads(s, pid) : [];
       if (any.length) return { type: 'build', pid, what: 'road', at: any[0] };
       if (seafarersOn(s) && s.players[pid].shipsLeft > 0) {
         const sh = bestShip(s, pid) ?? legalShips(s, pid)[0];

@@ -1867,6 +1867,19 @@ t('Catan para dos: fichas de comercio (ganar, intercambio forzado, ladrón al de
   eq(Two.settlementTokens(s.board, coast.id), 1, 'costa: 1');
 });
 
+t('Bot: construir caminos gratis sin caminos en la reserva usa barcos o termina', () => {
+  const c = defaultConfig(); c.expansions = { ...c.expansions, seafarers: true };
+  c.players.forEach(p => { p.kind = 'bot'; });
+  const s = G.createGame(c);
+  // play the setup with bots
+  for (let i = 0; i < 400 && s.phase === 'setup'; i++) { const pid = G.pendingActors(s)[0]; act(s, botAct(s, pid)); }
+  s.phase = 'roadBuilding'; s.freeRoads = 2; s.current = 0;
+  s.players[0].roadsLeft = 0;
+  const a = botAct(s, 0);
+  ok(a.what !== 'road', 'no intenta poner un camino (' + JSON.stringify(a) + ')');
+  ok(act(s, a).ok, 'la acción es legal');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {
