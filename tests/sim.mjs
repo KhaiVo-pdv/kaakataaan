@@ -126,6 +126,15 @@ function check(s, where) {
     for (const e in s.caravans.camels) if (s.board.edges[e].hexes.length !== 2 || s.board.edges[e].hexes.includes(s.board.oasis)) errs.push(`camello mal puesto ${e}`);
     if (s.board.robber === s.board.oasis) errs.push('ladrón en el oasis');
   }
+  // Traders & Barbarians: 36 commodities (stacks + wagons + delivered), no Longest Road, gold ≥ 0
+  if (s.traders) {
+    const T = s.traders;
+    const n = Object.values(T.stacks).reduce((x, st) => x + st.length, 0) + Object.values(T.wagons).reduce((x, w) => x + (w.cargo ? 1 : 0) + w.delivered, 0);
+    if (n !== 36) errs.push(`mercancías: ${n}`);
+    if (s.longestRoad.owner !== -1) errs.push('camino más largo en Mercaderes');
+    if (s.players.some(p => p.gold < 0)) errs.push('oro negativo');
+    if (Object.values(T.wagons).some(w => w.level < 1 || w.level > 5)) errs.push('nivel de carromato');
+  }
   // Barbarian Attack: 36 barbarians (board + supply + prisoners), at most 3 per hex, 6 knights each
   if (s.barbAttack) {
     const B = s.barbAttack;

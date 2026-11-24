@@ -10,6 +10,7 @@ import {
 import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
 import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
+import * as Traders from './tradersBarbarians/traders.js';
 import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
@@ -228,6 +229,7 @@ function chooseTarget(s, pid) {
   if (spots.length) opts.push({ what: 'settlement', cost: COSTS.settlement, w: 0 });
   else if (seafarersOn(s) && p.shipsLeft > 0 && p.settlementsLeft > 0 && bestShip(s, pid) !== null) opts.push({ what: 'ship', cost: SHIP_COST, w: 0.25 });
   else if (p.roadsLeft > 0 && p.settlementsLeft > 0 && bestRoad(s, pid) !== null) opts.push({ what: 'road', cost: COSTS.road, w: 0.3 });
+  if (s.traders && Traders.nextLevel(s, pid)) opts.push({ what: 'wagon', cost: Traders.nextLevel(s, pid).cost, w: 0.2 + s.traders.wagons[pid].level * 0.25 }); // Traders & Barbarians: a better wagon
   if (s.devDeck.length || s.barbAttack) opts.push({ what: 'dev', cost: COSTS.dev, w: s.barbAttack ? baCardWeight(s, pid) : 1.2 });
   if (!opts.length) return null;
   return best(opts, o => -(missing(p.res, o.cost).n + o.w));
@@ -518,7 +520,9 @@ function mainAction(s, pid) {
   if (river) return river;
   const knight = s.barbAttack && baKnightMove(s, pid); // Barbarian Attack: knights march on the barbarians
   if (knight) return knight;
-  if (s.barbAttack && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
+  const wagon = s.traders && tbWagonAction(s, pid); // Traders & Barbarians: upgrade, boost and drive the wagon
+  if (wagon) return wagon;
+  if ((s.barbAttack || s.traders) && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
     const t = chooseTarget(s, pid), need = t && missing(s.players[pid].res, t.cost);
     if (need && need.n === 1) {
       const r = Object.keys(need.m)[0];
@@ -678,8 +682,10 @@ function robber(s, pid) {
   return { type: 'moveRobber', pid, tile, victim: pickVictim(stealTargets(s, pid, tile)) };
 }
 
+let REAL = null; // the full state: the wagon pays real tolls even on roads fog hides
 export function botAct(real, pid) {
   if (real.phase === 'gameOver') return null;
+  REAL = real;
   const s = viewFor(real, pid); // in fog mode bots only know what they can see
   if (!pendingActors(s).includes(pid)) return null;
   if (s.phase === 'discard') return s.pendingDiscards[pid] ? discard(s, pid) : null;
@@ -875,4 +881,21 @@ export function baKnightMove(s, pid) {
     }
   }
   return bestMove;
+}
+
+// ---------------- Traders & Barbarians: the wagon ----------------
+function tbWagonAction(view, pid) {
+  const s = REAL && REAL.traders ? REAL : view;
+  const p = s.players[pid], next = Traders.nextLevel(s, pid);
+  if (next && canAfford(p.res, next.cost)) {
+    const tgt = chooseTarget(s, pid);
+    if (!tgt || tgt.what === 'wagon' || s.traders.wagons[pid].level < 2) return { type: 'tbUpgrade', pid };
+  }
+  if (Traders.wagonAt(s, pid) == null || Traders.stopped(s, pid)) return null;
+  const plan = Traders.wagonPlan(s, pid);
+  if (plan.goal == null) return null;
+  const reaches = pl => pl.steps.length && pl.steps[pl.steps.length - 1].to === pl.goal;
+  if (!reaches(plan) && !Traders.boostUsed(s, pid) && p.res.wheat >= 1 && reaches(Traders.wagonPlan(s, pid, Traders.mpLeft(s, pid) + Traders.BOOST_MP)))
+    return { type: 'tbBoost', pid };
+  return plan.steps.length ? { type: 'tbMove', pid, to: plan.steps[0].to } : null;
 }

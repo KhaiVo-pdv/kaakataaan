@@ -7,6 +7,7 @@ import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Fish from '../js/engine/tradersBarbarians/fishermen.js';
 import * as Rivers from '../js/engine/tradersBarbarians/rivers.js';
 import * as Caravans from '../js/engine/tradersBarbarians/caravans.js';
+import * as Traders from '../js/engine/tradersBarbarians/traders.js';
 import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
@@ -1523,6 +1524,65 @@ t('Mercaderes y bárbaros: 3 casillas de comercio con plaza, sin 2 ni 12, bárba
   // base boards are untouched
   const base = G.createGame(defaultConfig());
   ok(!base.board.trade && !base.traders && base.board.vertices.every(v => v.plaza == null), 'el juego base no cambia');
+});
+
+t('Mercaderes y bárbaros: el carromato se mueve, paga peajes, carga y entrega', () => {
+  const c = defaultConfig(); c.seed = 7;
+  c.expansions = { tradersBarbarians: true, tbScenario: 'tradersBarbarians' };
+  const s = G.createGame(c), b = s.board, T = s.traders;
+  s.phase = 'main'; s.current = 0; s.turn = 5;
+  s.buildings = {}; s.roads = {}; T.barbarians = [];
+  const tr = b.trade[0], plaza = tr.plaza, inner = b.edges[tr.inner[0]];
+  const corner = inner.a === plaza ? inner.b : inner.a;
+  // start two steps away: corner's other neighbour -> corner -> plaza
+  const e0 = b.vertices[corner].edges.find(e => !b.edges[e].inner);
+  const start = b.edges[e0].a === corner ? b.edges[e0].b : b.edges[e0].a;
+  T.wagons[0].at = start;
+  s.roads[e0] = 1; // a rival road: 1 MP + 1 gold toll
+  const g0 = s.players[0].gold, g1 = s.players[1].gold;
+  ok(act(s, { type: 'tbMove', pid: 0, to: corner }).ok, 'avanza');
+  eq(s.players[0].gold, g0 - 1, 'paga 1 de oro');
+  eq(s.players[1].gold, g1 + 1, 'al dueño del camino');
+  eq(Traders.mpLeft(s, 0), 3, 'gastó 1 punto');
+  ok(!act(s, { type: 'tbMove', pid: 0, to: start + 100000 }).ok, 'solo a un cruce vecino');
+  ok(act(s, { type: 'tbMove', pid: 0, to: plaza }).ok, 'llega a la plaza (sin camino: 2 puntos)');
+  eq(Traders.mpLeft(s, 0), 1, 'le queda 1');
+  ok(T.wagons[0].cargo, 'carga una mercancía');
+  eq(T.stacks[tr.kind].length, 11, 'del montón de esa casilla');
+  ok(Traders.SUPPLIES[tr.kind].includes(T.wagons[0].cargo), 'una de las dos que ofrece');
+  ok(!act(s, { type: 'tbMove', pid: 0, to: corner }).ok, 'en la plaza se detiene hasta el próximo turno');
+  // delivery: put the wagon next to the plaza that needs the cargo
+  const dest = Traders.tradeOfKind(s, Traders.NEEDED_AT[T.wagons[0].cargo]);
+  const de = b.edges[dest.inner[0]], dc = de.a === dest.plaza ? de.b : de.a;
+  s.turn = 6; T.wagons[0].at = dc;
+  const vp = G.victoryPoints(s, 0), gold = s.players[0].gold;
+  ok(act(s, { type: 'tbMove', pid: 0, to: dest.plaza }).ok, 'llega al destino');
+  eq(G.victoryPoints(s, 0), vp + 1, '+1 punto');
+  eq(s.players[0].gold, gold + 1, '+1 de oro (nivel 1)');
+  eq(T.wagons[0].delivered, 1, 'una entrega');
+  ok(T.wagons[0].cargo, 'y carga la siguiente allí');
+  // barbarian: +2 MP
+  s.turn = 7; s.roads = {};
+  T.barbarians = [e0]; T.wagons[0].at = start;
+  eq(Traders.pathCost(s, 0, e0).mp, 4, 'sin camino y con bárbaro: 4');
+  ok(act(s, { type: 'tbMove', pid: 0, to: corner }).ok, 'cuesta 4 de 4');
+  ok(!act(s, { type: 'tbMove', pid: 0, to: start }).ok, 'ya no le quedan puntos');
+  // grain boost once per turn; upgrades
+  give(s, 0, { wheat: 2 });
+  ok(act(s, { type: 'tbBoost', pid: 0 }).ok, '1 cereal: +2');
+  eq(Traders.mpLeft(s, 0), 2, 'ahora 2');
+  ok(!act(s, { type: 'tbBoost', pid: 0 }).ok, 'solo una vez');
+  for (let lv = 2; lv <= 5; lv++) {
+    give(s, 0, Traders.WAGON_LEVELS[lv - 1].cost);
+    ok(act(s, { type: 'tbUpgrade', pid: 0 }).ok, 'mejora a ' + lv);
+  }
+  eq(T.wagons[0].level, 5, 'nivel 5');
+  ok(!act(s, { type: 'tbUpgrade', pid: 0 }).ok, 'no hay más');
+  eq(G.victoryPoints(s, 0), vp + 2, 'el nivel 5 da 1 punto');
+  // no Longest Road; gold buys resources
+  eq(s.longestRoad.owner, -1, 'sin camino más largo');
+  s.players[0].gold = 4;
+  ok(act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'oro → recurso');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

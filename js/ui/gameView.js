@@ -18,6 +18,7 @@ import * as Fishr from './fishermenUI.js';
 import * as Riv from './riversUI.js';
 import * as Car from './caravansUI.js';
 import * as BaUI from './barbarianAttackUI.js';
+import * as TrUI from './tradersUI.js';
 
 let ui = null;
 
@@ -821,6 +822,7 @@ function renderPlayers(st, v) {
         ...Riv.riverStats(st, p, { h }), // Traders & Barbarians: gold, bridges, Wealthiest / Poor
         ...Car.caravanStats(st, p, { h }), // Traders & Barbarians: points from camels
         ...BaUI.baStats(st, p, { h }), // Barbarian Attack: gold, knights, prisoners
+        ...TrUI.tradersStats(st, p, { h }), // Traders & Barbarians: wagon, cargo, deliveries
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
         st.pendingDiscards[p.id] ? h('span', { style: { color: 'var(--red)' } }, `🗑️ ${st.pendingDiscards[p.id]}`) : null));
@@ -982,6 +984,7 @@ function fillActions(bar, st, v, locked) {
     ...Riv.riverButtons(st, v, ui, { h, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Rivers
     ...BaUI.baKnightButtons(st, v, ui, { h, rerender: () => render(App.state) }), // Barbarian Attack: move a knight
     ...BaUI.baGoldButton(st, v, { h, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Barbarian Attack: gold
+    ...TrUI.tradersButtons(st, v, { h, dispatch: a => App.dispatch(a), costIcons, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Traders & Barbarians: wagon
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
     h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => App.dispatch({ type: 'endTurn', pid: v }) }, t('✅ Terminar')));
@@ -1019,7 +1022,7 @@ function speedControl() {
 
 function describe(a, st) {
   if (!a) return t('Nada que hacer ahora.');
-  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a) || Fishr.fishDescribe(a) || Riv.riverDescribe(a) || Car.caravanDescribe(a, st) || BaUI.baDescribe(a, st); // expansion moves
+  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a) || Fishr.fishDescribe(a) || Riv.riverDescribe(a) || Car.caravanDescribe(a, st) || BaUI.baDescribe(a, st) || TrUI.tradersDescribe(a); // expansion moves
   if (sea) return sea;
   switch (a.type) {
     case 'roll': return t('Tira los dados.');

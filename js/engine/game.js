@@ -174,7 +174,7 @@ export function createGame(configIn) {
   }
   if (s.traders) {
     log(s, msg('🛒 Castillo, cantera y vidriería esperan mercancías; {n} bárbaros cortan los caminos. Cada jugador empieza con {g} de oro.', { n: s.traders.barbarians.length, g: Traders.START_GOLD }));
-    log(s, '🚧 Mercaderes y bárbaros está en construcción: los carromatos, las mercancías y los bárbaros llegarán en las próximas versiones.');
+    log(s, '🚧 Mercaderes y bárbaros está en construcción: espantar bárbaros, el 7 y las cartas llegarán en la próxima versión.');
   }
   if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {
@@ -267,6 +267,7 @@ export function victoryPoints(s, pid, hidden = true) {
   if (s.merchant) vp += TradeCards.merchantVP(s, pid); // Cities & Knights merchant piece
   if (s.rivers) vp += Rivers.wealthVP(s, pid); // Rivers: Wealthiest Settler +1 / Poor Settler -2
   if (s.barbAttack) vp += BarbAttack.prisonerVP(s.players[pid]); // Barbarian Attack: 2 prisoners = 1 VP
+  if (s.traders) vp += Traders.wagonVP(s, pid); // Traders & Barbarians: deliveries + the last wagon upgrade
   if (s.caravans) vp += Caravans.camelVP(s, pid); // Caravans: buildings between two camels +1
   return vp;
 }
@@ -518,6 +519,7 @@ function roadLength(s, pid) {
 }
 
 function updateLongestRoad(s) {
+  if (s.traders) { for (const p of s.players) p.roadLen = p.retired ? 0 : roadLength(s, p.id); return; } // Traders & Barbarians: no Longest Road card
   const lens = s.players.map(p => (p.roadLen = p.retired ? 0 : roadLength(s, p.id)));
   const cur = s.longestRoad.owner;
   const max = Math.max(...lens);
@@ -1223,7 +1225,7 @@ H.buildBridge = (s, a) => {
 };
 
 H.goldBuy = (s, a) => {
-  if (!s.rivers && !s.barbAttack) fail('No hay oro en esta partida.');
+  if (!Rivers.goldBox(s)) fail('No hay oro en esta partida.');
   assertMain(s, a);
   const p = s.players[a.pid];
   if (!RES.includes(a.res)) fail('Elige un recurso.');
@@ -1240,7 +1242,7 @@ H.goldBuy = (s, a) => {
 };
 
 H.goldSell = (s, a) => {
-  if (!s.rivers && !s.barbAttack) fail('No hay oro en esta partida.');
+  if (!Rivers.goldBox(s)) fail('No hay oro en esta partida.');
   assertMain(s, a);
   const p = s.players[a.pid];
   if (!RES.includes(a.give)) fail('Elige un recurso.');
@@ -1422,6 +1424,86 @@ function baBattles(s) {
     s.fx.push({ kind: 'baBattle', ...r });
   }
 }
+
+// ---- Traders & Barbarians: the wagon ----
+const GOODS = { marble: '🏛️ mármol', glass: '🔷 vidrio', tools: '🔨 herramientas', sand: '⏳ arena' };
+const TRADE_NAMES = { castle: '🏰 castillo', quarry: '⛏️ cantera', glassworks: '🏺 vidriería' };
+
+// one step along a path to the next intersection
+H.tbMove = (s, a) => {
+  assertMain(s, a);
+  if (!s.traders) fail('No hay carromatos en esta partida.');
+  const p = s.players[a.pid], from = Traders.wagonAt(s, a.pid);
+  if (from == null) fail('Tu carromato aún no está en el tablero.');
+  const M = Traders.turnMove(s, a.pid);
+  if (M.stopped) fail('Tu carromato ya se detuvo en una plaza este turno.');
+  const e = s.board.vertices[from].edges.find(x => Traders.otherEnd(s, x, from) === a.to);
+  if (e === undefined) fail('El carromato solo avanza a un cruce vecino.');
+  const c = Traders.pathCost(s, a.pid, e);
+  if (c.mp > M.mp) fail('No te quedan puntos de movimiento.');
+  if (c.toll > p.gold) fail('Te falta oro para el peaje.');
+  M.mp -= c.mp;
+  if (c.toll) {
+    p.gold -= c.toll;
+    s.players[c.owner].gold += c.toll;
+    log(s, msg('🪙 @{p} paga {n} de oro de peaje a @{o}.', { p: a.pid, n: c.toll, o: c.owner }), a.pid);
+  }
+  const W = s.traders.wagons[a.pid];
+  W.at = a.to;
+  s.fx.push({ kind: 'tbWagon', pid: a.pid, from, to: a.to });
+  if (Traders.isPlaza(s, a.to)) {
+    M.stopped = true; // the wagon must stop at a plaza
+    tbArrive(s, a.pid, s.board.vertices[a.to].plaza);
+  }
+};
+
+// at a trade hex's plaza: deliver what it needs, then take the next commodity there
+function tbArrive(s, pid, hex) {
+  const T = s.traders, W = T.wagons[pid], kind = Traders.tradeAt(s, hex).kind, p = s.players[pid];
+  if (W.cargo && Traders.NEEDED_AT[W.cargo] === kind) {
+    const lv = Traders.wagonLevel(s, pid);
+    W.delivered++;
+    p.gold += lv.gold;
+    log(s, msg('📦 @{p} entrega {g} en el {k}: +1 punto y {n} de oro.', { p: pid, g: GOODS[W.cargo], k: TRADE_NAMES[kind], n: lv.gold }), pid);
+    s.fx.push({ kind: 'tbDeliver', pid, good: W.cargo, at: hex, gold: lv.gold });
+    W.cargo = null;
+  }
+  if (!W.cargo && T.stacks[kind].length) {
+    W.cargo = T.stacks[kind].pop();
+    log(s, msg('📦 @{p} carga {g} en el {k}: hay que llevarlo al {d}.', { p: pid, g: GOODS[W.cargo], k: TRADE_NAMES[kind], d: TRADE_NAMES[Traders.NEEDED_AT[W.cargo]] }), pid);
+    s.fx.push({ kind: 'tbLoad', pid, good: W.cargo, at: hex });
+  }
+  checkWin(s);
+}
+
+// 1 grain: +2 movement points this turn (once per turn)
+H.tbBoost = (s, a) => {
+  assertMain(s, a);
+  if (!s.traders) fail('No hay carromatos en esta partida.');
+  if (Traders.boostUsed(s, a.pid)) fail('Solo una vez por turno.');
+  if (!canAfford(s.players[a.pid].res, Traders.BOOST_COST)) fail('Te faltan recursos.');
+  pay(s, a.pid, Traders.BOOST_COST);
+  const M = Traders.turnMove(s, a.pid);
+  M.boost = true;
+  M.mp += Traders.BOOST_MP;
+  log(s, msg('🌾 @{p} da cereal a los bueyes: +{n} de movimiento.', { p: a.pid, n: Traders.BOOST_MP }), a.pid);
+};
+
+// upgrade the baggage train to the next level
+H.tbUpgrade = (s, a) => {
+  assertMain(s, a);
+  if (!s.traders) fail('No hay carromatos en esta partida.');
+  const next = Traders.nextLevel(s, a.pid);
+  if (!next) fail('Tu carromato ya está al máximo.');
+  if (!canAfford(s.players[a.pid].res, next.cost)) fail('Te faltan recursos.');
+  pay(s, a.pid, next.cost);
+  const W = s.traders.wagons[a.pid], M = s.traders.move;
+  W.level = next.level;
+  if (M && M.turn === s.turn && M.pid === a.pid) M.mp += next.mp - Traders.WAGON_LEVELS[next.level - 2].mp; // the extra MP count at once
+  s.fx.push({ kind: 'tbUpgrade', pid: a.pid, level: next.level });
+  log(s, msg('🛒 @{p} mejora su carromato al nivel {n}.', { p: a.pid, n: next.level }) , a.pid);
+  checkWin(s);
+};
 
 // ---- Cities & Knights barbarians ----
 // the ship moves one step; on landing the attack is fought. True while losers must still pick a city.

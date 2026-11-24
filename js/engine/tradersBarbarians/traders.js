@@ -181,3 +181,85 @@ export function wagonAt(s, pid) {
   return k != null ? +k : null;
 }
 export const wagonLevel = (s, pid) => WAGON_LEVELS[s.traders.wagons[pid].level - 1];
+
+// ---------------- the wagon: moving, commodities, upgrades ----------------
+export const BOOST_MP = 2; // 1 grain, once per turn
+export const BOOST_COST = { wheat: 1 };
+export const TOLL = 1; // gold to the owner of a rival road
+export const BARBARIAN_MP = 2;
+export const deliveryVP = p => (p.delivered || 0);
+export const wagonVP = (s, pid) => (s.traders.wagons[pid].delivered || 0) + (WAGON_LEVELS[s.traders.wagons[pid].level - 1].vp || 0);
+export const nextLevel = (s, pid) => WAGON_LEVELS[s.traders.wagons[pid].level] || null;
+
+// this turn's movement points (created on the first move / boost of the turn)
+export function turnMove(s, pid) {
+  const T = s.traders;
+  if (!T.move || T.move.turn !== s.turn || T.move.pid !== pid) T.move = { turn: s.turn, pid, mp: wagonLevel(s, pid).mp, boost: false, stopped: false };
+  return T.move;
+}
+export const mpLeft = (s, pid) => (s.traders.move && s.traders.move.turn === s.turn && s.traders.move.pid === pid ? s.traders.move.mp : wagonLevel(s, pid).mp);
+export const boostUsed = (s, pid) => !!(s.traders.move && s.traders.move.turn === s.turn && s.traders.move.pid === pid && s.traders.move.boost);
+export const stopped = (s, pid) => !!(s.traders.move && s.traders.move.turn === s.turn && s.traders.move.pid === pid && s.traders.move.stopped);
+
+// what moving along path e costs pid: MP, and a toll to the owner of a rival road
+export function pathCost(s, pid, e) {
+  const owner = s.roads[e];
+  let mp = owner === undefined ? 2 : 1;
+  if (s.traders.barbarians.includes(e)) mp += BARBARIAN_MP;
+  const toll = owner !== undefined && owner !== pid ? TOLL : 0;
+  return { mp, toll, owner };
+}
+// the vertex at the other end of path e
+export const otherEnd = (s, e, v) => (s.board.edges[e].a === v ? s.board.edges[e].b : s.board.edges[e].a);
+
+// the commodity's destination (trade kind), or — with an empty wagon — null
+export const cargoDest = (s, pid) => { const c = s.traders.wagons[pid].cargo; return c ? NEEDED_AT[c] : null; };
+// where the wagon should head: the plaza that needs its cargo, else the nearest plaza with goods left
+export function wagonGoals(s, pid) {
+  const dest = cargoDest(s, pid);
+  if (dest) return [tradeOfKind(s, dest).plaza];
+  return s.board.trade.filter(t => s.traders.stacks[t.kind].length > 0).map(t => t.plaza);
+}
+
+// cheapest routes from the wagon (Dijkstra on MP, a toll counting as half a point); a plaza ends a
+// route (the wagon must stop there). Returns { cost: Map v -> mp, prev: Map v -> [v, e], gold: Map v -> tolls }.
+export function wagonRoutes(s, pid, from = wagonAt(s, pid)) {
+  const bd = s.board, cost = new Map([[from, 0]]), key = new Map([[from, 0]]), prev = new Map(), gold = new Map([[from, 0]]);
+  const open = [from];
+  while (open.length) {
+    open.sort((a, b) => key.get(a) - key.get(b));
+    const v = open.shift();
+    if (v !== from && isPlaza(s, v)) continue;
+    for (const e of bd.vertices[v].edges) {
+      const u = otherEnd(s, e, v), c = pathCost(s, pid, e);
+      const k = key.get(v) + c.mp + c.toll * 0.5;
+      if (!key.has(u) || k < key.get(u)) {
+        key.set(u, k);
+        cost.set(u, cost.get(v) + c.mp);
+        gold.set(u, gold.get(v) + c.toll);
+        prev.set(u, [v, e]);
+        if (!open.includes(u)) open.push(u);
+      }
+    }
+  }
+  return { cost, prev, gold };
+}
+// the next steps along the cheapest route to the nearest goal that fit in mp (and the gold in hand)
+export function wagonPlan(s, pid, mp = mpLeft(s, pid)) {
+  const goals = wagonGoals(s, pid);
+  const R = wagonRoutes(s, pid);
+  const goal = goals.filter(g => R.cost.has(g)).sort((a, b) => R.cost.get(a) - R.cost.get(b))[0];
+  if (goal == null) return { goal: null, steps: [], total: Infinity };
+  const path = [];
+  for (let v = goal; R.prev.has(v); v = R.prev.get(v)[0]) path.unshift({ to: v, e: R.prev.get(v)[1] });
+  const steps = [];
+  let left = mp, gold = s.players[pid].gold;
+  for (const st of path) {
+    const c = pathCost(s, pid, st.e);
+    if (c.mp > left || c.toll > gold) break;
+    left -= c.mp;
+    gold -= c.toll;
+    steps.push(st);
+  }
+  return { goal, steps, total: R.cost.get(goal) };
+}
