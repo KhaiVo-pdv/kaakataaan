@@ -30,6 +30,8 @@ import { makeFishingGround } from './fishermen3d.js';
 import { makeBridge, makeBridgeSpot } from './rivers3d.js';
 import { makeCamel, makePalm, makeArrow } from './caravans3d.js';
 import { makeCastle, makeBarbarian, makeKnight as makeBaKnight } from './barbarianAttack3d.js';
+import { makeQuarry, makeGlassworks, makeWagon } from './traders3d.js';
+import { wagonAt as tbWagonAt } from '../engine/tradersBarbarians/traders.js';
 import { camelPose, spotLetter } from './caravans2d.js';
 import { LAKE_NUMS } from '../engine/tradersBarbarians/fishermen.js';
 
@@ -1132,7 +1134,7 @@ export class Board3D {
     if (!st) return null;
     const bd = st.board;
     const vy = v => Math.max(this.heightAt(bd.vertices[v].x, bd.vertices[v].y), 0.05);
-    if (kind === 'settlement' || kind === 'city') {
+    if (kind === 'settlement' || kind === 'city' || kind === 'wagon') {
       const V = bd.vertices[id];
       if (!V) return null;
       return { x: V.x, y: vy(id) + (kind === 'city' ? 0.45 : 0.08), z: V.y };
@@ -1650,6 +1652,33 @@ export class Board3D {
         this.staticGroup.add(tok);
       }
     }
+    // ---- Traders & Barbarians: the trade hexes' buildings, plaza and inner tracks
+    for (const T of bd.trade || []) {
+      const t = bd.tiles[T.hex];
+      if (!t.revealed) continue;
+      const o = T.kind === 'castle' ? makeCastle() : T.kind === 'quarry' ? makeQuarry() : makeGlassworks();
+      const bx = t.x, bz = t.y - 0.38;
+      o.position.set(bx, this.heightAt(bx, bz) - 0.01, bz);
+      o.scale.setScalar(T.kind === 'castle' ? 1.1 : 1.4);
+      this.staticGroup.add(o);
+      this.tbKit ||= { plaza: new THREE.CylinderGeometry(0.17, 0.17, 0.03, 16), track: new THREE.BoxGeometry(1, 0.015, 0.06), stone: new THREE.MeshStandardMaterial({ color: 0xcdb892, roughness: 0.9 }), dirt: new THREE.MeshStandardMaterial({ color: 0x7a6040, roughness: 1 }) };
+      const P = bd.vertices[T.plaza];
+      const py = this.heightAt(P.x, P.y);
+      const plaza = new THREE.Mesh(this.tbKit.plaza, this.tbKit.stone);
+      plaza.position.set(P.x, py + 0.02, P.y);
+      plaza.receiveShadow = true;
+      this.staticGroup.add(plaza);
+      for (const e of T.inner) {
+        const E = bd.edges[e], c = bd.vertices[E.a === T.plaza ? E.b : E.a];
+        const len = Math.hypot(c.x - P.x, c.y - P.y);
+        const tr = new THREE.Mesh(this.tbKit.track, this.tbKit.dirt);
+        tr.scale.x = len;
+        tr.position.set((P.x + c.x) / 2, Math.max(py, this.heightAt(c.x, c.y)) + 0.012, (P.y + c.y) / 2);
+        tr.rotation.y = -Math.atan2(c.y - P.y, c.x - P.x);
+        tr.receiveShadow = true;
+        this.staticGroup.add(tr);
+      }
+    }
     // ---- Barbarian Attack: the castle on its coastal hex
     if (bd.castle != null && bd.tiles[bd.castle] && bd.tiles[bd.castle].revealed) {
       const c = bd.tiles[bd.castle];
@@ -2109,7 +2138,7 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, st.barbAttack ? [st.barbAttack.on, st.barbAttack.knights, st.barbAttack.conquered] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, st.barbAttack ? [st.barbAttack.on, st.barbAttack.knights, st.barbAttack.conquered] : null, st.traders ? [st.traders.barbarians, st.traders.wagons, Object.values(st.traders.stacks).map(x => x.length), st.players.map(p => tbWagonAt(st, p.id))] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
       inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b), inter.labels || null], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
@@ -2236,6 +2265,37 @@ export class Board3D {
         o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
         o.scale.setScalar(1.6);
         add(o, 'kn' + e + ':' + B.knights[e], st.players[B.knights[e]].color);
+      }
+    }
+    // Traders & Barbarians: barbarians on their paths, wagons on their intersections, stack counts
+    if (st.traders) {
+      const T = st.traders;
+      for (const e of T.barbarians) {
+        const E = bd.edges[e], a = bd.vertices[E.a], b = bd.vertices[E.b];
+        const o = makeBarbarian();
+        const x = (a.x + b.x) / 2, z = (a.y + b.y) / 2;
+        o.position.set(x, Math.max(vy(E.a), vy(E.b)) + 0.02, z);
+        o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+        o.scale.setScalar(1.8);
+        add(o, 'tbb' + e);
+      }
+      const at = {};
+      for (const p of st.players) { const v = tbWagonAt(st, p.id); if (v != null) (at[v] ||= []).push(p.id); }
+      for (const [v, pids] of Object.entries(at)) {
+        const V = bd.vertices[v];
+        pids.forEach((pid, i) => {
+          const o = makeWagon(st.players[pid].color, T.wagons[pid].cargo);
+          const x = V.x + (i - (pids.length - 1) / 2) * 0.22;
+          o.position.set(x, vy(+v) + 0.02, V.y + 0.12);
+          o.scale.setScalar(1.5);
+          add(o, 'tbw' + pid + ':' + v + ':' + (T.wagons[pid].cargo || ''), st.players[pid].color);
+        });
+      }
+      for (const Tr of bd.trade || []) {
+        const t = bd.tiles[Tr.hex], n = T.stacks[Tr.kind].length;
+        const tag = css2d('tok3d-at', `<div class="tok3d wide">📦${n}</div>`);
+        tag.position.set(t.x - 0.4, this.heightAt(t.x, t.y) + 0.35, t.y + 0.45);
+        this.dynGroup.add(tag);
       }
     }
     for (const e of bd.bridgeSpots || []) {
@@ -2441,11 +2501,16 @@ export class Board3D {
         o.position.set(x, y, z);
         this.dynGroup.add(o);
       };
-      if (inter.kind === 'settlement' || inter.kind === 'city')
+      if (inter.kind === 'settlement' || inter.kind === 'city' || inter.kind === 'wagon')
         for (const v of inter.legal) {
           const V = bd.vertices[v];
           // corners served by a port say so right on the spot
           mk(v, V.x, vy(v) + (inter.kind === 'city' ? 0.45 : 0.08), V.y, 'v' + (inter.kind === 'settlement' && V.port != null ? ' port' : ''));
+          if (inter.labels && inter.labels[v]) { // Traders & Barbarians: what the wagon's move costs
+            const tag = css2d('tok3d-at', `<div class="tok3d wide">${inter.labels[v]}</div>`);
+            tag.position.set(V.x, vy(v) + 0.32, V.y);
+            this.dynGroup.add(tag);
+          }
         }
       else if (inter.kind === 'road')
         for (const e of inter.legal) {

@@ -8,6 +8,8 @@ import { drawFishermen } from './fishermen2d.js';
 import { drawRivers, drawBridge } from './rivers2d.js';
 import { drawCaravans, drawCamelSpots } from './caravans2d.js';
 import { drawBarbarianAttack, drawBaKnights } from './barbarianAttack2d.js';
+import { drawTradeHexes, drawTradersPieces } from './traders2d.js';
+import { wagonAt } from '../engine/tradersBarbarians/traders.js';
 
 const U = 100; // svg units per hex radius
 const hexPoints = (cx, cy, r) =>
@@ -199,6 +201,7 @@ export class BoardView {
       svg.append(gTok);
     }
     if (bd.castle != null) svg.append(drawBarbarianAttack(S, U, st, hexPoints)); // Barbarian Attack: castle, barbarians, conquered hexes
+    if (bd.trade) svg.append(drawTradeHexes(S, U, st, hexPoints)); // Traders & Barbarians: trade hexes, plazas, stacks
     if (bd.islands) svg.append(drawSeaFog(S, U, bd, hexPoints)); // Seafarers: fog over the sea too
 
     // ports
@@ -253,6 +256,7 @@ export class BoardView {
     svg.append(gRoads);
     if (st.caravans && st.caravans.vote) svg.append(drawCamelSpots(S, U, st)); // Caravans: lettered vote spots on top
     if (st.barbAttack) svg.append(drawBaKnights(S, U, st)); // Barbarian Attack: knights on their paths
+    if (st.traders) svg.append(drawTradersPieces(S, U, st, wagonAt)); // Traders & Barbarians: barbarians and wagons
 
     // Seafarers: ships and the pirate
     if (st.ships) {
@@ -311,12 +315,13 @@ export class BoardView {
     }
 
     // hotspots
-    if (inter && (inter.kind === 'settlement' || inter.kind === 'city')) {
+    if (inter && (inter.kind === 'settlement' || inter.kind === 'city' || inter.kind === 'wagon')) { // wagon: Traders & Barbarians
       const g = S('g', { class: 'hot' });
       for (const v of legal) {
         const V = bd.vertices[v];
         g.append(S('circle', { cx: V.x * U, cy: V.y * U, r: 14, class: 'hot-v', style: `--pc:${inter.color || '#fff'}` }));
         g.append(S('circle', { cx: V.x * U, cy: V.y * U, r: 28, class: 'hit', 'data-testid': 'spot', 'data-spot': 'v' + v, onclick: e => pick(v, e) }));
+        if (inter.labels && inter.labels[v]) g.append(S('text', { x: V.x * U, y: V.y * U - 22, class: 'hot-label' }, inter.labels[v])); // e.g. a wagon move's cost
       }
       svg.append(g);
     }

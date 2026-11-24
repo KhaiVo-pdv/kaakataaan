@@ -669,6 +669,8 @@ function interaction(real, v) {
     ?? CK.progressInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), legalCities: G.legalCities, legalRoads: G.legalRoads })
     ?? CK.knightInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (ck !== undefined) return ck;
+  const tb = TrUI.tradersInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); // Traders & Barbarians
+  if (tb !== undefined) return tb;
   const ba = BaUI.baInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), liveRes: () => App.state.players[v].res }); // Barbarian Attack
   if (ba !== undefined) return ba;
   const bridge = Riv.bridgeInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); // Rivers
@@ -740,7 +742,8 @@ function bannerText(st, v, inter) {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
   }
-  if (st.phase === 'tbBarbarian') return st.current === v ? t('🪓 Mueve un bárbaro') : t('🪓 {name} mueve un bárbaro...', { name: cur.name }); // Traders & Barbarians
+  const tbTxt = TrUI.tradersBanner(st, v, ui); // Traders & Barbarians: wagon moves, barbarians
+  if (tbTxt) return tbTxt;
   const baTxt = BaUI.baBanner(st, v, ui); // Barbarian Attack: placing / moving knights, Treason, Intrigue
   if (baTxt) return baTxt;
   if (st.phase === 'baSteal') return st.current === v ? t('🫳 Elige a quién robar una carta') : t('🫳 {name} elige a quién robar...', { name: cur.name }); // Barbarian Attack
@@ -898,6 +901,10 @@ function fillActions(bar, st, v, locked) {
     acts.append(h('button', { class: 'btn primary', onclick: () => openGameOver(App.state) }, t('🏆 Ver resultados')));
     return;
   }
+  if (st.phase === 'tbBarbarian') { // Traders & Barbarians: tap a barbarian, then a free path
+    acts.append(...TrUI.barbarianActions(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }));
+    return;
+  }
   if (st.phase === 'baCard') { // Barbarian Attack: knights / Treason / Intrigue on the board
     acts.append(...BaUI.baCardActions(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }));
     return;
@@ -985,7 +992,7 @@ function fillActions(bar, st, v, locked) {
     ...Riv.riverButtons(st, v, ui, { h, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Rivers
     ...BaUI.baKnightButtons(st, v, ui, { h, rerender: () => render(App.state) }), // Barbarian Attack: move a knight
     ...BaUI.baGoldButton(st, v, { h, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Barbarian Attack: gold
-    ...TrUI.tradersButtons(st, v, { h, dispatch: a => App.dispatch(a), costIcons, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Traders & Barbarians: wagon
+    ...TrUI.tradersButtons(st, v, { h, dispatch: a => App.dispatch(a), costIcons, ui, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Traders & Barbarians: wagon
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
     h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => App.dispatch({ type: 'endTurn', pid: v }) }, t('✅ Terminar')));
@@ -1310,8 +1317,6 @@ function modalContent(st, v) {
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
     return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
-  // Traders & Barbarians: move a barbarian (temporary panel; board taps come with the graphics)
-  if (st.phase === 'tbBarbarian' && st.traders && st.current === v && localHumans(st).includes(v)) return TrUI.barbarianModal(st, v, { h, dispatch: a => App.dispatch(a) });
   // Barbarian Attack: a 7 without a robber — pick who to steal from
   if (st.phase === 'baSteal' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
     const victims = st.players.filter(o => o.id !== v && !o.retired && G.handSize(o.res) > 0);

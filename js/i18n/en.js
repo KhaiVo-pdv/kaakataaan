@@ -1542,4 +1542,10 @@ export default {
   "🫳 @{p} roba una carta a @{o}.": "🫳 @{p} steals a card from @{o}.",
   "Mueve un bárbaro a otro camino; si cae sobre el camino de un rival, le robas 1 recurso.": "Move a barbarian to another path; if it lands on a rival's road, you steal 1 resource.",
   "🚧 Mercaderes y bárbaros está en construcción: el tablero se dibujará en la próxima versión.": "🚧 Traders & Barbarians is under construction: the board graphics arrive in the next version.",
+  "Mueve el carromato: toca en el tablero el cruce adonde quieres ir": "Move the wagon: tap the intersection on the board where you want to go",
+  "Sigue la ruta más barata hacia el destino": "Follow the cheapest route to the goal",
+  "🛒 Toca el cruce adonde va el carromato (número = movimiento, 🪙 = peaje; Esc para cancelar)": "🛒 Tap where the wagon goes (number = movement, 🪙 = toll; Esc to cancel)",
+  "🪓 Toca el bárbaro que quieres mover": "🪓 Tap the barbarian you want to move",
+  "🪓 Toca un camino libre para el bárbaro (🫳 = robas una carta)": "🪓 Tap a free path for the barbarian (🫳 = you steal a card)",
+  "🚧 Mercaderes y bárbaros está en construcción: el panel y las reglas ilustradas llegarán en la próxima versión.": "🚧 Traders & Barbarians is under construction: the panel and illustrated rules arrive in the next version.",
 };

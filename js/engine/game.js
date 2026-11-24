@@ -174,7 +174,7 @@ export function createGame(configIn) {
   }
   if (s.traders) {
     log(s, msg('🛒 Castillo, cantera y vidriería esperan mercancías; {n} bárbaros cortan los caminos. Cada jugador empieza con {g} de oro.', { n: s.traders.barbarians.length, g: Traders.START_GOLD }));
-    log(s, '🚧 Mercaderes y bárbaros está en construcción: el tablero se dibujará en la próxima versión.');
+    log(s, '🚧 Mercaderes y bárbaros está en construcción: el panel y las reglas ilustradas llegarán en la próxima versión.');
   }
   if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {

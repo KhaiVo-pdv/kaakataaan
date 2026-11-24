@@ -1541,4 +1541,10 @@ export default {
   "🫳 @{p} roba una carta a @{o}.": "🫳 @{p} rút một lá của @{o}.",
   "Mueve un bárbaro a otro camino; si cae sobre el camino de un rival, le robas 1 recurso.": "Dời một quân man di sang cạnh khác; nếu nó đứng lên đường của đối thủ, bạn rút 1 tài nguyên của họ.",
   "🚧 Mercaderes y bárbaros está en construcción: el tablero se dibujará en la próxima versión.": "🚧 Traders & Barbarians đang được làm: đồ họa bàn cờ sẽ có ở bản tiếp theo.",
+  "Mueve el carromato: toca en el tablero el cruce adonde quieres ir": "Đi xe: chạm vào giao điểm trên bàn cờ mà bạn muốn tới",
+  "Sigue la ruta más barata hacia el destino": "Đi theo đường rẻ nhất tới đích",
+  "🛒 Toca el cruce adonde va el carromato (número = movimiento, 🪙 = peaje; Esc para cancelar)": "🛒 Chạm vào chỗ xe sẽ tới (số = điểm di chuyển, 🪙 = phí đường; Esc để hủy)",
+  "🪓 Toca el bárbaro que quieres mover": "🪓 Chạm vào quân man di muốn dời",
+  "🪓 Toca un camino libre para el bárbaro (🫳 = robas una carta)": "🪓 Chạm vào cạnh trống để đặt man di (🫳 = được rút một lá)",
+  "🚧 Mercaderes y bárbaros está en construcción: el panel y las reglas ilustradas llegarán en la próxima versión.": "🚧 Traders & Barbarians đang được làm: bảng thông tin và màn hình luật sẽ có ở bản tiếp theo.",
 };
