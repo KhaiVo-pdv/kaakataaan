@@ -1384,4 +1384,6 @@ export default {
   "🐪 ¡Un camello junto a tu poblado! +{n} punto": "🐪 A camel next to your settlement! +{n} point",
   "🐪 ¿Dónde va el próximo camello?": "🐪 Where does the next camel go?",
   "📖 Reglas de Las caravanas": "📖 Caravans rules",
+  "🏰 Un castillo en la costa; {n} casillas costeras vigilan el mar. {k} bárbaros acechan.": "🏰 A castle on the coast; {n} coastal hexes watch the sea. {k} barbarians lurk.",
+  "🚧 El ataque de los bárbaros está en construcción: los desembarcos, los caballeros y el oro llegarán en las próximas versiones.": "🚧 Barbarian Attack is under construction: landings, knights and gold arrive in the next versions.",
 };

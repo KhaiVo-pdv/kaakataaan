@@ -16,7 +16,7 @@ export const TB_SCENARIOS = {
     desc: 'Los jugadores votan con lana y trigo dónde avanzan las caravanas de camellos.',
   },
   barbarianAttack: {
-    icon: '⚔️', name: 'El ataque de los bárbaros', vp: 12, players: [3, 4], ready: false,
+    icon: '⚔️', name: 'El ataque de los bárbaros', vp: 12, players: [3, 4], ready: true,
     desc: 'Los bárbaros desembarcan en la costa y conquistan casillas. Defiéndete con caballeros.',
   },
   tradersBarbarians: {

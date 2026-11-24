@@ -4,6 +4,7 @@ import { seafarersOn, tbScenarioOn } from './expansions.js';
 import { addFishermen } from './tradersBarbarians/fishermen.js';
 import { addRivers, MARSHES } from './tradersBarbarians/rivers.js';
 import { addCaravans } from './tradersBarbarians/caravans.js';
+import { addBarbarianAttack, BA_DESERTS } from './tradersBarbarians/barbarianAttack.js';
 import { buildScenario } from './seafarers/scenarios.js';
 import { makeSea, addSeaGraph, findIslands } from './seafarers/board.js';
 
@@ -262,6 +263,7 @@ export function generateBoard(config, rng) {
   if (sf) deserts = gold = 0; // scenarios draw their own deserts and gold
   if (tbScenarioOn(config) === 'rivers') deserts = Math.max(deserts, MARSHES); // Rivers: two marshes
   if (tbScenarioOn(config) === 'caravans') deserts = Math.max(deserts, 1); // Caravans: the oasis
+  if (tbScenarioOn(config) === 'barbarianAttack') deserts = Math.max(deserts, BA_DESERTS); // Barbarian Attack: castle + desert
   if (fixed) {
     // on custom maps deserts/gold painted by hand count towards the totals
     deserts = Math.max(0, deserts - tiles.filter(t => t.res === 'desert').length);
@@ -401,6 +403,7 @@ export function generateBoard(config, rng) {
   if (tbScenarioOn(config) === 'fishermen') Object.assign(extra, addFishermen({ tiles, sea, vertices, edges, ports }, rng, { corner, pkey }));
   if (tbScenarioOn(config) === 'rivers') Object.assign(extra, addRivers({ tiles, vertices, edges }, rng)); // rivers, marshes, bridge spots
   if (tbScenarioOn(config) === 'caravans') Object.assign(extra, addCaravans({ tiles, vertices, edges }, rng)); // oasis + caravan starts
+  if (tbScenarioOn(config) === 'barbarianAttack') Object.assign(extra, addBarbarianAttack({ tiles, vertices, edges }, rng)); // castle, coast, first barbarians
 
   const all = [...tiles, ...sea];
   const bounds = {

@@ -8,6 +8,7 @@ import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
+import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -132,6 +133,7 @@ export function createGame(configIn) {
   if (tbScenarioOn(s) === 'fishermen') Fish.initFishermen(s, rng);
   if (tbScenarioOn(s) === 'rivers') Rivers.initRivers(s);
   if (tbScenarioOn(s) === 'caravans') Caravans.initCaravans(s);
+  if (tbScenarioOn(s) === 'barbarianAttack') BarbAttack.initBarbarianAttack(s);
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -164,6 +166,10 @@ export function createGame(configIn) {
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
   if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
+  if (s.barbAttack) {
+    log(s, msg('🏰 Un castillo en la costa; {n} casillas costeras vigilan el mar. {k} bárbaros acechan.', { n: board.coast.length, k: BarbAttack.BARBARIANS }));
+    log(s, '🚧 El ataque de los bárbaros está en construcción: los desembarcos, los caballeros y el oro llegarán en las próximas versiones.');
+  }
   if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {
     log(s, msg('🏞️ {n} ríos y {m} pantanos; {k} sitios para puentes.', { n: board.rivers.length, m: board.marsh.length, k: board.bridgeSpots.length }));
@@ -622,7 +628,7 @@ function rollDice(s) {
 }
 
 function randomLandTile(s, exclude) {
-  const ids = s.board.tiles.map(t => t.id).filter(id => id !== exclude);
+  const ids = s.board.tiles.map(t => t.id).filter(id => id !== exclude && !(s.caravans && s.board.tiles[id].oasis)); // Caravans: never the oasis
   return pick(s.rng, ids);
 }
 

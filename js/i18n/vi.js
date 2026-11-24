@@ -1383,4 +1383,6 @@ export default {
   "🐪 ¡Un camello junto a tu poblado! +{n} punto": "🐪 Lạc đà cạnh nhà của bạn! +{n} điểm",
   "🐪 ¿Dónde va el próximo camello?": "🐪 Lạc đà tiếp theo đi đâu?",
   "📖 Reglas de Las caravanas": "📖 Luật Đoàn lạc đà",
+  "🏰 Un castillo en la costa; {n} casillas costeras vigilan el mar. {k} bárbaros acechan.": "🏰 Lâu đài trên bờ biển; {n} ô ven biển canh chừng mặt biển. {k} quân man di đang rình rập.",
+  "🚧 El ataque de los bárbaros está en construcción: los desembarcos, los caballeros y el oro llegarán en las próximas versiones.": "🚧 Man di tấn công đang được làm: đổ bộ, hiệp sĩ và vàng sẽ có ở các bản tiếp theo.",
 };

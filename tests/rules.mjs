@@ -7,6 +7,7 @@ import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Fish from '../js/engine/tradersBarbarians/fishermen.js';
 import * as Rivers from '../js/engine/tradersBarbarians/rivers.js';
 import * as Caravans from '../js/engine/tradersBarbarians/caravans.js';
+import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
@@ -876,7 +877,7 @@ t('Mercaderes y Bárbaros: interruptor, escenario y una expansión a la vez', ()
   eq(c.rules.vpTarget, 10, 'apagada vuelve a 10');
   // a scenario that isn't playable yet falls back to the fishermen
   const c2 = defaultConfig();
-  c2.expansions = { tradersBarbarians: true, tbScenario: 'barbarianAttack' };
+  c2.expansions = { tradersBarbarians: true, tbScenario: 'tradersBarbarians' };
   const s = G.createGame(c2);
   ok(tradersBarbariansOn(s) && !seafarersOn(s) && !citiesKnightsOn(s), 'solo Mercaderes y Bárbaros');
   eq(tbScenarioOn(s), 'fishermen', 'escenario no disponible -> pescadores');
@@ -1270,6 +1271,35 @@ t('Caravanas: +1 punto entre dos camellos, camino doble, ladrón fuera del oasis
   plain.buildings[v.id] = { owner: 0, type: 'settlement' };
   act(plain, { type: 'build', pid: 0, what: 'road', at: G.legalRoads(plain, 0)[0] });
   ok(plain.players[0].roadLen <= 3, 'sin caravanas, cada camino cuenta 1');
+});
+
+// ---------- Traders & Barbarians: Barbarian Attack (board data) ----------
+t('Ataque bárbaro: castillo en la costa, desierto enfrente, 2 bárbaros iniciales, sin ladrón', () => {
+  for (const [shape, seed] of [['classic', 3], ['classic', 8], ['mini', 2], ['big', 5], ['ring', 1], ['islands', 7]]) {
+    const c = defaultConfig();
+    c.seed = seed; c.map.shape = shape;
+    c.expansions = { tradersBarbarians: true, tbScenario: 'barbarianAttack' };
+    const s = G.createGame(c), b = s.board;
+    const castle = b.tiles[b.castle];
+    const coastal = id => b.edges.some(e => e.hexes.length === 1 && e.hexes[0] === id);
+    ok(castle && castle.castle && castle.res === 'desert' && !castle.num, shape + ': el castillo no produce');
+    ok(coastal(castle.id), shape + ': el castillo está en la costa');
+    ok(b.tiles.some(t => t.res === 'desert' && !t.castle && coastal(t.id)), shape + ': un desierto en la costa');
+    eq(b.castlePaths.length, 6, shape + ': 6 caminos alrededor del castillo');
+    ok(b.coast.length > 3 && b.coast.every(id => coastal(id) && b.tiles[id].res !== 'desert'), shape + ': casillas costeras sin castillo ni desierto');
+    eq(b.barbStart.length, 2, shape + ': 2 bárbaros iniciales');
+    eq(b.robber, -1, shape + ': sin ladrón');
+    eq(Object.values(s.barbAttack.on).reduce((a, n) => a + n, 0) + s.barbAttack.pool, BarbAttack.BARBARIANS, shape + ': 36 bárbaros en total');
+    ok(s.players.every(p => p.gold === 0 && p.prisoners === 0 && p.knightsLeft === BarbAttack.KNIGHTS), shape + ': 6 caballeros, sin oro ni prisioneros');
+    eq(b.tiles.filter(t => t.res !== 'desert').every(t => t.num), true, shape + ': las demás casillas tienen número');
+  }
+  const c = defaultConfig(); c.seed = 3;
+  c.expansions = { tradersBarbarians: true, tbScenario: 'barbarianAttack' };
+  const b = G.createGame(c).board;
+  eq(b.barbStart.map(id => b.tiles[id].num).sort((x, y) => x - y)[0] <= 3, true, 'el primero va al 2 (o lo más cerca)');
+  ok(TB_SCENARIOS.barbarianAttack.vp === 12, 'se juega a 12 puntos');
+  const base = G.createGame(defaultConfig());
+  ok(!('barbAttack' in base) && !('castle' in base.board) && base.players.every(p => !('prisoners' in p)), 'el juego base no tiene bárbaros');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------
