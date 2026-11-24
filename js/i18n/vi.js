@@ -1324,4 +1324,6 @@ export default {
   "🪙 Cambia {r} por 1 de oro.": "🪙 Đổi {r} lấy 1 vàng.",
   "🪙 Compra {r} con 2 de oro.": "🪙 Mua {r} bằng 2 vàng.",
   "🪙 Tu oro": "🪙 Vàng của bạn",
+  "🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.": "🐪 Ốc đảo ở giữa đảo: {n} đoàn lạc đà và {k} con lạc đà đang chờ.",
+  "🚧 Las caravanas está en construcción: la votación y los camellos llegarán en la próxima versión.": "🚧 Đoàn lạc đà đang được làm: bỏ phiếu và lạc đà sẽ có ở bản tiếp theo.",
 };

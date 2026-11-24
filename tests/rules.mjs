@@ -6,6 +6,8 @@ import { seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, EXPANS
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Fish from '../js/engine/tradersBarbarians/fishermen.js';
 import * as Rivers from '../js/engine/tradersBarbarians/rivers.js';
+import * as Caravans from '../js/engine/tradersBarbarians/caravans.js';
+import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -874,7 +876,7 @@ t('Mercaderes y Bárbaros: interruptor, escenario y una expansión a la vez', ()
   eq(c.rules.vpTarget, 10, 'apagada vuelve a 10');
   // a scenario that isn't playable yet falls back to the fishermen
   const c2 = defaultConfig();
-  c2.expansions = { tradersBarbarians: true, tbScenario: 'caravans' };
+  c2.expansions = { tradersBarbarians: true, tbScenario: 'barbarianAttack' };
   const s = G.createGame(c2);
   ok(tradersBarbariansOn(s) && !seafarersOn(s) && !citiesKnightsOn(s), 'solo Mercaderes y Bárbaros');
   eq(tbScenarioOn(s), 'fishermen', 'escenario no disponible -> pescadores');
@@ -1157,6 +1159,33 @@ t('Ríos: el colono más rico (+1) y los pobres (−2)', () => {
   s.players[3].gold = 1;
   eq([1, 2, 3].map(vp), [0, -2, -2], 'empatados abajo: todos pobres');
   ok(G.handSize(s.players[0].res) === 0, 'el oro no es carta (no cuenta para el 7)');
+});
+
+// ---------- Traders & Barbarians: The Caravans (board data) ----------
+t('Caravanas: oasis en el centro, 3 salidas, 22 camellos, 12 puntos', () => {
+  for (const [shape, seed] of [['classic', 3], ['classic', 9], ['mini', 2], ['big', 5], ['ring', 1], ['islands', 7], ['kingdoms', 4]]) {
+    const c = defaultConfig();
+    c.seed = seed; c.map.shape = shape;
+    c.expansions = { tradersBarbarians: true, tbScenario: 'caravans' };
+    const s = G.createGame(c), b = s.board;
+    const o = b.tiles[b.oasis];
+    ok(o && o.oasis && o.res === 'desert' && !o.num, shape + ': el oasis no produce');
+    eq(b.tiles.filter(t => t.oasis).length, 1, shape + ': un solo oasis');
+    eq(b.robber, -1, shape + ': el ladrón empieza fuera del tablero');
+    eq(b.caravanStarts.length, 3, shape + ': 3 salidas de caravana');
+    ok(b.caravanStarts.every(x => o.verts.includes(x.vertex) && Caravans.camelEdge(b, x.edge) && !b.edges[x.edge].hexes.includes(o.id)), shape + ': cada salida deja el oasis por un camino entre dos casillas');
+    eq(new Set(b.caravanStarts.map(x => x.edge)).size, 3, shape + ': salidas distintas');
+    eq(s.caravans.left, Caravans.CAMELS, shape + ': 22 camellos en reserva');
+    eq(Object.keys(s.caravans.camels).length, 0, shape + ': ningún camello en el tablero');
+    eq(s.caravans.routes.length, 3, shape + ': 3 rutas');
+    eq(b.tiles.filter(t => t.res !== 'desert').every(t => t.num), true, shape + ': las demás casillas tienen número');
+  }
+  const c = defaultConfig();
+  EXPANSIONS.find(x => x.id === 'tradersBarbarians').set(c, true);
+  c.expansions.tbScenario = 'caravans';
+  ok(TB_SCENARIOS.caravans.vp === 12, 'se juega a 12 puntos');
+  const base = G.createGame(defaultConfig());
+  ok(!('caravans' in base) && !('oasis' in base.board) && !('caravanStarts' in base.board), 'el juego base no tiene caravanas');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

@@ -3,6 +3,7 @@ import { rand, randInt, shuffle } from './rng.js';
 import { seafarersOn, tbScenarioOn } from './expansions.js';
 import { addFishermen } from './tradersBarbarians/fishermen.js';
 import { addRivers, MARSHES } from './tradersBarbarians/rivers.js';
+import { addCaravans } from './tradersBarbarians/caravans.js';
 import { buildScenario } from './seafarers/scenarios.js';
 import { makeSea, addSeaGraph, findIslands } from './seafarers/board.js';
 
@@ -260,6 +261,7 @@ export function generateBoard(config, rng) {
   let gold = +m.gold || 0;
   if (sf) deserts = gold = 0; // scenarios draw their own deserts and gold
   if (tbScenarioOn(config) === 'rivers') deserts = Math.max(deserts, MARSHES); // Rivers: two marshes
+  if (tbScenarioOn(config) === 'caravans') deserts = Math.max(deserts, 1); // Caravans: the oasis
   if (fixed) {
     // on custom maps deserts/gold painted by hand count towards the totals
     deserts = Math.max(0, deserts - tiles.filter(t => t.res === 'desert').length);
@@ -398,6 +400,7 @@ export function generateBoard(config, rng) {
   // Traders & Barbarians, Fishermen: lake + fishing grounds, drawn after the normal board
   if (tbScenarioOn(config) === 'fishermen') Object.assign(extra, addFishermen({ tiles, sea, vertices, edges, ports }, rng, { corner, pkey }));
   if (tbScenarioOn(config) === 'rivers') Object.assign(extra, addRivers({ tiles, vertices, edges }, rng)); // rivers, marshes, bridge spots
+  if (tbScenarioOn(config) === 'caravans') Object.assign(extra, addCaravans({ tiles, vertices, edges }, rng)); // oasis + caravan starts
 
   const all = [...tiles, ...sea];
   const bounds = {

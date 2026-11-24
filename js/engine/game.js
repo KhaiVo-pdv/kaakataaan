@@ -7,6 +7,7 @@ import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn,
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
+import * as Caravans from './tradersBarbarians/caravans.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -130,6 +131,7 @@ export function createGame(configIn) {
   }
   if (tbScenarioOn(s) === 'fishermen') Fish.initFishermen(s, rng);
   if (tbScenarioOn(s) === 'rivers') Rivers.initRivers(s);
+  if (tbScenarioOn(s) === 'caravans') Caravans.initCaravans(s);
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -162,6 +164,10 @@ export function createGame(configIn) {
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
   if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
+  if (s.caravans) {
+    log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
+    log(s, '🚧 Las caravanas está en construcción: la votación y los camellos llegarán en la próxima versión.');
+  }
   if (s.rivers) {
     log(s, msg('🏞️ {n} ríos y {m} pantanos; {k} sitios para puentes.', { n: board.rivers.length, m: board.marsh.length, k: board.bridgeSpots.length }));
   }

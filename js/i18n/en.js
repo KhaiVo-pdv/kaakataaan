@@ -1325,4 +1325,6 @@ export default {
   "🪙 Cambia {r} por 1 de oro.": "🪙 Trade {r} for 1 gold.",
   "🪙 Compra {r} con 2 de oro.": "🪙 Buy {r} with 2 gold.",
   "🪙 Tu oro": "🪙 Your gold",
+  "🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.": "🐪 An oasis in the centre: {n} caravans and {k} camels are waiting.",
+  "🚧 Las caravanas está en construcción: la votación y los camellos llegarán en la próxima versión.": "🚧 The Caravans is under construction: voting and camels arrive in the next version.",
 };

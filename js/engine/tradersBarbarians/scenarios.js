@@ -12,7 +12,7 @@ export const TB_SCENARIOS = {
     desc: 'Dos ríos cruzan la isla: puentes, monedas de oro y el título de colono más rico.',
   },
   caravans: {
-    icon: '🐪', name: 'Las caravanas', vp: 10, players: [3, 4], ready: false,
+    icon: '🐪', name: 'Las caravanas', vp: 12, players: [3, 4], ready: true,
     desc: 'Los jugadores votan con lana y trigo dónde avanzan las caravanas de camellos.',
   },
   barbarianAttack: {
