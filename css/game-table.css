@@ -259,3 +259,9 @@ body:has(.game.wood-table) .overlay .pwhy { color: #b13e53 !important; }
 body:has(.game.wood-table) .overlay .fish-perk { background: var(--wood-paper-2); }
 body:has(.game.wood-table) .overlay .fish-txt small { color: var(--wood-muted); }
 @media (max-width: 520px) { .fish-panel .fish-perk { grid-template-columns: 40px 24px minmax(0, 1fr); } .fish-panel .fish-perk .btn { grid-column: 1 / -1; } }
+
+/* ---------- Traders & Barbarians, Rivers: the gold panel ---------- */
+.gold-panel h3 { margin: 12px 0 6px; font-size: 14px; }
+.gold-panel .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gold-panel .gold-titles { margin-top: 12px; padding: 8px 10px; border-radius: 10px; border: 2px dashed #b08a3e; }
+.gold-panel .gold-titles p { margin: 2px 0; }

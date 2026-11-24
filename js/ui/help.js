@@ -4,6 +4,7 @@ import { t } from '../i18n.js';
 import { showSeafarersHelp } from './seafarersHelp.js';
 import { showCitiesKnightsHelp } from './citiesKnightsHelp.js';
 import { showFishermenHelp } from './fishermenHelp.js';
+import { showRiversHelp } from './riversHelp.js';
 
 export const REPO_URL = 'https://github.com/KurusuDes/CatanTestFriendos';
 const repoLink = () => h('a', { href: REPO_URL, target: '_blank', rel: 'noopener' }, t('código en GitHub'));
@@ -13,7 +14,7 @@ export function creditLine() {
   return h('div', { class: 'credits' }, t('Kaakataaan · basado en Katanittes de Sowtank · '), repoLink(), t(' · proyecto de fans no oficial'));
 }
 
-// opts.seafarers / opts.citiesKnights / opts.fishermen: the current game uses that expansion -> link to its rules
+// opts.seafarers / opts.citiesKnights / opts.fishermen / opts.rivers: the current game uses that expansion -> link to its rules
 export function showHelp(opts = {}) {
   const close = () => ov.remove();
   const ov = h('div', { class: 'overlay', onclick: e => e.target === ov && close() },
@@ -22,6 +23,7 @@ export function showHelp(opts = {}) {
       opts.seafarers ? h('button', { class: 'btn', 'data-testid': 'seafarers-rules', onclick: () => { close(); showSeafarersHelp(); } }, t('📖 Reglas de Navegantes')) : null,
       opts.citiesKnights ? h('button', { class: 'btn', 'data-testid': 'ck-rules', onclick: () => { close(); showCitiesKnightsHelp(); } }, t('📖 Reglas de Ciudades y Caballeros')) : null,
       opts.fishermen ? h('button', { class: 'btn', 'data-testid': 'fishermen-rules', onclick: () => { close(); showFishermenHelp(); } }, t('📖 Reglas de Los pescadores')) : null,
+      opts.rivers ? h('button', { class: 'btn', 'data-testid': 'rivers-rules', onclick: () => { close(); showRiversHelp(); } }, t('📖 Reglas de Los ríos')) : null,
       h('p', null, t('Construye poblados, ciudades y caminos. El primero en llegar a los puntos de victoria de la partida (10 por defecto) gana.')),
       h('h3', null, t('Turno')),
       h('ul', null,

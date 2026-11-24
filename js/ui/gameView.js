@@ -15,6 +15,7 @@ import { t, tx, tk } from '../i18n.js';
 import * as Sea from './seafarersUI.js';
 import * as CK from './citiesKnightsUI.js';
 import * as Fishr from './fishermenUI.js';
+import * as Riv from './riversUI.js';
 
 let ui = null;
 
@@ -48,7 +49,7 @@ export function gameScreen(root) {
     h('div', { class: 'brand' }, 'Kaakataaan'),
     els.turn, els.event, els.dice,
     h('div', { class: 'top-actions' },
-      h('button', { class: 'btn sm', title: t('Ayuda'), onclick: () => showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state) }) }, '❔'),
+      h('button', { class: 'btn sm', title: t('Ayuda'), onclick: () => showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state), rivers: Riv.hasRivers(App.state) }) }, '❔'),
       h('button', { class: 'btn sm', title: t('Menú'), onclick: () => openMenu() }, '☰')));
   els.topView = h('button', { class: 'btn', title: t('Vista desde arriba'), onclick: () => toggleTopView() }, '🗺️');
   boardWrap.append(els.banner, els.offer, els.rolls, els.barb,
@@ -256,6 +257,9 @@ function handleFx(st) {
       case 'fishSpent':
         Fishr.fishFx(st, f, v, { toast, rich }); // Traders & Barbarians: Fishermen
         break;
+      case 'gold':
+        Riv.riverFx(st, f, v, { toast }); // Traders & Barbarians: Rivers
+        break;
       case 'pirate':
         play.robber();
         break;
@@ -314,6 +318,7 @@ function handleFx(st) {
         break;
     }
   }
+  Riv.riverTitles(st, v, ui, { toast }); // Rivers: you became / stopped being Wealthiest or Poor
   if (st.current !== ui.lastCurrent) {
     ui.lastCurrent = st.current;
     ui.pick = null;
@@ -644,6 +649,8 @@ function interaction(real, v) {
     ?? CK.progressInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), legalCities: G.legalCities, legalRoads: G.legalRoads })
     ?? CK.knightInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (ck !== undefined) return ck;
+  const bridge = Riv.bridgeInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); // Rivers
+  if (bridge !== undefined) return bridge;
   if (st.phase === 'setup') {
     if (G.pendingActors(st)[0] !== v) return null;
     if (st.setup.step === 'settlement') return mk('settlement', G.legalSetupSettlements(st, v), vid => App.dispatch({ type: 'placeSettlement', pid: v, vid }));
@@ -718,6 +725,7 @@ function bannerText(st, v, inter) {
   if (st.phase === 'roll') return t('🎲 ¡Tu turno! Tira los dados');
   const seaTxt = Sea.seaBanner(st, v, ui, inter) || CK.ckBanner(st, ui, inter) || CK.progressBanner(st, ui, inter) || CK.politicsBanner(st, v, inter) || CK.knightBanner(st, v, ui, inter);
   if (seaTxt) return seaTxt;
+  if (inter && ui.pick === 'bridge') return t('🌉 Elige dónde construir el puente (Esc para cancelar)'); // Rivers
   if (inter) return { road: t('Elige dónde construir el camino (Esc para cancelar)'), settlement: t('Elige dónde construir el poblado (Esc para cancelar)'), city: t('Elige qué poblado mejorar (Esc para cancelar)') }[inter.kind];
   return '';
 }
@@ -784,6 +792,7 @@ function renderPlayers(st, v) {
         ...CK.knightStats(st, p, { h }),
         ...CK.merchantStats(st, p, { h }),
         ...Fishr.fishStats(st, p, v, { h }), // Traders & Barbarians: fish tokens, old boot
+        ...Riv.riverStats(st, p, { h }), // Traders & Barbarians: gold, bridges, Wealthiest / Poor
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
         st.pendingDiscards[p.id] ? h('span', { style: { color: 'var(--red)' } }, `🗑️ ${st.pendingDiscards[p.id]}`) : null));
@@ -938,6 +947,7 @@ function fillActions(bar, st, v, locked) {
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
     }, h('span', { class: 'bicon' }, '🃏'), h('span', null, t('Carta'), h('span', { class: 'cost' }, costIcons(COSTS.dev)))),
     ...Fishr.fishButtons(st, v, { h, open: () => openFish(v) }), // Traders & Barbarians: spend fish
+    ...Riv.riverButtons(st, v, ui, { h, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Rivers
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
     h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => App.dispatch({ type: 'endTurn', pid: v }) }, t('✅ Terminar')));
@@ -975,7 +985,7 @@ function speedControl() {
 
 function describe(a, st) {
   if (!a) return t('Nada que hacer ahora.');
-  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a) || Fishr.fishDescribe(a); // expansion moves
+  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a) || Fishr.fishDescribe(a) || Riv.riverDescribe(a); // expansion moves
   if (sea) return sea;
   switch (a.type) {
     case 'roll': return t('Tira los dados.');
@@ -1331,7 +1341,7 @@ function openMenu() {
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_Q() === 'high' ? ' on' : ''), onclick: () => { ui.board3d.setGraphics({ quality: ui.board3d.constructor.SETTINGS_Q() === 'high' ? 'low' : 'high' }); toast(t('Calidad cambiada: se aplica al recargar el mapa')); renderModal(App.state); } }, t('✨ Alta calidad')),
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_OUTLINE() ? ' on' : ''), title: t('Contorno fino del color de cada jugador, visible a través de montañas y árboles'), onclick: () => { ui.board3d.setGraphics({ outline: !ui.board3d.constructor.SETTINGS_OUTLINE() }); renderModal(App.state); } }, t('🔲 Contorno de piezas')))) : null,
       // resource icons are always the classic set (see pixel.js), so there is no picker here
-      h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state) }); } }, t('📖 Cómo se juega')),
+      h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state), rivers: Riv.hasRivers(App.state) }); } }, t('📖 Cómo se juega')),
       h('button', { class: 'btn', onclick: () => { const on = App.toggleSound(); toast(on ? t('🔊 Sonido activado') : t('🔇 Sonido desactivado')); } }, t('🔊 Sonido on/off')),
       h('button', { class: 'btn', onclick: () => { const on = toggleMusic(); toast(on ? t('🎵 Música activada') : t('🎵 Música desactivada')); } }, t('🎵 Música on/off')),
       h('div', null, h('div', { class: 'section-label' }, t('Velocidad de los bots')), speedControl()),
