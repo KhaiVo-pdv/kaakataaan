@@ -7,6 +7,7 @@ import { drawKnights, drawWallsAndMetros, drawMerchant, drawBarbarians } from '.
 import { drawFishermen } from './fishermen2d.js';
 import { drawRivers, drawBridge } from './rivers2d.js';
 import { drawCaravans, drawCamelSpots } from './caravans2d.js';
+import { drawBarbarianAttack, drawBaKnights } from './barbarianAttack2d.js';
 
 const U = 100; // svg units per hex radius
 const hexPoints = (cx, cy, r) =>
@@ -197,6 +198,7 @@ export class BoardView {
       for (const tk of [...gLand.querySelectorAll('.token')]) gTok.append(tk);
       svg.append(gTok);
     }
+    if (bd.castle != null) svg.append(drawBarbarianAttack(S, U, st, hexPoints)); // Barbarian Attack: castle, barbarians, conquered hexes
     if (bd.islands) svg.append(drawSeaFog(S, U, bd, hexPoints)); // Seafarers: fog over the sea too
 
     // ports
@@ -250,6 +252,7 @@ export class BoardView {
     for (const b of view.blindOwn || []) if (b.eid != null) drawRoad(b.eid, st.players[b.pid].color, ' ghost');
     svg.append(gRoads);
     if (st.caravans && st.caravans.vote) svg.append(drawCamelSpots(S, U, st)); // Caravans: lettered vote spots on top
+    if (st.barbAttack) svg.append(drawBaKnights(S, U, st)); // Barbarian Attack: knights on their paths
 
     // Seafarers: ships and the pirate
     if (st.ships) {
@@ -327,6 +330,7 @@ export class BoardView {
         g.append(S('line', { x1, y1, x2, y2, class: 'hot-e-bg' }));
         g.append(S('line', { x1, y1, x2, y2, class: 'hot-e', style: `--pc:${inter.color || '#fff'}` }));
         g.append(S('line', { x1, y1, x2, y2, class: 'hit-e', 'data-testid': 'spot', 'data-spot': 'e' + e, onclick: ev => pick(e, ev) }));
+        if (inter.labels && inter.labels[e]) g.append(S('text', { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 16, class: 'hot-label' }, inter.labels[e])); // e.g. the grain a knight's move costs
       }
       svg.append(g);
     }

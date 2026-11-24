@@ -4,7 +4,7 @@ import { BoardView } from './boardView.js';
 import { RES, TILE_INFO, COSTS, DEV_INFO, EVENTS } from '../engine/constants.js';
 import { PROGRESS_CARDS as CK_PROGRESS } from '../engine/citiesKnights/progress.js';
 import * as G from '../engine/game.js';
-import { hint, baCardChoice, baKnightMove } from '../engine/bot.js';
+import { hint } from '../engine/bot.js';
 import { play } from './sfx.js';
 import { showHelp } from './help.js';
 import { toggleMusic } from './music.js';
@@ -17,6 +17,7 @@ import * as CK from './citiesKnightsUI.js';
 import * as Fishr from './fishermenUI.js';
 import * as Riv from './riversUI.js';
 import * as Car from './caravansUI.js';
+import * as BaUI from './barbarianAttackUI.js';
 
 let ui = null;
 
@@ -261,6 +262,11 @@ function handleFx(st) {
       case 'gold':
         Riv.riverFx(st, f, v, { toast }); // Traders & Barbarians: Rivers
         break;
+      case 'baCard': { // Barbarian Attack: the card is revealed
+        const info = BaUI.CARD_INFO[f.type];
+        toast(`${info.icon} ${t(info.name)} — ${t(info.text)}`, 'info', 3500);
+        break;
+      }
       case 'baBattle': // Barbarian Attack
         toast(t('⚔️ ¡Los caballeros liberan una casilla! {n} prisionero(s)', { n: f.freed }), 'info', 3000);
         break;
@@ -662,6 +668,8 @@ function interaction(real, v) {
     ?? CK.progressInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), legalCities: G.legalCities, legalRoads: G.legalRoads })
     ?? CK.knightInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (ck !== undefined) return ck;
+  const ba = BaUI.baInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), liveRes: () => App.state.players[v].res }); // Barbarian Attack
+  if (ba !== undefined) return ba;
   const bridge = Riv.bridgeInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); // Rivers
   if (bridge !== undefined) return bridge;
   if (st.phase === 'setup') {
@@ -731,7 +739,8 @@ function bannerText(st, v, inter) {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
   }
-  if (st.phase === 'baCard') return st.current === v ? t('🃏 Resuelve tu carta') : t('🃏 {name} resuelve su carta...', { name: cur.name }); // Barbarian Attack
+  const baTxt = BaUI.baBanner(st, v, ui); // Barbarian Attack: placing / moving knights, Treason, Intrigue
+  if (baTxt) return baTxt;
   if (st.phase === 'baSteal') return st.current === v ? t('🫳 Elige a quién robar una carta') : t('🫳 {name} elige a quién robar...', { name: cur.name }); // Barbarian Attack
   const camel = Car.voteBanner(st, v); // Caravans: whose vote it is
   if (camel) return camel;
@@ -885,6 +894,10 @@ function fillActions(bar, st, v, locked) {
     acts.append(h('button', { class: 'btn primary', onclick: () => openGameOver(App.state) }, t('🏆 Ver resultados')));
     return;
   }
+  if (st.phase === 'baCard') { // Barbarian Attack: knights / Treason / Intrigue on the board
+    acts.append(...BaUI.baCardActions(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }));
+    return;
+  }
   if (st.phase === 'displace') {
     acts.append(h('div', { class: 'waiting' + (st.displaced.pid === v ? ' your-turn' : '') }, st.displaced.pid === v ? t('🐎 Toca dónde recolocar tu caballero') : t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name })));
     return;
@@ -966,20 +979,10 @@ function fillActions(bar, st, v, locked) {
     }, h('span', { class: 'bicon' }, '🃏'), h('span', null, t('Carta'), h('span', { class: 'cost' }, costIcons(COSTS.dev)))),
     ...Fishr.fishButtons(st, v, { h, open: () => openFish(v) }), // Traders & Barbarians: spend fish
     ...Riv.riverButtons(st, v, ui, { h, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Rivers
-    ...baKnightButtons(st, v), // Barbarian Attack (temporary: the board taps come with the graphics)
+    ...BaUI.baKnightButtons(st, v, ui, { h, rerender: () => render(App.state) }), // Barbarian Attack: move a knight
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
     h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => App.dispatch({ type: 'endTurn', pid: v }) }, t('✅ Terminar')));
-}
-
-// Barbarian Attack: knights march towards the barbarians (one suggested move per tap)
-function baKnightButtons(st, v) {
-  if (!st.barbAttack) return [];
-  const mine = Object.values(st.barbAttack.knights).filter(o => o === v).length;
-  if (!mine) return [];
-  const mv = baKnightMove(st, v);
-  return [h('button', { class: 'btn', 'data-testid': 'ba-knight-move', disabled: !mv, title: t('Mueve un caballero hacia los bárbaros (hasta 3 caminos; 1 cereal por cada camino de más)'), onclick: () => mv && App.dispatch(mv) },
-    h('span', { class: 'bicon' }, '🛡️'), h('span', null, t('Avanzar caballero ({n})', { n: mine })))];
 }
 
 // out of turn: what your hand already pays for, so you can plan while the others play
@@ -1301,26 +1304,6 @@ function modalContent(st, v) {
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
     return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
-  // Barbarian Attack: the card just bought (temporary panel: suggested choice; board taps come with the graphics)
-  if (st.phase === 'baCard' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
-    const type = st.barbAttack.card, sug = baCardChoice(st, v);
-    const names = { knight: t('🛡️ Caballería'), blackKnight: t('🖤 Caballero negro'), treason: t('🗡️ Traición'), intrigue: t('🕵️ Intriga') };
-    const text = {
-      knight: t('Un caballero nuevo sale del castillo: se coloca en un camino libre junto a él.'),
-      blackKnight: t('Un caballero nuevo en cualquier camino libre: se coloca junto a los bárbaros.'),
-      treason: t('Ya tienes 2 de oro. Puedes mover hasta 2 bárbaros de una casilla costera a otra.'),
-      intrigue: t('Un bárbaro de la casilla que elijas se convierte en tu prisionero.'),
-    }[type];
-    const B = st.barbAttack;
-    const body = [h('h2', null, names[type]), h('p', null, text)];
-    if (type === 'intrigue') body.push(h('div', { class: 'chips' }, Object.keys(B.on).map(Number).map(hx => h('button', { class: 'btn', 'data-testid': 'ba-intrigue-' + hx, onclick: () => App.dispatch({ type: 'baCard', pid: v, hex: hx }) },
-      t('Casilla del {n} ({k} bárbaros)', { n: st.board.tiles[hx].num ?? '—', k: B.on[hx] })))));
-    else if (type === 'treason') body.push(h('div', { class: 'row' },
-      h('button', { class: 'btn', 'data-testid': 'ba-card-ok', disabled: !sug.moves.length, onclick: () => App.dispatch(sug) }, t('Mover {n} bárbaro(s) lejos de ti', { n: sug.moves.length })),
-      h('button', { class: 'btn ghost', 'data-testid': 'ba-card-skip', onclick: () => App.dispatch({ type: 'baCard', pid: v, moves: [] }) }, t('No mover nada'))));
-    else body.push(h('div', { class: 'row' }, h('button', { class: 'btn green', 'data-testid': 'ba-card-ok', onclick: () => App.dispatch(sug) }, t('Colocar el caballero'))));
-    return { kind: 'bacard' + v + '-' + st.turn + '-' + type, body: h('div', { 'data-testid': 'ba-card' }, ...body) };
-  }
   // Barbarian Attack: a 7 without a robber — pick who to steal from
   if (st.phase === 'baSteal' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
     const victims = st.players.filter(o => o.id !== v && !o.retired && G.handSize(o.res) > 0);

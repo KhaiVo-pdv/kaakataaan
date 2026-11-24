@@ -1333,7 +1333,7 @@ H.baSteal = (s, a) => {
 };
 
 // Barbarian Attack cards: revealed on purchase, then resolved (phase 'baCard') if they need a choice
-const BA_CARD_NAMES = { knight: '🛡️ Caballería', blackKnight: '🖤 Caballero negro', treason: '🗡️ Traición', intrigue: '🕵️ Intriga' };
+const BA_CARD_NAMES = { knight: '🛡️ Caballería', blackKnight: '🖤 Caballero negro', treason: '🗡️ Traición', intrigue: '🕵️ Intriga' }; // translated as log params (vi.js / en.js)
 function baBuyCard(s, a) {
   const p = s.players[a.pid];
   if (!canAfford(p.res, COSTS.dev)) fail('Te faltan recursos.');

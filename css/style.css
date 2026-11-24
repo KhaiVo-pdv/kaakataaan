@@ -283,6 +283,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 .hot-v { fill: #ffe7a3; stroke: #1a1c2c; stroke-width: 4; animation: hotFade 2.4s ease-in-out infinite; pointer-events: none; transform-box: fill-box; transform-origin: center; }
 .hot-e-bg { stroke: #1a1c2c; stroke-width: 18; stroke-linecap: round; opacity: .8; pointer-events: none; animation: hotFade 2.4s ease-in-out infinite; }
 .hot-e { stroke: #ffe7a3; stroke-width: 11; stroke-linecap: round; opacity: .9; animation: hotFade 2.4s ease-in-out infinite; pointer-events: none; }
+.hot-label { font: 700 22px var(--num, sans-serif); fill: #ffe7a3; stroke: #1a1c2c; stroke-width: 5px; paint-order: stroke; text-anchor: middle; pointer-events: none; }
 @keyframes hotPulse { 50% { transform: scale(.7); opacity: .6 } }
 @keyframes hotFade { 50% { opacity: .55 } }
 .hit, .hit-e { fill: rgba(255, 231, 163, 0.42); stroke: #1a1c2c; stroke-width: 3; cursor: pointer; }

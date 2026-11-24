@@ -29,6 +29,7 @@ import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeB
 import { makeFishingGround } from './fishermen3d.js';
 import { makeBridge, makeBridgeSpot } from './rivers3d.js';
 import { makeCamel, makePalm, makeArrow } from './caravans3d.js';
+import { makeCastle, makeBarbarian, makeKnight as makeBaKnight } from './barbarianAttack3d.js';
 import { camelPose, spotLetter } from './caravans2d.js';
 import { LAKE_NUMS } from '../engine/tradersBarbarians/fishermen.js';
 
@@ -1623,6 +1624,7 @@ export class Board3D {
       const tok = css2d('tok3d-at', `<div class="tok3d${red ? ' red' : ''}">${face}</div>`);
       tok.position.set(t.x, Math.max(h, 0.3) + 0.12, t.y);
       tok.userData.num = t.numRevealed ? t.num : null;
+      tok.userData.tile = t.id; // Barbarian Attack: conquered hexes turn their token face down
       this.tokens.push(tok);
       this.staticGroup.add(tok);
     }
@@ -1647,6 +1649,14 @@ export class Board3D {
         this.tokens.push(tok);
         this.staticGroup.add(tok);
       }
+    }
+    // ---- Barbarian Attack: the castle on its coastal hex
+    if (bd.castle != null && bd.tiles[bd.castle] && bd.tiles[bd.castle].revealed) {
+      const c = bd.tiles[bd.castle];
+      const o = makeCastle();
+      o.position.set(c.x, this.heightAt(c.x, c.y) - 0.01, c.y);
+      o.scale.setScalar(1.5);
+      this.staticGroup.add(o);
     }
     // ---- Caravans: palms around the oasis pond and a sandstone arrow at each caravan start
     if (bd.caravanStarts && bd.tiles[bd.oasis] && bd.tiles[bd.oasis].revealed) {
@@ -2099,8 +2109,8 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
-      inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b)], this.staticKey]);
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, st.barbAttack ? [st.barbAttack.on, st.barbAttack.knights, st.barbAttack.conquered] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
+      inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b), inter.labels || null], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
     // clouds whose tile was just discovered drift up and fade instead of vanishing
@@ -2192,6 +2202,40 @@ export class Board3D {
           o.add(tag);
           add(o, 'cs' + e);
         }
+      }
+    }
+    // Barbarian Attack: barbarians on the coast, knights on their paths, conquered hexes in smoke
+    if (st.barbAttack) {
+      const B = st.barbAttack;
+      for (const h in B.on) {
+        const t = bd.tiles[h], n = B.on[h];
+        for (let i = 0; i < n; i++) {
+          const a = (i / Math.max(n, 1)) * Math.PI * 2 + 0.6, r = n > 1 ? 0.14 : 0;
+          const x = t.x - 0.22 + Math.cos(a) * r, z = t.y - 0.22 + Math.sin(a) * r;
+          const o = makeBarbarian();
+          o.position.set(x, Math.max(this.heightAt(x, z), 0.05), z);
+          o.rotation.y = a;
+          o.scale.setScalar(1.6);
+          add(o, 'ba' + h + ':' + i);
+        }
+      }
+      for (const h of B.conquered) {
+        const t = bd.tiles[h];
+        this.baSmokeKit ||= { geo: new THREE.CylinderGeometry(0.78, 0.78, 0.02, 6), mat: new THREE.MeshBasicMaterial({ color: 0x1a0806, transparent: true, opacity: 0.45, depthWrite: false }) };
+        const m = new THREE.Mesh(this.baSmokeKit.geo, this.baSmokeKit.mat);
+        m.position.set(t.x, Math.max(this.heightAt(t.x, t.y), 0.05) + 0.06, t.y);
+        m.rotation.y = Math.PI / 6;
+        add(m, 'bc' + h);
+      }
+      for (const tok of this.tokens) if (tok.userData.tile != null) tok.element.classList.toggle('ba-conq', B.conquered.includes(tok.userData.tile));
+      for (const e in B.knights) {
+        const E = bd.edges[+e], a = bd.vertices[E.a], b = bd.vertices[E.b];
+        const o = makeBaKnight(st.players[B.knights[e]].color);
+        const x = (a.x + b.x) / 2, z = (a.y + b.y) / 2;
+        o.position.set(x, Math.max(vy(E.a), vy(E.b)) + 0.02, z);
+        o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+        o.scale.setScalar(1.6);
+        add(o, 'kn' + e + ':' + B.knights[e], st.players[B.knights[e]].color);
       }
     }
     for (const e of bd.bridgeSpots || []) {
@@ -2407,6 +2451,11 @@ export class Board3D {
         for (const e of inter.legal) {
           const E = bd.edges[e], a = bd.vertices[E.a], b = bd.vertices[E.b];
           mk(e, (a.x + b.x) / 2, (vy(E.a) + vy(E.b)) / 2 + 0.06, (a.y + b.y) / 2, 'e');
+          if (inter.labels && inter.labels[e]) { // e.g. the grain a knight's move costs
+            const tag = css2d('tok3d-at', `<div class="tok3d wide">${inter.labels[e]}</div>`);
+            tag.position.set((a.x + b.x) / 2, (vy(E.a) + vy(E.b)) / 2 + 0.3, (a.y + b.y) / 2);
+            this.dynGroup.add(tag);
+          }
         }
       else if (inter.kind === 'robber')
         for (const id of inter.legal) {
