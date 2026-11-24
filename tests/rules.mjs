@@ -1880,6 +1880,25 @@ t('Bot: construir caminos gratis sin caminos en la reserva usa barcos o termina'
   ok(act(s, a).ok, 'la acción es legal');
 });
 
+t('Pirata en la niebla: sin víctima elegida roba a una al azar (como el ladrón)', () => {
+  const c = defaultConfig(); c.expansions = { ...c.expansions, seafarers: true, scenario: 'fourIslands' }; c.modes.fog = true;
+  const s = G.createGame(c), b = s.board;
+  // a sea hex with ships of two rivals on its sides
+  const sea = G.legalPirateTiles(s).find(t => seaTileEdges(s, t).filter(e => e !== undefined).length >= 4);
+  const es = seaTileEdges(s, sea).filter(e => e !== undefined);
+  s.ships = s.ships || {};
+  s.ships[es[0]] = 1; s.ships[es[2]] = 2;
+  give(s, 1, { ore: 1 }); give(s, 2, { ore: 1 });
+  s.phase = 'robber'; s.current = 0; s.robberReturn = 'main';
+  const victims = G.pirateTargets(s, 0, sea);
+  if (victims.length >= 2) {
+    ok(act(s, { type: 'movePirate', pid: 0, tile: sea }).ok, 'en la niebla no falla sin víctima');
+    eq(s.phase, 'main', 'y sigue el turno');
+    const s2 = G.createGame({ ...c, modes: { ...c.modes, fog: false } });
+    ok(s2.board.pirate !== undefined, 'sin niebla hay que elegir (regla normal)');
+  } else ok(false, 'el tablero de prueba debería tener dos víctimas');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {

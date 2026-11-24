@@ -2213,6 +2213,8 @@ H.movePirate = (s, a) => {
   const victims = pirateTargets(s, a.pid, a.tile);
   let victim = a.victim;
   if (victims.length === 1 && victim == null) victim = victims[0];
+  // in the fog you may not see whose ships are there: steal from a random one (as the land robber does)
+  if (s.config.modes.fog && victims.length && !victims.includes(victim)) victim = pick(s.rng, victims);
   if (victims.length && !victims.includes(victim)) fail('Elige a quién robar.');
   if (!victims.length) victim = null;
   s.board.pirate = a.tile;
