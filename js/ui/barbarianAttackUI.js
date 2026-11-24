@@ -103,3 +103,44 @@ export function baBanner(st, v, ui) {
   if (st.phase === 'main' && ui.pick === 'baKnight') return ui.baFrom == null ? t('🛡️ Elige qué caballero se mueve (Esc para cancelar)') : t('🛡️ Elige adónde va (🌾 = cereal que cuesta)');
   return '';
 }
+
+export const hasBA = st => !!(st && st.barbAttack);
+
+// player card: gold, prisoners (and the points they give), knights on the board / in reserve
+export function baStats(st, p, { h }) {
+  if (!hasBA(st)) return [];
+  const on = BA.knightsOf(st, p.id).length, vp = BA.prisonerVP(p);
+  const out = [
+    h('span', { title: t('Oro') }, `🪙 ${p.gold}`),
+    h('span', { title: t('Caballeros en el tablero / en reserva') }, `🛡️ ${on}/${p.knightsLeft}`),
+    h('span', { title: t('Prisioneros (cada {n} valen 1 punto)', { n: BA.PRISONERS_PER_VP }) }, `⛓️ ${p.prisoners}`),
+  ];
+  if (vp) out.push(h('span', { class: 'award', title: t('Puntos por prisioneros') }, `⛓️ +${vp}`));
+  return out;
+}
+
+// the gold button (the Rivers gold panel is shared)
+export function baGoldButton(st, v, { h, openGold }) {
+  if (!hasBA(st)) return [];
+  return [h('button', { class: 'btn', 'data-testid': 'gold-open', title: t('Compra recursos con oro o cambia recursos por oro'), onclick: openGold },
+    h('span', { class: 'bicon' }, '🪙'), h('span', null, t('Oro'), h('span', { class: 'cost' }, String(st.players[v].gold))))];
+}
+
+// the bank row: cards left in the scenario deck and barbarians still at sea
+export function baBankInfo(st, { h }) {
+  const B = st.barbAttack;
+  return [h('span', { title: t('Cartas que quedan en el mazo') }, `🃏${B.deck ? B.deck.length : 26}`),
+    h('span', { title: t('Bárbaros que aún no han desembarcado') }, `⚔️${B.pool}`)];
+}
+
+// history lines for the scenario's moves
+export function baDescribe(a, st) {
+  if (a.type === 'baMoveKnight') return t('🛡️ Mueve un caballero.');
+  if (a.type === 'baSteal') return t('🫳 Roba una carta.');
+  if (a.type === 'baCard') {
+    if (a.at != null) return t('🛡️ Coloca un caballero.');
+    if (a.hex != null) return t('🕵️ Hace un prisionero.');
+    return a.moves && a.moves.length ? t('🗡️ Mueve {n} bárbaro(s).', { n: a.moves.length }) : t('🗡️ No mueve bárbaros.');
+  }
+  return undefined;
+}

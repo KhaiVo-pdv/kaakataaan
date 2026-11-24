@@ -47,7 +47,7 @@ export function goldModal(st, v, { h, dispatch, close }) {
   const p = st.players[v];
   const mine = st.current === v && st.phase === 'main';
   const left = Rivers.goldBuysLeft(st);
-  const titles = Rivers.wealthTitles(st);
+  const titles = hasRivers(st) ? Rivers.wealthTitles(st) : null; // Barbarian Attack shares this panel (no titles there)
   const name = id => (id === v ? t('tú') : st.players[id].name);
   const canBuy = r => mine && left > 0 && p.gold >= Rivers.GOLD_PER_RESOURCE && st.bank[r] > 0;
   const sellRows = RES.map(r => ({ r, n: G.tradeRatio(st, v, r) }));
@@ -60,7 +60,7 @@ export function goldModal(st, v, { h, dispatch, close }) {
     h('h3', null, t('Vender: recursos → 1 de oro (al cambio del banco o de tu puerto)')),
     h('div', { class: 'chips' }, sellRows.map(({ r, n }) => h('button', { class: 'btn', disabled: !mine || p.res[r] < n, 'data-testid': 'gold-sell-' + r, onclick: () => { close(); dispatch({ type: 'goldSell', pid: v, give: r }); } },
       `${TILE_INFO[r].icon.repeat(n)} → 🪙`))),
-    h('div', { class: 'gold-titles' },
+    titles && h('div', { class: 'gold-titles' },
       h('p', null, '👑 ', h('b', null, t('Colono más rico (+1):')), ' ', titles.wealthy >= 0 ? name(titles.wealthy) : t('nadie (empate)')),
       h('p', null, '😢 ', h('b', null, t('Colono pobre (−2):')), ' ', titles.poor.map(name).join(', ') || t('nadie'))),
     !mine ? h('p', null, h('small', null, t('Solo en tu turno, después de tirar.'))) : null,
