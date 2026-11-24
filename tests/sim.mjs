@@ -119,6 +119,13 @@ function check(s, where) {
     }
     for (const e of s.board.bridgeSpots) if (s.roads[e] !== undefined && s.rivers.bridges[e] === undefined) errs.push(`camino cruzando el río ${e}`);
   }
+  // Caravans: 22 camels in all, only on paths between two land hexes, never by the oasis or the robber on it
+  if (s.caravans) {
+    const placed = Object.keys(s.caravans.camels).length;
+    if (placed + s.caravans.left !== 22) errs.push(`camellos: ${placed}+${s.caravans.left}`);
+    for (const e in s.caravans.camels) if (s.board.edges[e].hexes.length !== 2 || s.board.edges[e].hexes.includes(s.board.oasis)) errs.push(`camello mal puesto ${e}`);
+    if (s.board.robber === s.board.oasis) errs.push('ladrón en el oasis');
+  }
   // Fishermen: the 30 tokens (29 fish + the boot) are never created or lost
   if (s.fishermen) {
     const F = s.fishermen;
@@ -251,6 +258,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES; i++) {
       summary.progress = (summary.progress || 0) + 54 - Object.values(s.progress).reduce((n, d) => n + d.length, 0);
     }
     if (s.config.expansions.citiesKnights) summary.commodities = (summary.commodities || 0) + s.players.reduce((a, p) => a + COMMODITIES.reduce((b, c) => b + p.res[c], 0), 0) + (s.ckProduced || 0);
+    if (s.caravans) summary.camels = (summary.camels || 0) + Object.keys(s.caravans.camels).length;
     if (s.rivers) {
       summary.bridges = (summary.bridges || 0) + Object.keys(s.rivers.bridges).length;
       summary.gold = (summary.gold || 0) + s.players.reduce((a, p) => a + p.gold, 0);
@@ -279,6 +287,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES; i++) {
 }
 if (summary.attacks != null) console.log(`🏴‍☠️ ataques bárbaros: ${summary.attacks} · puntos de Defensor de Catan: ${summary.defenders} · cartas de progreso robadas: ${summary.progress} · jugadas: ${summary.played}`);
 if (summary.knights != null) console.log(`⚔️ caballeros en el tablero al final de las partidas de Ciudades y Caballeros: ${summary.knights}`);
+if (summary.camels != null) console.log(`🐪 caravanas: ${summary.camels} camellos puestos`);
 if (summary.bridges != null) console.log(`🌉 ríos: ${summary.bridges} puentes · ${summary.gold} de oro al final`);
 if (summary.fishSpent != null) console.log(`🎣 pescadores: ${summary.fishSpent} compras con pescado · bota vieja repartida en ${summary.boots} partidas · ganadas con la bota: ${summary.bootWins}`);
 if (summary.ships != null) console.log(`\n⛵ barcos en el mar al final de las partidas de Navegantes: ${summary.ships} · 🏴‍☠️ movimientos del pirata: ${summary.pirate || 0} · 🏝️ puntos por islas nuevas: ${summary.islandVP || 0} · 🌫️ niebla descubierta: ${summary.fogSeen || 0}/${summary.fogAll || 0}`);

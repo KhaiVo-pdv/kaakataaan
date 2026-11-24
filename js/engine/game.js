@@ -164,10 +164,7 @@ export function createGame(configIn) {
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
   if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
-  if (s.caravans) {
-    log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
-    log(s, '🚧 Las caravanas está en construcción: la votación y los camellos llegarán en la próxima versión.');
-  }
+  if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {
     log(s, msg('🏞️ {n} ríos y {m} pantanos; {k} sitios para puentes.', { n: board.rivers.length, m: board.marsh.length, k: board.bridgeSpots.length }));
   }
@@ -257,6 +254,7 @@ export function victoryPoints(s, pid, hidden = true) {
   vp += s.players[pid].progressVP || 0; // Cities & Knights printer / constitution
   if (s.merchant) vp += TradeCards.merchantVP(s, pid); // Cities & Knights merchant piece
   if (s.rivers) vp += Rivers.wealthVP(s, pid); // Rivers: Wealthiest Settler +1 / Poor Settler -2
+  if (s.caravans) vp += Caravans.camelVP(s, pid); // Caravans: buildings between two camels +1
   return vp;
 }
 
@@ -376,7 +374,7 @@ export const pirateTargets = (s, pid, tile) => pirateVictims(s, pid, tile, handS
 export { legalPirateTiles };
 
 export function legalRobberTiles(s, pid) {
-  const all = s.board.tiles.filter(t => t.id !== s.board.robber).map(t => t.id);
+  const all = s.board.tiles.filter(t => t.id !== s.board.robber && !(s.caravans && t.oasis)).map(t => t.id); // Caravans: never on the oasis
   if (!s.config.rules.friendlyRobber) return all;
   const ok = all.filter(id =>
     !s.board.tiles[id].verts.some(v => {
@@ -412,6 +410,8 @@ export function pendingActors(s) {
   if (s.phase === 'wedding') return s.wedding ? Object.keys(s.wedding.pending).map(Number).filter(pid => !s.players[pid].retired) : [];
   if (s.phase === 'harbor') return s.harbor ? Object.keys(s.harbor.pending).map(Number).filter(pid => !s.players[pid].retired) : [];
   if (s.phase === 'pillage') return s.pillage ? Object.keys(s.pillage).map(Number).filter(pid => !s.players[pid].retired) : [];
+  if (s.phase === 'caravanVote') return [s.caravans.vote.order[s.caravans.vote.idx]]; // Caravans: one voter at a time
+  if (s.phase === 'caravanPick') return [s.caravans.vote.decider];
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -488,7 +488,7 @@ function roadLength(s, pid) {
       if (len > 0 && isShip(e) !== lastShip && !ownHere(v)) continue;
       used.add(e);
       const E = bd.edges[e];
-      dfs(E.a === v ? E.b : E.a, len + 1, isShip(e));
+      dfs(E.a === v ? E.b : E.a, len + Caravans.roadWeight(s, e), isShip(e)); // Caravans: a camel path counts 2 (1 otherwise)
       used.delete(e);
     }
   };
@@ -1228,6 +1228,74 @@ H.goldSell = (s, a) => {
   log(s, msg('🪙 @{p} cambia {n}{give} por 1 de oro.', { p: a.pid, n: ratio, give: resName(a.give) }), a.pid);
 };
 
+// ---- Traders & Barbarians: The Caravans ----
+// After a turn with a new settlement or city: everyone, from the builder on, votes once for where
+// the next camel goes, paying wool and/or grain (1 card = 1 vote, back to the bank).
+function startCamelVote(s) {
+  const C = s.caravans;
+  const built = C.built;
+  C.built = false;
+  if (!built) return false;
+  const options = Caravans.camelOptions(s).map(o => o.edge);
+  if (!options.length) return false;
+  const order = [];
+  for (let k = 0; k < s.players.length; k++) {
+    const pid = (s.current + k) % s.players.length;
+    if (!s.players[pid].retired) order.push(pid);
+  }
+  C.vote = { order, idx: 0, bids: {}, options, decider: null, tied: null };
+  s.phase = 'caravanVote';
+  log(s, '🐪 Votación de la caravana: ¿dónde va el próximo camello? (lana y trigo = votos)');
+  s.fx.push({ kind: 'camelVote', options });
+  return true;
+}
+
+H.caravanBid = (s, a) => {
+  if (!s.caravans || s.phase !== 'caravanVote') fail('No hay votación ahora.');
+  const V = s.caravans.vote;
+  if (V.order[V.idx] !== a.pid) fail('No es tu turno de votar.');
+  const p = s.players[a.pid];
+  const give = {};
+  for (const r of Caravans.VOTE_RES) {
+    const n = a[r] || 0;
+    if (!Number.isInteger(n) || n < 0 || n > p.res[r]) fail('No tienes esas cartas.');
+    if (n) give[r] = n;
+  }
+  if (!V.options.includes(a.spot)) fail('Elige un sitio para el camello.');
+  const n = Object.values(give).reduce((x, y) => x + y, 0);
+  pay(s, a.pid, give);
+  V.bids[a.pid] = { n, spot: a.spot };
+  s.fx.push({ kind: 'camelBid', pid: a.pid, n, spot: a.spot });
+  log(s, n ? msg('🐪 @{p} da {n} votos.', { p: a.pid, n }) : msg('🐪 @{p} no vota.', { p: a.pid }), a.pid);
+  V.idx++;
+  if (V.idx < V.order.length) return;
+  const res = Caravans.voteResult(V.bids, s.current, V.options);
+  if (res.edge !== undefined) return finishCamelVote(s, res.edge);
+  V.decider = res.decider;
+  V.tied = res.tied;
+  s.phase = 'caravanPick';
+  log(s, msg('🐪 Empate: @{p} elige el sitio.', { p: res.decider }), res.decider);
+};
+
+H.caravanPick = (s, a) => {
+  if (!s.caravans || s.phase !== 'caravanPick') fail('No hay que elegir ahora.');
+  const V = s.caravans.vote;
+  if (V.decider !== a.pid) fail('No te toca elegir.');
+  if (!V.tied.includes(a.spot)) fail('Elige uno de los sitios empatados.');
+  finishCamelVote(s, a.spot);
+};
+
+function finishCamelVote(s, edge) {
+  Caravans.placeCamel(s, edge);
+  s.caravans.vote = null;
+  s.fx.push({ kind: 'camel', at: edge });
+  log(s, msg('🐪 Un camello se une a la caravana ({n} en reserva).', { n: s.caravans.left }));
+  updateLongestRoad(s); // a road beside the new camel now counts double
+  s.phase = 'main';
+  checkWin(s); // still the builder's turn: the camel may have given them the win
+  if (s.phase !== 'gameOver') advanceTurn(s);
+}
+
 // ---- Cities & Knights barbarians ----
 // the ship moves one step; on landing the attack is fought. True while losers must still pick a city.
 function barbariansSail(s) {
@@ -1903,6 +1971,7 @@ H.build = (s, a) => {
     }
     log(s, msg('🏠 @{p} construye un poblado.', { p: a.pid }), a.pid);
     riverGold(s, a.pid, 'settlement', a.at);
+    if (s.caravans) s.caravans.built = true; // Caravans: a camel vote at the end of this turn
   } else if (a.what === 'city') {
     if (p.citiesLeft <= 0) fail('No te quedan ciudades.');
     if (!canBuildCity(s, a.pid, a.at)) fail('Solo puedes mejorar tus poblados.');
@@ -1912,6 +1981,7 @@ H.build = (s, a) => {
     p.settlementsLeft++;
     s.buildings[a.at].type = 'city';
     log(s, msg('🏰 @{p} mejora a ciudad.', { p: a.pid }), a.pid);
+    if (s.caravans) s.caravans.built = true;
   } else fail('Construcción desconocida.');
   s.fx.push({ kind: 'build', what: a.what, pid: a.pid, at: a.at });
   if (a.what !== 'city') updateLongestRoad(s);
@@ -2095,6 +2165,7 @@ function advanceTurn(s) {
 
 H.endTurn = (s, a) => {
   assertMain(s, a);
+  if (s.caravans && startCamelVote(s)) return; // Caravans: the vote comes first, then the next turn
   advanceTurn(s);
 };
 

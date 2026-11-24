@@ -8,6 +8,7 @@ import {
   fishPerkReason, bootReceivers, legalBridges,
 } from './game.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
+import * as Caravans from './tradersBarbarians/caravans.js';
 import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
@@ -430,6 +431,41 @@ function tryRivers(s, pid) {
   return null;
 }
 
+// Caravans: what a camel on edge e is worth to `me`: points for my buildings that would sit between
+// two camels and my roads beside it, minus what it hands the strongest rival
+function camelSpotValue(s, me, e) {
+  const gain = pid => {
+    const E = s.board.edges[e];
+    let g = 0;
+    for (const v of [E.a, E.b]) {
+      const b = s.buildings[v];
+      if (b && b.owner === pid && Caravans.camelsAt(s, v) === 1) g += 3; // the second camel: +1 VP
+    }
+    if (s.roads[e] === pid) g += 1; // the road now counts double
+    return g;
+  };
+  const rivals = s.players.filter(o => o.id !== me && !o.retired);
+  const leader = rivals.length ? best(rivals.map(o => o.id), o => victoryPoints(s, o, false)) : null;
+  return gain(me) - (leader === null ? 0 : gain(leader) * 0.7) + noise(s, e) * 0.05;
+}
+// one vote: our favourite spot, and 0-2 wool/grain we can spare when it matters to us
+function camelBid(s, pid) {
+  const V = s.caravans.vote;
+  const spot = best(V.options, e => camelSpotValue(s, pid, e));
+  const value = camelSpotValue(s, pid, spot);
+  const p = s.players[pid];
+  const t = chooseTarget(s, pid);
+  const spare = r => Math.max(0, p.res[r] - ((t && t.cost[r]) || 0));
+  let want = value >= 3 ? 2 : value >= 1 ? 1 : 0;
+  const bid = { type: 'caravanBid', pid, spot, sheep: 0, wheat: 0 };
+  for (const r of Caravans.VOTE_RES) {
+    const n = Math.min(want, spare(r));
+    bid[r] = n;
+    want -= n;
+  }
+  return bid;
+}
+
 // Fishermen: pass the old boot on, then spend fish on the most useful perk we can afford
 function tryFish(s, pid) {
   if (!s.fishermen) return null;
@@ -636,6 +672,8 @@ export function botAct(real, pid) {
   const s = viewFor(real, pid); // in fog mode bots only know what they can see
   if (!pendingActors(s).includes(pid)) return null;
   if (s.phase === 'discard') return s.pendingDiscards[pid] ? discard(s, pid) : null;
+  if (s.phase === 'caravanVote') return camelBid(s, pid); // Caravans
+  if (s.phase === 'caravanPick') return { type: 'caravanPick', pid, spot: best(s.caravans.vote.tied, e => camelSpotValue(s, pid, e)) };
   if (s.phase === 'displace') {
     // Cities & Knights: our knight was pushed away: put it back next to our buildings if we can
     if (!s.displaced || s.displaced.pid !== pid) return null;

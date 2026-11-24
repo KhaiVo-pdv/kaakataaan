@@ -319,6 +319,23 @@ function handleFx(st) {
     }
   }
   Riv.riverTitles(st, v, ui, { toast }); // Rivers: you became / stopped being Wealthiest or Poor
+  // Caravans (temporary until the voting panel exists): a local human's vote is cast for them,
+  // with no cards and the spot the hint likes best, so the game never waits on a missing screen
+  if (st.caravans && (st.phase === 'caravanVote' || st.phase === 'caravanPick')) {
+    const who = G.pendingActors(st)[0];
+    if (localHumans(st).includes(who) && !ui.camelAuto) {
+      ui.camelAuto = true;
+      setTimeout(() => {
+        ui.camelAuto = false;
+        const now = App.state;
+        if (!now || G.pendingActors(now)[0] !== who) return;
+        const a = hint(now, who);
+        if (!a) return;
+        if (a.type === 'caravanBid') { a.sheep = 0; a.wheat = 0; }
+        App.dispatch(a);
+      }, 700);
+    }
+  }
   if (st.current !== ui.lastCurrent) {
     ui.lastCurrent = st.current;
     ui.pick = null;

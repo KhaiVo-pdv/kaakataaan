@@ -1188,6 +1188,90 @@ t('Caravanas: oasis en el centro, 3 salidas, 22 camellos, 12 puntos', () => {
   ok(!('caravans' in base) && !('oasis' in base.board) && !('caravanStarts' in base.board), 'el juego base no tiene caravanas');
 });
 
+// ---------- Traders & Barbarians: The Caravans (rules) ----------
+const caravanGame = () => fresh(c => { c.expansions = { tradersBarbarians: true, tbScenario: 'caravans' }; });
+
+t('Caravanas: sitios para camellos, una ruta sin ramas, fin de la reserva', () => {
+  const s = caravanGame(), b = s.board;
+  const first = Caravans.camelOptions(s);
+  eq(first.map(o => o.edge).sort(), b.caravanStarts.map(x => x.edge).sort(), 'al principio: las 3 salidas del oasis');
+  const e0 = first[0].edge;
+  ok(Caravans.placeCamel(s, e0), 'pone el primer camello');
+  eq(s.caravans.left, 21, 'quedan 21');
+  const next = Caravans.camelOptions(s).filter(o => o.route === first[0].route);
+  ok(next.length >= 1 && next.length <= 2, 'la ruta sigue por 1 o 2 caminos');
+  const tip = s.caravans.routes[first[0].route].tip;
+  ok(next.every(o => b.edges[o.edge].a === tip || b.edges[o.edge].b === tip), 'desde el extremo lejano del último camello');
+  ok(!Caravans.placeCamel(s, e0), 'no dos camellos en el mismo camino');
+  ok(!Caravans.camelOptions(s).some(o => b.edges[o.edge].hexes.includes(b.oasis)), 'nunca junto al oasis');
+  s.caravans.left = 0;
+  eq(Caravans.camelOptions(s).length, 0, 'sin camellos en reserva no hay sitios');
+});
+
+t('Caravanas: resultado de la votación', () => {
+  const opts = [10, 20, 30];
+  eq(Caravans.voteResult({ 0: { n: 3, spot: 10 }, 1: { n: 1, spot: 20 }, 2: { n: 1, spot: 20 } }, 0, opts), { edge: 10 }, 'gana el sitio con más votos');
+  eq(Caravans.voteResult({ 0: { n: 1, spot: 10 }, 1: { n: 2, spot: 20 }, 2: { n: 1, spot: 20 } }, 0, opts), { edge: 20 }, 'los votos al mismo sitio se suman');
+  eq(Caravans.voteResult({ 0: { n: 2, spot: 10 }, 1: { n: 1, spot: 20 }, 2: { n: 1, spot: 20 } }, 2, opts), { edge: 10 }, 'empate 2-2: decide quien puso más (y su sitio está empatado)');
+  eq(Caravans.voteResult({ 0: { n: 1, spot: 10 }, 1: { n: 1, spot: 20 }, 2: { n: 0, spot: 30 } }, 2, opts), { decider: 2, tied: [10, 20] }, 'empate sin líder: elige el jugador del turno');
+  eq(Caravans.voteResult({ 0: { n: 0, spot: 10 }, 1: { n: 0, spot: 20 } }, 1, opts), { edge: 20 }, 'nadie vota: el jugador del turno pone su sitio');
+});
+
+t('Caravanas: votación completa al terminar un turno con construcción', () => {
+  const s = caravanGame(), b = s.board;
+  // a settlement next to a start, built this turn
+  const st = b.caravanStarts[0], E = b.edges[st.edge];
+  const v = E.a === st.vertex ? E.b : E.a;
+  const road = b.vertices[v].edges.find(e => e !== st.edge);
+  s.roads[road] = 0;
+  give(s, 0, { wood: 1, brick: 1, sheep: 3, wheat: 2 });
+  ok(act(s, { type: 'build', pid: 0, what: 'settlement', at: v }).ok, 'poblado');
+  ok(act(s, { type: 'endTurn', pid: 0 }).ok, 'termina el turno');
+  eq(s.phase, 'caravanVote', 'empieza la votación');
+  eq(G.pendingActors(s), [0], 'vota primero quien construyó');
+  ok(!act(s, { type: 'caravanBid', pid: 1, sheep: 0, wheat: 0, spot: st.edge }).ok, 'no se vota fuera de turno');
+  ok(!act(s, { type: 'caravanBid', pid: 0, sheep: 9, wheat: 0, spot: st.edge }).ok, 'no más cartas de las que tienes');
+  const bank = s.bank.sheep;
+  ok(act(s, { type: 'caravanBid', pid: 0, sheep: 2, wheat: 1, spot: st.edge }).ok, 'vota 3');
+  eq(s.bank.sheep, bank + 2, 'las cartas vuelven al banco');
+  for (const pid of [1, 2, 3]) ok(act(s, { type: 'caravanBid', pid, sheep: 0, wheat: 0, spot: b.caravanStarts[pid % 3].edge }).ok, 'vota ' + pid);
+  eq(s.caravans.camels[st.edge], 0 in s.caravans.camels ? s.caravans.camels[st.edge] : s.caravans.camels[st.edge], 'camello puesto');
+  ok(s.caravans.camels[st.edge] !== undefined, 'el camello va donde votó la mayoría');
+  eq(s.current, 1, 'y empieza el turno siguiente');
+  eq(s.phase, 'roll', 'que tira los dados');
+  // a turn without building: no vote
+  s.phase = 'main';
+  ok(act(s, { type: 'endTurn', pid: 1 }).ok, 'sin construir');
+  eq(s.phase, 'roll', 'no hay votación');
+});
+
+t('Caravanas: +1 punto entre dos camellos, camino doble, ladrón fuera del oasis', () => {
+  const s = caravanGame(), b = s.board;
+  // a vertex with two land paths: put camels on two of its edges directly
+  const v = b.vertices.find(V => V.edges.filter(e => Caravans.camelEdge(b, e) && !b.edges[e].hexes.includes(b.oasis)).length >= 2 && V.hexes.length === 3);
+  const [e1, e2] = v.edges.filter(e => Caravans.camelEdge(b, e) && !b.edges[e].hexes.includes(b.oasis));
+  s.buildings[v.id] = { owner: 0, type: 'settlement' };
+  const base = G.victoryPoints(s, 0);
+  s.caravans.camels[e1] = 0;
+  eq(G.victoryPoints(s, 0), base, 'un camello: nada');
+  s.caravans.camels[e2] = 0;
+  eq(G.victoryPoints(s, 0), base + 1, 'dos camellos: +1 punto');
+  // road length: roads on both camel paths, then one more road built normally -> 2 + 2 + 1 = 5
+  s.roads[e1] = 0;
+  s.roads[e2] = 0;
+  const e3 = G.legalRoads(s, 0)[0];
+  give(s, 0, { wood: 1, brick: 1 });
+  ok(act(s, { type: 'build', pid: 0, what: 'road', at: e3 }).ok, 'un camino más');
+  ok(s.players[0].roadLen >= 4, 'los caminos junto a camellos cuentan doble (' + s.players[0].roadLen + ')');
+  ok(!G.legalRobberTiles(s, 0).includes(b.oasis), 'el ladrón no va al oasis');
+  const plain = fresh();
+  plain.roads[e1] = 0; plain.roads[e2] = 0;
+  give(plain, 0, { wood: 1, brick: 1 });
+  plain.buildings[v.id] = { owner: 0, type: 'settlement' };
+  act(plain, { type: 'build', pid: 0, what: 'road', at: G.legalRoads(plain, 0)[0] });
+  ok(plain.players[0].roadLen <= 3, 'sin caravanas, cada camino cuenta 1');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {
