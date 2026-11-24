@@ -228,7 +228,7 @@ function chooseTarget(s, pid) {
   if (spots.length) opts.push({ what: 'settlement', cost: COSTS.settlement, w: 0 });
   else if (seafarersOn(s) && p.shipsLeft > 0 && p.settlementsLeft > 0 && bestShip(s, pid) !== null) opts.push({ what: 'ship', cost: SHIP_COST, w: 0.25 });
   else if (p.roadsLeft > 0 && p.settlementsLeft > 0 && bestRoad(s, pid) !== null) opts.push({ what: 'road', cost: COSTS.road, w: 0.3 });
-  if (s.devDeck.length) opts.push({ what: 'dev', cost: COSTS.dev, w: 1.2 });
+  if (s.devDeck.length || s.barbAttack) opts.push({ what: 'dev', cost: COSTS.dev, w: s.barbAttack ? baCardWeight(s, pid) : 1.2 });
   if (!opts.length) return null;
   return best(opts, o => -(missing(p.res, o.cost).n + o.w));
 }
@@ -516,6 +516,8 @@ function mainAction(s, pid) {
   if (fish) return fish;
   const river = tryRivers(s, pid); // Traders & Barbarians: Rivers of Catan
   if (river) return river;
+  const knight = s.barbAttack && baKnightMove(s, pid); // Barbarian Attack: knights march on the barbarians
+  if (knight) return knight;
   if (s.barbAttack && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
     const t = chooseTarget(s, pid), need = t && missing(s.players[pid].res, t.cost);
     if (need && need.n === 1) {
@@ -578,7 +580,7 @@ function mainAction(s, pid) {
     }
   }
   const tgt = chooseTarget(s, pid);
-  if (s.devDeck.length && canAfford(p.res, COSTS.dev)) {
+  if ((s.devDeck.length || s.barbAttack) && canAfford(p.res, COSTS.dev)) {
     const keep = tgt && tgt.what !== 'dev' ? surplus(p.res, tgt.cost) : null;
     const spare = !keep || (keep.sheep >= 1 && keep.wheat >= 1 && keep.ore >= 1);
     if (spare || !tgt || tgt.what === 'dev' || victoryPoints(s, pid) >= target - 2) return { type: 'buyDev', pid };
@@ -686,6 +688,7 @@ export function botAct(real, pid) {
     const vs = BarbAttack.stealVictims(s, pid);
     return { type: 'baSteal', pid, target: best(vs, o => victoryPoints(s, o, false) * 2 + handSize(s.players[o].res) + noise(s, o) * 0.1) };
   }
+  if (s.phase === 'baCard') return baCardChoice(s, pid); // Barbarian Attack
   if (s.phase === 'caravanPick') return { type: 'caravanPick', pid, spot: best(s.caravans.vote.tied, e => camelSpotValue(s, pid, e)) };
   if (s.phase === 'displace') {
     // Cities & Knights: our knight was pushed away: put it back next to our buildings if we can
@@ -788,4 +791,88 @@ export function hint(s, pid) {
   const a = botAct(s, pid);
   s.players[pid].level = lv;
   return a;
+}
+
+// ---------------- Traders & Barbarians: Barbarian Attack ----------------
+// what a hex's barbarians cost us: our buildings around it (cities count double)
+function baStake(s, pid, hex) {
+  let k = 0;
+  for (const v of s.board.tiles[hex].verts) {
+    const b = s.buildings[v];
+    if (b && b.owner === pid) k += b.type === 'city' ? 2 : 1;
+  }
+  return k;
+}
+// worth of one more of our knights beside a hex with barbarians (`delta` knights added)
+function baHexValue(s, pid, hex, delta = 0) {
+  const B = s.barbAttack, n = B.on[hex] || 0;
+  if (!n) return 0;
+  const ks = BarbAttack.hexPaths(s, hex).filter(e => B.knights[e] != null).length + delta;
+  const base = 1 + n * 0.5 + baStake(s, pid, hex) * (BarbAttack.isConquered(s, hex) ? 1.5 : 1);
+  return ks > n ? base * 2 : base / (n + 2 - ks);
+}
+function baCardWeight(s, pid) {
+  const B = s.barbAttack;
+  const threat = Object.keys(B.on).reduce((a, h) => a + (baStake(s, pid, +h) ? B.on[h] : 0), 0);
+  return threat >= 2 ? 0.4 : 0.9;
+}
+// best place for a knight: beside the hex where it helps most
+function baBestPath(s, pid, spots) {
+  const B = s.barbAttack;
+  const score = e => {
+    const hs = s.board.edges[e].hexes.filter(h => B.on[h]);
+    return Math.max(0, ...hs.map(h => baHexValue(s, pid, h, 1))) + noise(s, e) * 0.05;
+  };
+  if (spots.some(e => score(e) > 0.1)) return best(spots, score);
+  // nothing in reach of the spots (castle paths): the one closest to the barbarians
+  const hot = Object.keys(B.on).map(Number);
+  const near = e => -Math.min(...hot.map(h => Math.hypot(s.board.tiles[h].x - s.board.vertices[s.board.edges[e].a].x, s.board.tiles[h].y - s.board.vertices[s.board.edges[e].a].y)));
+  return hot.length ? best(spots, near) : spots[0];
+}
+export function baCardChoice(s, pid) {
+  const B = s.barbAttack, type = B.card;
+  if (type === 'knight' || type === 'blackKnight') return { type: 'baCard', pid, at: baBestPath(s, pid, BarbAttack.knightSpots(s, type)) };
+  if (type === 'intrigue') {
+    const hexes = Object.keys(B.on).map(Number);
+    return { type: 'baCard', pid, hex: best(hexes, h => baStake(s, pid, h) * (BarbAttack.isConquered(s, h) ? 3 : 1) + B.on[h] * 0.2) };
+  }
+  // treason: barbarians away from our buildings, towards the leader's
+  const leader = best(s.players.filter(o => o.id !== pid && !o.retired).map(o => o.id), o => victoryPoints(s, o, false)) ?? pid;
+  const moves = [];
+  const sim = { ...B, on: { ...B.on }, conquered: [...B.conquered] };
+  const view = { ...s, barbAttack: sim };
+  for (let i = 0; i < BarbAttack.TREASON_MOVES; i++) {
+    let bestMove = null, bestGain = 0.5;
+    for (const f of s.board.coast) for (const t of s.board.coast) {
+      if (!BarbAttack.treasonMoveOk(view, f, t)) continue;
+      const gain = baStake(s, pid, f) - baStake(s, pid, t) + baStake(s, leader, t) * 0.7 - baStake(s, leader, f) * 0.7;
+      if (gain > bestGain) { bestGain = gain; bestMove = { from: f, to: t }; }
+    }
+    if (!bestMove) break;
+    moves.push(bestMove);
+    BarbAttack.moveBarbarian(view, bestMove.from, bestMove.to);
+  }
+  return { type: 'baCard', pid, moves };
+}
+// one knight move per call (each knight once per turn); grain only when we have it to spare
+export function baKnightMove(s, pid) {
+  const B = s.barbAttack, p = s.players[pid];
+  const moved = B.moved && B.moved.turn === s.turn ? B.moved.at : [];
+  const here = e => BarbAttack.isCastlePath(s, e) ? -0.5 : Math.max(0, ...s.board.edges[e].hexes.filter(h => B.on[h]).map(h => baHexValue(s, pid, h)));
+  let bestMove = null, bestGain = 0.3;
+  for (const from of BarbAttack.knightsOf(s, pid)) {
+    if (moved.includes(from)) continue;
+    const cur = here(from);
+    const view = { ...s, barbAttack: { ...B, knights: { ...B.knights } } };
+    delete view.barbAttack.knights[from];
+    for (const [to, d] of BarbAttack.knightReach(s, from)) {
+      const grain = BarbAttack.moveCost(d);
+      if (grain && p.res.wheat - grain < 1) continue;
+      const hs = s.board.edges[to].hexes.filter(h => B.on[h]);
+      if (!hs.length) continue;
+      const val = Math.max(...hs.map(h => baHexValue(view, pid, h, 1))) - grain * 0.6;
+      if (val - cur > bestGain) { bestGain = val - cur; bestMove = { type: 'baMoveKnight', pid, from, to }; }
+    }
+  }
+  return bestMove;
 }

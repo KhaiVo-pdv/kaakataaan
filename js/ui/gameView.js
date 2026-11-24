@@ -4,7 +4,7 @@ import { BoardView } from './boardView.js';
 import { RES, TILE_INFO, COSTS, DEV_INFO, EVENTS } from '../engine/constants.js';
 import { PROGRESS_CARDS as CK_PROGRESS } from '../engine/citiesKnights/progress.js';
 import * as G from '../engine/game.js';
-import { hint } from '../engine/bot.js';
+import { hint, baCardChoice, baKnightMove } from '../engine/bot.js';
 import { play } from './sfx.js';
 import { showHelp } from './help.js';
 import { toggleMusic } from './music.js';
@@ -260,6 +260,9 @@ function handleFx(st) {
         break;
       case 'gold':
         Riv.riverFx(st, f, v, { toast }); // Traders & Barbarians: Rivers
+        break;
+      case 'baBattle': // Barbarian Attack
+        toast(t('⚔️ ¡Los caballeros liberan una casilla! {n} prisionero(s)', { n: f.freed }), 'info', 3000);
         break;
       case 'barbLand': // Barbarian Attack
         if (f.conquered.length) toast(t('🔥 ¡Los bárbaros conquistan {n} casilla(s) de la costa!', { n: f.conquered.length }), 'error', 3500);
@@ -728,6 +731,7 @@ function bannerText(st, v, inter) {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
   }
+  if (st.phase === 'baCard') return st.current === v ? t('🃏 Resuelve tu carta') : t('🃏 {name} resuelve su carta...', { name: cur.name }); // Barbarian Attack
   if (st.phase === 'baSteal') return st.current === v ? t('🫳 Elige a quién robar una carta') : t('🫳 {name} elige a quién robar...', { name: cur.name }); // Barbarian Attack
   const camel = Car.voteBanner(st, v); // Caravans: whose vote it is
   if (camel) return camel;
@@ -957,14 +961,25 @@ function fillActions(bar, st, v, locked) {
     ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a), costIcons }),
     ...CK.progressButtons(st, v, ui, { h, dispatch: a => App.dispatch(a) }),
     CK.hasCK(st) ? '' : h('button', {
-      class: 'btn', disabled: !st.devDeck.length || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
+      class: 'btn', disabled: !(st.devDeck.length || st.barbAttack) || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
     }, h('span', { class: 'bicon' }, '🃏'), h('span', null, t('Carta'), h('span', { class: 'cost' }, costIcons(COSTS.dev)))),
     ...Fishr.fishButtons(st, v, { h, open: () => openFish(v) }), // Traders & Barbarians: spend fish
     ...Riv.riverButtons(st, v, ui, { h, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Rivers
+    ...baKnightButtons(st, v), // Barbarian Attack (temporary: the board taps come with the graphics)
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
     h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => App.dispatch({ type: 'endTurn', pid: v }) }, t('✅ Terminar')));
+}
+
+// Barbarian Attack: knights march towards the barbarians (one suggested move per tap)
+function baKnightButtons(st, v) {
+  if (!st.barbAttack) return [];
+  const mine = Object.values(st.barbAttack.knights).filter(o => o === v).length;
+  if (!mine) return [];
+  const mv = baKnightMove(st, v);
+  return [h('button', { class: 'btn', 'data-testid': 'ba-knight-move', disabled: !mv, title: t('Mueve un caballero hacia los bárbaros (hasta 3 caminos; 1 cereal por cada camino de más)'), onclick: () => mv && App.dispatch(mv) },
+    h('span', { class: 'bicon' }, '🛡️'), h('span', null, t('Avanzar caballero ({n})', { n: mine })))];
 }
 
 // out of turn: what your hand already pays for, so you can plan while the others play
@@ -975,7 +990,7 @@ function affordPreview(real, v) {
     ['road', '🛤️', t('Camino'), p.roadsLeft > 0 && G.legalRoads(st, v).length > 0],
     ['settlement', '🏠', t('Poblado'), p.settlementsLeft > 0 && G.legalSettlements(st, v).length > 0],
     ['city', '🏰', t('Ciudad'), p.citiesLeft > 0 && G.legalCities(st, v).length > 0],
-    ...(CK.hasCK(st) ? [] : [['dev', '🃏', t('Carta'), st.devDeck.length > 0]]),
+    ...(CK.hasCK(st) ? [] : [['dev', '🃏', t('Carta'), st.devDeck.length > 0 || !!st.barbAttack]]),
     ...Sea.seaAfford(st, v), // Seafarers: ships (their entry carries its own cost)
   ];
   return h('div', { class: 'afford' }, items.map(([what, icon, label, room, cost = COSTS[what]]) => {
@@ -1286,6 +1301,26 @@ function modalContent(st, v) {
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
     return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
+  // Barbarian Attack: the card just bought (temporary panel: suggested choice; board taps come with the graphics)
+  if (st.phase === 'baCard' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
+    const type = st.barbAttack.card, sug = baCardChoice(st, v);
+    const names = { knight: t('🛡️ Caballería'), blackKnight: t('🖤 Caballero negro'), treason: t('🗡️ Traición'), intrigue: t('🕵️ Intriga') };
+    const text = {
+      knight: t('Un caballero nuevo sale del castillo: se coloca en un camino libre junto a él.'),
+      blackKnight: t('Un caballero nuevo en cualquier camino libre: se coloca junto a los bárbaros.'),
+      treason: t('Ya tienes 2 de oro. Puedes mover hasta 2 bárbaros de una casilla costera a otra.'),
+      intrigue: t('Un bárbaro de la casilla que elijas se convierte en tu prisionero.'),
+    }[type];
+    const B = st.barbAttack;
+    const body = [h('h2', null, names[type]), h('p', null, text)];
+    if (type === 'intrigue') body.push(h('div', { class: 'chips' }, Object.keys(B.on).map(Number).map(hx => h('button', { class: 'btn', 'data-testid': 'ba-intrigue-' + hx, onclick: () => App.dispatch({ type: 'baCard', pid: v, hex: hx }) },
+      t('Casilla del {n} ({k} bárbaros)', { n: st.board.tiles[hx].num ?? '—', k: B.on[hx] })))));
+    else if (type === 'treason') body.push(h('div', { class: 'row' },
+      h('button', { class: 'btn', 'data-testid': 'ba-card-ok', disabled: !sug.moves.length, onclick: () => App.dispatch(sug) }, t('Mover {n} bárbaro(s) lejos de ti', { n: sug.moves.length })),
+      h('button', { class: 'btn ghost', 'data-testid': 'ba-card-skip', onclick: () => App.dispatch({ type: 'baCard', pid: v, moves: [] }) }, t('No mover nada'))));
+    else body.push(h('div', { class: 'row' }, h('button', { class: 'btn green', 'data-testid': 'ba-card-ok', onclick: () => App.dispatch(sug) }, t('Colocar el caballero'))));
+    return { kind: 'bacard' + v + '-' + st.turn + '-' + type, body: h('div', { 'data-testid': 'ba-card' }, ...body) };
+  }
   // Barbarian Attack: a 7 without a robber — pick who to steal from
   if (st.phase === 'baSteal' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
     const victims = st.players.filter(o => o.id !== v && !o.retired && G.handSize(o.res) > 0);

@@ -168,7 +168,7 @@ export function createGame(configIn) {
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
   if (s.barbAttack) {
     log(s, msg('🏰 Un castillo en la costa; {n} casillas costeras vigilan el mar. {k} bárbaros acechan.', { n: board.coast.length, k: BarbAttack.BARBARIANS }));
-    log(s, '🚧 El ataque de los bárbaros está en construcción: los caballeros y las cartas llegarán en la próxima versión.');
+    log(s, '🛡️ Compra cartas para armar caballeros: rodea a los bárbaros para expulsarlos y hacerlos prisioneros.');
   }
   if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {
@@ -260,6 +260,7 @@ export function victoryPoints(s, pid, hidden = true) {
   vp += s.players[pid].progressVP || 0; // Cities & Knights printer / constitution
   if (s.merchant) vp += TradeCards.merchantVP(s, pid); // Cities & Knights merchant piece
   if (s.rivers) vp += Rivers.wealthVP(s, pid); // Rivers: Wealthiest Settler +1 / Poor Settler -2
+  if (s.barbAttack) vp += BarbAttack.prisonerVP(s.players[pid]); // Barbarian Attack: 2 prisoners = 1 VP
   if (s.caravans) vp += Caravans.camelVP(s, pid); // Caravans: buildings between two camels +1
   return vp;
 }
@@ -422,6 +423,7 @@ export function pendingActors(s) {
   if (s.phase === 'pillage') return s.pillage ? Object.keys(s.pillage).map(Number).filter(pid => !s.players[pid].retired) : [];
   if (s.phase === 'caravanVote') return [s.caravans.vote.order[s.caravans.vote.idx]]; // Caravans: one voter at a time
   if (s.phase === 'caravanPick') return [s.caravans.vote.decider];
+  if (s.phase === 'baCard') return [s.current]; // Barbarian Attack: resolve the card just bought
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -1330,6 +1332,88 @@ H.baSteal = (s, a) => {
   s.phase = 'main';
 };
 
+// Barbarian Attack cards: revealed on purchase, then resolved (phase 'baCard') if they need a choice
+const BA_CARD_NAMES = { knight: '🛡️ Caballería', blackKnight: '🖤 Caballero negro', treason: '🗡️ Traición', intrigue: '🕵️ Intriga' };
+function baBuyCard(s, a) {
+  const p = s.players[a.pid];
+  if (!canAfford(p.res, COSTS.dev)) fail('Te faltan recursos.');
+  pay(s, a.pid, COSTS.dev);
+  const type = BarbAttack.drawCard(s);
+  s.fx.push({ kind: 'baCard', pid: a.pid, type });
+  log(s, msg('🃏 @{p} compra una carta: {c}.', { p: a.pid, c: BA_CARD_NAMES[type] }), a.pid);
+  if (type === 'treason') {
+    p.gold += BarbAttack.TREASON_GOLD;
+    log(s, msg('💰 @{p} recibe {n} de oro.', { p: a.pid, n: BarbAttack.TREASON_GOLD }), a.pid);
+  }
+  if (!BarbAttack.cardPlayable(s, a.pid, type) || (type === 'treason' && !s.board.coast.some(f => s.board.coast.some(t => BarbAttack.treasonMoveOk(s, f, t))))) {
+    if (type !== 'treason') log(s, msg('🃏 La carta no tiene efecto ahora.'), a.pid);
+    return;
+  }
+  s.barbAttack.card = type;
+  s.phase = 'baCard';
+}
+
+// a.at (edge) for knights, a.moves [{ from, to }] for Treason (0–2), a.hex for Intrigue
+H.baCard = (s, a) => {
+  if (!s.barbAttack || s.phase !== 'baCard') fail('No hay carta que resolver.');
+  if (a.pid !== s.current) fail('No es tu turno.');
+  const B = s.barbAttack, p = s.players[a.pid], type = B.card;
+  if (type === 'knight' || type === 'blackKnight') {
+    if (!BarbAttack.knightSpots(s, type).includes(a.at)) fail(type === 'knight' ? 'Coloca el caballero en un camino libre junto al castillo.' : 'Coloca el caballero en un camino libre.');
+    B.knights[a.at] = a.pid;
+    p.knightsLeft--;
+    s.fx.push({ kind: 'baKnight', pid: a.pid, at: a.at });
+    log(s, msg('🛡️ @{p} arma un caballero.', { p: a.pid }), a.pid);
+  } else if (type === 'treason') {
+    const moves = a.moves || [];
+    if (moves.length > BarbAttack.TREASON_MOVES) fail('Como mucho 2 bárbaros.');
+    for (const m of moves) {
+      if (!BarbAttack.treasonMoveOk(s, m.from, m.to)) fail('Ese bárbaro no puede moverse ahí.');
+      if (BarbAttack.moveBarbarian(s, m.from, m.to)) log(s, msg('🔥 ¡Los bárbaros conquistan la casilla del {n}! Ya no produce.', { n: s.board.tiles[m.to].num }), a.pid);
+    }
+    if (moves.length) log(s, msg('🗡️ @{p} mueve {n} bárbaro(s).', { p: a.pid, n: moves.length }), a.pid);
+    s.fx.push({ kind: 'baTreason', moves });
+  } else if (type === 'intrigue') {
+    if (!(B.on[a.hex] > 0)) fail('Elige una casilla con bárbaros.');
+    BarbAttack.takePrisoner(s, a.pid, a.hex);
+    s.fx.push({ kind: 'baPrisoner', pid: a.pid, hex: a.hex });
+    log(s, msg('🕵️ @{p} hace prisionero a un bárbaro.', { p: a.pid }), a.pid);
+  }
+  B.card = null;
+  s.phase = 'main';
+  checkWin(s);
+};
+
+// a knight moves: up to 3 paths free, 1 grain for each path beyond (5 at most); once per turn
+H.baMoveKnight = (s, a) => {
+  assertMain(s, a);
+  if (!s.barbAttack) fail('No hay caballeros en esta partida.');
+  const B = s.barbAttack, p = s.players[a.pid];
+  if (B.knights[a.from] !== a.pid) fail('Ese caballero no es tuyo.');
+  if (!B.moved || B.moved.turn !== s.turn) B.moved = { turn: s.turn, at: [] };
+  if (B.moved.at.includes(a.from)) fail('Ese caballero ya se movió este turno.');
+  const d = BarbAttack.knightReach(s, a.from).get(a.to);
+  if (d == null) fail('El caballero no llega ahí.');
+  const grain = BarbAttack.moveCost(d);
+  if (p.res.wheat < grain) fail('Te faltan recursos.');
+  if (grain) pay(s, a.pid, { wheat: grain });
+  delete B.knights[a.from];
+  B.knights[a.to] = a.pid;
+  B.moved.at.push(a.to);
+  s.fx.push({ kind: 'baKnightMove', pid: a.pid, from: a.from, to: a.to });
+};
+
+function baBattles(s) {
+  for (const r of BarbAttack.expelBarbarians(s)) {
+    const n = s.board.tiles[r.hex].num;
+    log(s, msg('⚔️ ¡Los caballeros expulsan {k} bárbaro(s) de la casilla del {n}!', { k: r.freed, n }));
+    for (const [pid, k] of Object.entries(r.prisoners)) log(s, msg('⛓️ @{p} se lleva {n} prisionero(s).', { p: +pid, n: k }), +pid);
+    for (const pid of Object.keys(r.gold)) log(s, msg('💰 @{p} se queda sin prisionero y recibe {n} de oro.', { p: +pid, n: r.gold[pid] }), +pid);
+    for (const l of r.lost) log(s, msg('💀 @{p} pierde un caballero en la batalla (+{n} de oro).', { p: l.pid, n: BarbAttack.LOST_KNIGHT_GOLD }), l.pid);
+    s.fx.push({ kind: 'baBattle', ...r });
+  }
+}
+
 // ---- Cities & Knights barbarians ----
 // the ship moves one step; on landing the attack is fought. True while losers must still pick a city.
 function barbariansSail(s) {
@@ -2040,6 +2124,7 @@ H.endRoadBuilding = (s, a) => {
 H.buyDev = (s, a) => {
   assertMain(s, a);
   if (s.progress) fail('En Ciudades y Caballeros no hay cartas de desarrollo.');
+  if (s.barbAttack) return baBuyCard(s, a); // Barbarian Attack: the scenario's own deck
   const p = s.players[a.pid];
   if (!s.devDeck.length) fail('No quedan cartas de desarrollo.');
   if (!canAfford(p.res, COSTS.dev)) fail('Te faltan recursos.');
@@ -2202,6 +2287,7 @@ function advanceTurn(s) {
 H.endTurn = (s, a) => {
   assertMain(s, a);
   if (s.caravans && startCamelVote(s)) return; // Caravans: the vote comes first, then the next turn
+  if (s.barbAttack) { baBattles(s); checkWin(s); if (s.phase === 'gameOver') return; } // Barbarian Attack: knights expel barbarians
   advanceTurn(s);
 };
 

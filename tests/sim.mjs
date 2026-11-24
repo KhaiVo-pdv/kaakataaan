@@ -126,6 +126,16 @@ function check(s, where) {
     for (const e in s.caravans.camels) if (s.board.edges[e].hexes.length !== 2 || s.board.edges[e].hexes.includes(s.board.oasis)) errs.push(`camello mal puesto ${e}`);
     if (s.board.robber === s.board.oasis) errs.push('ladrón en el oasis');
   }
+  // Barbarian Attack: 36 barbarians (board + supply + prisoners), at most 3 per hex, 6 knights each
+  if (s.barbAttack) {
+    const B = s.barbAttack;
+    const on = Object.values(B.on).reduce((x, y) => x + y, 0), pris = s.players.reduce((x, p) => x + p.prisoners, 0);
+    if (on + B.pool + pris !== 36) errs.push(`bárbaros: ${on}+${B.pool}+${pris}`);
+    for (const h in B.on) if (B.on[h] > 3 || B.on[h] < 1) errs.push(`bárbaros en ${h}: ${B.on[h]}`);
+    for (const h of B.conquered) if (B.on[h] !== 3) errs.push(`conquista sin 3 bárbaros ${h}`);
+    for (const p of s.players) if (Object.values(B.knights).filter(o => o === p.id).length + p.knightsLeft !== 6) errs.push(`caballeros de ${p.id}`);
+    if (s.players.some(p => p.gold < 0)) errs.push('oro negativo');
+  }
   // Fishermen: the 30 tokens (29 fish + the boot) are never created or lost
   if (s.fishermen) {
     const F = s.fishermen;

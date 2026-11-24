@@ -1396,6 +1396,90 @@ t('Ataque bárbaro: edificio conquistado sin puntos; el 7 roba sin ladrón; oro'
   ok(sg.config.rules.setupCity, 'el segundo poblado inicial es ciudad');
 });
 
+t('Ataque bárbaro: cartas al comprar, caballeros, expulsión y prisioneros', () => {
+  const s = baGame(), b = s.board, B = s.barbAttack;
+  // a knighthood card: the knight goes to a free path beside the castle
+  B.deck = ['knight'];
+  give(s, 0, { sheep: 1, wheat: 1, ore: 1 });
+  ok(act(s, { type: 'buyDev', pid: 0 }).ok, 'compra');
+  eq(s.phase, 'baCard', 'hay que colocarlo');
+  const notCastle = b.edges.find(e => !b.castlePaths.includes(e.id)).id;
+  ok(!act(s, { type: 'baCard', pid: 0, at: notCastle }).ok, 'no lejos del castillo');
+  ok(act(s, { type: 'baCard', pid: 0, at: b.castlePaths[0] }).ok, 'junto al castillo');
+  eq(s.players[0].knightsLeft, 5, 'un caballero menos en reserva');
+  // move: never onto a castle path; 3 paths free, then 1 grain each
+  const reach = BarbAttack.knightReach(s, b.castlePaths[0]);
+  ok(![...reach.keys()].some(e => b.castlePaths.includes(e)), 'no termina junto al castillo');
+  const [far] = [...reach].find(([, d]) => d === 4) || [];
+  if (far != null) {
+    for (const r of Object.keys(s.players[0].res)) s.players[0].res[r] = 0;
+    ok(!act(s, { type: 'baMoveKnight', pid: 0, from: b.castlePaths[0], to: far }).ok, '4 caminos sin cereal no');
+    give(s, 0, { wheat: 1 });
+    ok(act(s, { type: 'baMoveKnight', pid: 0, from: b.castlePaths[0], to: far }).ok, 'con 1 cereal sí');
+    eq(s.players[0].res.wheat, 0, 'pagó el cereal');
+    const next = [...BarbAttack.knightReach(s, far).keys()][0];
+    ok(!act(s, { type: 'baMoveKnight', pid: 0, from: far, to: next }).ok, 'una vez por turno');
+  }
+  // battle: 2 knights beside a hex with 1 barbarian free it; the barbarian becomes a prisoner
+  const s2 = baGame(), B2 = s2.barbAttack;
+  const hex = s2.board.coast.find(h => !B2.on[h]);
+  B2.on[hex] = 1; B2.pool--;
+  const paths = BarbAttack.hexPaths(s2, hex);
+  B2.knights[paths[0]] = 0; B2.knights[paths[1]] = 0; s2.players[0].knightsLeft -= 2;
+  const others = Object.keys(B2.on).filter(h => +h !== hex);
+  const r = BarbAttack.expelBarbarians(s2).find(x => x.hex === hex);
+  ok(r, 'hay batalla');
+  ok(!B2.on[hex], 'casilla liberada');
+  eq(s2.players[0].prisoners, 1, 'un prisionero');
+  eq(Object.keys(B2.on).length, others.length, 'las demás no cambian');
+  const lost = r.lost.length;
+  eq(s2.players[0].knightsLeft, 4 + lost, 'los caídos vuelven a la reserva');
+  eq(s2.players[0].gold, 3 * lost, '3 de oro por caído');
+  // equal numbers are not enough
+  const s3 = baGame(), B3 = s3.barbAttack;
+  const h3 = s3.board.coast.find(h => !B3.on[h]);
+  B3.on[h3] = 2; B3.pool -= 2;
+  const p3 = BarbAttack.hexPaths(s3, h3);
+  B3.knights[p3[0]] = 0; B3.knights[p3[1]] = 1;
+  ok(!BarbAttack.expelBarbarians(s3).some(x => x.hex === h3), '2 contra 2 no basta');
+  // shared victory: 2 barbarians, 3 knights of 2 players → 1 prisoner each
+  B3.knights[p3[2]] = 1;
+  const r3 = BarbAttack.expelBarbarians(s3).find(x => x.hex === h3);
+  eq(r3.prisoners, { 0: 1, 1: 1 }, 'uno para cada uno');
+  // prisoners score: 2 = 1 VP
+  const vp = G.victoryPoints(s3, 0);
+  s3.players[0].prisoners = 3;
+  eq(G.victoryPoints(s3, 0), vp + 1, '3 prisioneros = 1 punto');
+});
+
+t('Ataque bárbaro: traición e intriga', () => {
+  const s = baGame(), b = s.board, B = s.barbAttack;
+  const [h1] = b.barbStart;
+  const to = b.coast.find(h => !B.on[h]);
+  B.deck = ['treason'];
+  give(s, 0, { sheep: 1, wheat: 1, ore: 1 });
+  ok(act(s, { type: 'buyDev', pid: 0 }).ok, 'compra traición');
+  eq(s.players[0].gold, 2, '+2 de oro');
+  eq(s.phase, 'baCard', 'elige qué mover');
+  ok(!act(s, { type: 'baCard', pid: 0, moves: [{ from: to, to: h1 }] }).ok, 'no desde una casilla vacía');
+  ok(act(s, { type: 'baCard', pid: 0, moves: [{ from: h1, to }] }).ok, 'mueve un bárbaro');
+  eq(B.on[to], 1, 'llegó');
+  B.deck = ['intrigue'];
+  give(s, 0, { sheep: 1, wheat: 1, ore: 1 });
+  ok(act(s, { type: 'buyDev', pid: 0 }).ok, 'compra intriga');
+  ok(act(s, { type: 'baCard', pid: 0, hex: to }).ok, 'toma un prisionero');
+  eq(s.players[0].prisoners, 1, 'prisionero');
+  ok(!B.on[to], 'ya no está en la casilla');
+  // intrigue on a conquered hex frees it
+  const c = b.coast.find(h => !B.on[h]);
+  B.on[c] = 3; B.conquered.push(c); B.pool -= 3;
+  B.deck = ['intrigue'];
+  give(s, 0, { sheep: 1, wheat: 1, ore: 1 });
+  act(s, { type: 'buyDev', pid: 0 });
+  ok(act(s, { type: 'baCard', pid: 0, hex: c }).ok, 'de una casilla conquistada');
+  ok(!BarbAttack.isConquered(s, c), 'queda liberada');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {
