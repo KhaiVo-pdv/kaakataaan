@@ -394,7 +394,7 @@ export function generateBoard(config, rng) {
     };
   }
   // Traders & Barbarians, Fishermen: lake + fishing grounds, drawn after the normal board
-  if (tbScenarioOn(config) === 'fishermen') Object.assign(extra, addFishermen({ tiles, sea, vertices }, rng, { corner, pkey }));
+  if (tbScenarioOn(config) === 'fishermen') Object.assign(extra, addFishermen({ tiles, sea, vertices, edges, ports }, rng, { corner, pkey }));
 
   const all = [...tiles, ...sea];
   const bounds = {

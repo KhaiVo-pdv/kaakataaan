@@ -897,7 +897,7 @@ t('Pescadores: lago, 6 caladeros y bolsa de 30 fichas', () => {
     const vs = b.fishing.flatMap(f => f.verts);
     ok(new Set(vs).size === vs.length, shape + ': ningún cruce en dos caladeros');
     ok(b.fishing.every(f => f.verts.length >= 2 && f.verts.every(v => b.vertices[v].hexes.length < 3)), shape + ': caladeros en la costa');
-    if (shape === 'classic') ok(b.fishing.every(f => f.verts.length === 3), 'clásico: cada caladero toca 3 cruces');
+    ok(!b.fishing.some(f => b.ports.some(p => f.verts.includes(b.edges[p.edge].a) && f.verts.includes(b.edges[p.edge].b))), shape + ': ningún caladero bajo el cartel de un puerto');
     eq(s.fishermen.bag.length, 30, shape + ': 30 fichas');
     eq(s.fishermen.bag.filter(x => x === Fish.BOOT).length, 1, shape + ': una bota vieja');
     eq(s.fishermen.bag.reduce((a, x) => a + x, 0), 11 + 20 + 24, shape + ': 11×1 + 10×2 + 8×3');

@@ -169,6 +169,9 @@ input[type=range] { accent-color: var(--sand); }
 .tok3d .pbar { display: flex; justify-content: center; align-items: center; gap: 2px; height: 6px; }
 .tok3d .pbar b { display: block; width: 4px; box-shadow: 0 0 0 1px rgba(26,28,44,.6); }
 .tok3d.red { color: var(--wine); }
+/* Traders & Barbarians, Fishermen: fishing-ground tokens get a sea-blue rim; the lake plate is wider */
+.tok3d.fish3d { box-shadow: 0 0 0 3px #1c5d8c, inset -3px -3px 0 #b9d9ea, 4px 5px 0 1px rgba(0,0,0,.35); }
+.tok3d.wide { width: auto; height: 28px; padding: 2px 6px 0; font-size: 12px; letter-spacing: -1px; }
 /* winning number: soft green blink for ~2.6s. Only background/box-shadow/translate are animated:
    `transform` belongs to CSS2DRenderer (animating it made the tokens jump around the screen). */
 .tok3d.rolled { animation: tokWin .65s ease-in-out 4; }

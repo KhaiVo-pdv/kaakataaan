@@ -21,7 +21,7 @@ export const FISH_TOKENS = { 1: 11, 2: 10, 3: 8 };
 // Adds the lake and the fishing grounds to a freshly generated board.
 // `geo` = { corner, pkey, hexCenter, dirs } from board.js (passed in to avoid a circular import).
 export function addFishermen(board, rng, geo) {
-  const { tiles, sea, vertices } = board;
+  const { tiles, sea, vertices, edges = [], ports = [] } = board;
   const out = { lake: -1, fishing: [] };
 
   // the lake: the most central desert (custom maps can have several)
@@ -36,37 +36,42 @@ export function addFishermen(board, rng, geo) {
 
   // fishing ground candidates: sea hexes of the ring that touch exactly 3 land intersections
   const vByKey = new Map(vertices.map(v => [geo.pkey(v), v.id]));
+  // a harbour sign floats in the sea hex across its coastal edge: never put a fishing ground there
+  const signEdges = ports.map(p => edges[p.edge]).filter(Boolean);
   const cands = sea.map(h => {
     const verts = [];
     for (let i = 0; i < 6; i++) {
       const v = vByKey.get(geo.pkey(geo.corner(h.q, h.r, i)));
       if (v !== undefined) verts.push(v);
     }
-    return { h, verts, port: verts.some(v => vertices[v].port !== null), ang: Math.atan2(h.y - cy, h.x - cx) };
-  }).filter(c => c.verts.length >= 2);
-  // best first: 3 intersections and no harbour; then 3 with a harbour; then 2 (tiny or odd maps)
+    const sign = signEdges.some(e => verts.includes(e.a) && verts.includes(e.b));
+    return { h, verts, sign, port: verts.some(v => vertices[v].port !== null), ang: Math.atan2(h.y - cy, h.x - cx) };
+  }).filter(c => c.verts.length >= 2 && !c.sign);
+  // best first: 3 intersections and no harbour corner; then 3 sharing a harbour corner; then 2 (tiny or odd maps)
   const grade = c => (c.verts.length === 3 ? 0 : 2) + (c.port ? 1 : 0);
-  let pool = [];
-  for (let g = 0; g < 4 && pool.length < FISHING_COUNT; g++) pool = cands.filter(c => grade(c) <= g);
-  pool.sort((a, b) => a.ang - b.ang);
 
-  // spread them evenly around the island, never two sharing an intersection
-  const want = Math.min(FISHING_COUNT, pool.length);
+  // spread them evenly around the island: for each of 6 directions take the closest good spot,
+  // never two sharing an intersection. A worse grade costs like being ~60° off target.
   const nums = shuffle(rng, [...FISHING_NUMS]);
   const used = new Set(), taken = new Set();
-  const step = pool.length / Math.max(1, want);
-  const start = rand(rng) * step;
-  for (let i = 0; i < want; i++) {
-    const base = Math.floor(start + i * step);
-    for (let d = 0; d < pool.length; d++) {
-      const k = (base + (d % 2 ? -((d + 1) >> 1) : d >> 1) + pool.length * 2) % pool.length;
-      const c = pool[k];
-      if (taken.has(k) || c.verts.some(v => used.has(v))) continue;
-      taken.add(k);
-      c.verts.forEach(v => used.add(v));
-      out.fishing.push({ id: out.fishing.length, q: c.h.q, r: c.h.r, x: c.h.x, y: c.h.y, num: nums[out.fishing.length], verts: c.verts });
-      break;
-    }
+  const off = rand(rng) * Math.PI * 2;
+  const angDiff = (a, b) => Math.abs(((a - b + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  for (let i = 0; i < FISHING_COUNT; i++) {
+    const target = off + (i / FISHING_COUNT) * Math.PI * 2;
+    let bestK = -1, bestCost = Infinity;
+    cands.forEach((c, k) => {
+      if (taken.has(k) || c.verts.some(v => used.has(v))) return;
+      const cost = angDiff(c.ang, target) + grade(c) * 1.05;
+      if (cost < bestCost) {
+        bestCost = cost;
+        bestK = k;
+      }
+    });
+    if (bestK < 0) break;
+    const c = cands[bestK];
+    taken.add(bestK);
+    c.verts.forEach(v => used.add(v));
+    out.fishing.push({ id: out.fishing.length, q: c.h.q, r: c.h.r, x: c.h.x, y: c.h.y, num: nums[out.fishing.length], verts: c.verts });
   }
   return out;
 }

@@ -4,6 +4,7 @@ import { TILE_INFO, probLook } from '../engine/constants.js';
 import { s as S, clear } from './dom.js';
 import { drawShips, drawPirate, drawSeaHotspots, drawSeaFog } from './seafarers2d.js';
 import { drawKnights, drawWallsAndMetros, drawMerchant, drawBarbarians } from './citiesKnights2d.js';
+import { drawFishermen } from './fishermen2d.js';
 
 const U = 100; // svg units per hex radius
 const hexPoints = (cx, cy, r) =>
@@ -185,6 +186,7 @@ export class BoardView {
       gLand.append(g);
     }
     svg.append(gLand);
+    if (bd.fishing) svg.append(drawFishermen(S, U, st, hexPoints, rolled)); // Traders & Barbarians: lake + fishing grounds
     if (bd.islands) svg.append(drawSeaFog(S, U, bd, hexPoints)); // Seafarers: fog over the sea too
 
     // ports

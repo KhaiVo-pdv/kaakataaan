@@ -26,6 +26,8 @@ import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
 import { makeStyledBuilding, makeStyledMetro, makeStyledWall } from './pieceStyles3d.js';
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
+import { makeFishingGround } from './fishermen3d.js';
+import { LAKE_NUMS } from '../engine/tradersBarbarians/fishermen.js';
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
 const TOKEN_SPAN = 0.75; // widest a number token gets on the map, in world units (a hex is 1.73 across)
@@ -406,7 +408,7 @@ function tileLook(res, seed) {
 function terrainOf(st, faceDown) {
   const tiles = st.board.tiles;
   const land = new Map(tiles.map(t => [hk(t.q, t.r), t]));
-  const kindOf = t => (!t.revealed ? (faceDown ? 'back' : 'unknown') : t.res);
+  const kindOf = t => (!t.revealed ? (faceDown ? 'back' : 'unknown') : t.lake ? 'lake' : t.res); // Fishermen: the desert is a lake
   const seedOf = t => t.id * 7 + (t.q * 131 + t.r * 71);
   const lookOf = t => (t.revealed ? tileLook(t.res, seedOf(t)) : 0);
 
@@ -452,6 +454,11 @@ function terrainOf(st, faceDown) {
       case 'desert':
         // pale sand in clear dune ripples, so it never reads as a golden wheat field
         return 0.27 + fade * (Math.sin(dx * 8 + dz * 3.5 + seed) * 0.06 + n * 0.06);
+      case 'lake': {
+        // Fishermen: a round basin dipping under the sea level, so the water shows through
+        const bowl = smooth(0.64, 0.3, Math.hypot(dx, dz));
+        return 0.27 - bowl * 0.52 + fade * n * 0.03;
+      }
       default:
         return 0.3;
     }
@@ -496,6 +503,13 @@ function terrainOf(st, faceDown) {
       case 'desert':
         w[L.sand] += k;
         break;
+      case 'lake': {
+        // sandy shore down to the water, a grassy ring on top
+        const shore = smooth(0.74, 0.5, Math.hypot(dx, dz));
+        w[L.sand] += k * shore;
+        w[L.meadow] += k * (1 - shore);
+        break;
+      }
       case 'gold':
         w[L.rock] += k * 0.55;
         w[L.sand] += k * 0.45;
@@ -1559,6 +1573,36 @@ export class Board3D {
       this.tokens.push(tok);
       this.staticGroup.add(tok);
     }
+    // ---- Fishermen: fishing grounds (net, floats, fish) with their number, and the lake's 2·3·11·12 plate
+    if (bd.fishing) {
+      const ROPE = new THREE.LineDashedMaterial({ color: '#e8f6ff', dashSize: 0.08, gapSize: 0.06, transparent: true, opacity: 0.8 });
+      for (const f of bd.fishing) {
+        const o = makeFishingGround(f.id + f.q * 3 + f.r);
+        o.position.set(f.x, 0.01, f.y);
+        this.staticGroup.add(o);
+        for (const v of f.verts) {
+          const V = bd.vertices[v];
+          const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(f.x, 0.04, f.y), new THREE.Vector3(V.x, Math.max(this.heightAt(V.x, V.y), 0.05) + 0.03, V.y)]), ROPE);
+          line.computeLineDistances();
+          this.staticGroup.add(line);
+        }
+        const pl = probLook(f.num);
+        const face = `<span>${f.num}</span><i class="pbar">${`<b style="height:${pl.h}px;background:${pl.c}"></b>`.repeat(pl.p)}</i>`;
+        const tok = css2d('tok3d-at', `<div class="tok3d fish3d${f.num === 6 || f.num === 8 ? ' red' : ''}">${face}</div>`);
+        tok.position.set(f.x, 0.3, f.y);
+        tok.userData.num = f.num;
+        this.tokens.push(tok);
+        this.staticGroup.add(tok);
+      }
+    }
+    if (bd.lake >= 0 && bd.tiles[bd.lake] && bd.tiles[bd.lake].revealed) {
+      const t = bd.tiles[bd.lake];
+      const tok = css2d('tok3d-at', `<div class="tok3d wide fish3d"><span>${LAKE_NUMS.join('·')}</span></div>`);
+      tok.position.set(t.x, 0.22, t.y + 0.28);
+      tok.userData.nums = LAKE_NUMS;
+      this.tokens.push(tok);
+      this.staticGroup.add(tok);
+    }
 
     // ---- ports: two walkways from the sign straight to the two corners that use it (like the
     // classic board), a mooring post on each of those corners, a boat and a pixel sign
@@ -1639,7 +1683,11 @@ export class Board3D {
       const along = (x, z) => (x - t.x) * tc + (z - t.y) * ts;
       const look = field.lookOf(t);
       const R = () => rnd() * 6.3;
-      switch (t.res) {
+      switch (t.lake ? 'lake' : t.res) {
+        case 'lake':
+          spots(5, 0.6, 0.78, (x, z) => put('rock', x, z, 0.45 + rnd() * 0.4, R()), null, 0.05);
+          spots(4, 0.64, 0.8, (x, z) => put('pine', x, z, 0.65 + rnd() * 0.25, R()), null, 0.04);
+          break;
         case 'wood':
           if (look === 1) {
             // pine wood on a hill
@@ -1898,7 +1946,7 @@ export class Board3D {
     const fresh = at && at !== this.rolledAt;
     if (fresh) this.rolledAt = at;
     for (const tk of this.tokens || []) {
-      const on = num != null && tk.userData.num === num, el = tk.element.firstChild;
+      const on = num != null && (tk.userData.num === num || (tk.userData.nums && tk.userData.nums.includes(num))), el = tk.element.firstChild;
       if (fresh && on) {
         el.classList.remove('rolled');
         void el.offsetWidth; // same number twice in a row: restart the blink
