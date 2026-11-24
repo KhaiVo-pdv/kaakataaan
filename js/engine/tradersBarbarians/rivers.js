@@ -131,3 +131,55 @@ export function initRivers(s) {
     p.bridgesLeft = MAX_BRIDGES;
   }
 }
+
+// ---------------- rules ----------------
+
+export const BRIDGE_COST = { brick: 2, wood: 1 };
+export const GOLD = { settlement: 1, road: 1, bridge: 3 }; // gold for building at a river (cities: none)
+export const GOLD_PER_RESOURCE = 2; // 2 gold buy 1 resource...
+export const GOLD_BUYS_PER_TURN = 2; // ...at most twice a turn
+export const WEALTHY_VP = 1, POOR_VP = -2;
+
+// the 7 edges the water cuts through: roads never go there, bridges only there
+export const isCrossing = (bd, e) => !!bd.bridgeSpots && bd.bridgeSpots.includes(+e);
+// a corner of a river hex: a settlement here earns gold
+export const riverVertex = (bd, v) => bd.vertices[v].hexes.some(h => bd.tiles[h].river !== undefined);
+// an edge along a river hex (not across the water): a road here earns gold
+export const riverEdge = (bd, e) => !isCrossing(bd, e) && bd.edges[e].hexes.some(h => bd.tiles[h].river !== undefined);
+
+// gold a new piece earns: 'settlement' at vertex v / 'road' on edge e / 'bridge'
+export function goldFor(bd, what, at) {
+  if (what === 'settlement') return riverVertex(bd, at) ? GOLD.settlement : 0;
+  if (what === 'road') return riverEdge(bd, at) ? GOLD.road : 0;
+  if (what === 'bridge') return GOLD.bridge;
+  return 0;
+}
+
+// Wealthiest Settler (+1): the one player who alone has the most gold.
+// Poor Settler (-2): every player tied for the fewest gold (no gold included). Retired seats don't count.
+export function wealthVP(s, pid) {
+  if (!s.rivers) return 0;
+  const live = s.players.filter(p => !p.retired);
+  if (!live.some(p => p.id === pid) || live.length < 2) return 0;
+  const golds = live.map(p => p.gold);
+  const max = Math.max(...golds), min = Math.min(...golds);
+  const me = s.players[pid].gold;
+  let vp = 0;
+  if (me === max && golds.filter(g => g === max).length === 1) vp += WEALTHY_VP;
+  if (me === min) vp += POOR_VP;
+  return vp;
+}
+
+// title holders, for the UI and the log: { wealthy: pid or -1, poor: [pids] }
+export function wealthTitles(s) {
+  if (!s.rivers) return { wealthy: -1, poor: [] };
+  const live = s.players.filter(p => !p.retired);
+  if (live.length < 2) return { wealthy: -1, poor: [] };
+  const golds = live.map(p => p.gold);
+  const max = Math.max(...golds), min = Math.min(...golds);
+  const top = live.filter(p => p.gold === max);
+  return { wealthy: top.length === 1 ? top[0].id : -1, poor: live.filter(p => p.gold === min).map(p => p.id) };
+}
+
+// gold buys left this turn
+export const goldBuysLeft = s => (s.rivers.buys && s.rivers.buys.turn === s.turn ? GOLD_BUYS_PER_TURN - s.rivers.buys.n : GOLD_BUYS_PER_TURN);

@@ -110,3 +110,11 @@ export function fishFx(st, f, v, { toast, rich }) {
   if (f.kind === 'fishSpent') return true; // the log says it
   return false;
 }
+
+// the 💡 hint text for a fish move (undefined for other moves)
+export function fishDescribe(a) {
+  if (a.type === 'giveBoot') return t('👢 Pasa la bota vieja.');
+  if (a.type !== 'spendFish') return undefined;
+  const perk = PERKS.find(x => x.id === a.perk);
+  return perk ? t('🎣 Gasta {n} peces: {what}.', { n: FISH_PERKS[a.perk], what: t(perk.name) }) : undefined;
+}

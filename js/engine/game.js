@@ -164,7 +164,6 @@ export function createGame(configIn) {
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
   if (s.rivers) {
     log(s, msg('🏞️ {n} ríos y {m} pantanos; {k} sitios para puentes.', { n: board.rivers.length, m: board.marsh.length, k: board.bridgeSpots.length }));
-    log(s, '🚧 Los ríos de Catán está en construcción: los puentes y el oro llegarán en la próxima versión.');
   }
   if (s.fishermen) {
     if (board.lake >= 0) log(s, '🏞️ Un lago sustituye al desierto: da pescado con 2, 3, 11 y 12.');
@@ -251,6 +250,7 @@ export function victoryPoints(s, pid, hidden = true) {
   vp += s.players[pid].defenderVP || 0; // Cities & Knights Defender of Catan (absent in the base game)
   vp += s.players[pid].progressVP || 0; // Cities & Knights printer / constitution
   if (s.merchant) vp += TradeCards.merchantVP(s, pid); // Cities & Knights merchant piece
+  if (s.rivers) vp += Rivers.wealthVP(s, pid); // Rivers: Wealthiest Settler +1 / Poor Settler -2
   return vp;
 }
 
@@ -301,6 +301,7 @@ export function canSetupSettlement(s, pid, v) {
 export function canSetupRoad(s, pid, e) {
   const E = s.board.edges[e];
   if (!E || !landEdge(s, e) || hasShip(s, e) || (E.a !== s.setup.lastVid && E.b !== s.setup.lastVid)) return false;
+  if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: never across the water
   if (s.setup.blindActive) return !ownBlind(s, pid).edges.has(e);
   return s.roads[e] === undefined;
 }
@@ -308,6 +309,7 @@ export function canSetupRoad(s, pid, e) {
 export function canBuildRoad(s, pid, e) {
   const E = s.board.edges[e];
   if (!E || s.roads[e] !== undefined || !landEdge(s, e) || hasShip(s, e)) return false;
+  if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: only bridges cross the water
   for (const v of [E.a, E.b]) {
     const b = s.buildings[v];
     if (b && b.owner === pid) return true;
@@ -762,8 +764,10 @@ function resolveBlind(s) {
       const p = s.players[b.pid];
       const isCity = b.type === 'city';
       s.buildings[b.vid] = { owner: b.pid, type: b.type };
+      riverGold(s, b.pid, 'settlement', b.vid);
       if (b.eid != null && s.roads[b.eid] === undefined) {
         s.roads[b.eid] = b.pid;
+        riverGold(s, b.pid, 'road', b.eid);
       } else if (b.eid != null) {
         p.roadsLeft++;
         fix.push({ pid: b.pid, round: b.round, roadOnly: true, vid: b.vid });
@@ -900,6 +904,7 @@ H.placeSettlement = (s, a) => {
     s.buildings[a.vid] = { owner: a.pid, type };
     revealAround(s, a.vid);
     Islands.settledAt(s, a.pid, a.vid, true);
+    riverGold(s, a.pid, 'settlement', a.vid);
     if (entry.round === st.lastRound) {
       // face-down board: resources would give away what's underneath, pay them on the flip
       if (s.config.modes.flipped) (st.pendingRes = st.pendingRes || []).push([a.pid, a.vid]);
@@ -928,6 +933,7 @@ H.placeRoad = (s, a) => {
     revealAround(s, E.a);
     revealAround(s, E.b);
     exploreFrom(s, a.pid, a.eid);
+    riverGold(s, a.pid, 'road', a.eid);
   }
   s.fx.push({ kind: 'build', what: 'road', pid: a.pid, at: a.eid, hidden: st.blindActive });
   if (st.fixing) nextFixOrBegin(s);
@@ -1144,6 +1150,76 @@ H.giveBoot = (s, a) => {
   s.fishermen.boot = a.to;
   s.fx.push({ kind: 'boot', pid: a.to, from: a.pid });
   log(s, msg('👢 @{p} le pasa la bota vieja a @{v}.', { p: a.pid, v: a.to }), a.pid);
+};
+
+// ---- Traders & Barbarians: Rivers of Catan ----
+function riverGold(s, pid, what, at) {
+  if (!s.rivers) return;
+  const n = Rivers.goldFor(s.board, what, at);
+  if (!n) return;
+  s.players[pid].gold += n;
+  s.fx.push({ kind: 'gold', pid, n, what });
+  log(s, msg('🪙 @{p} gana {n} de oro junto al río.', { p: pid, n }), pid);
+}
+
+// a bridge: on a free bridge spot, joined to the player's road or building (like a road)
+export function canBuildBridge(s, pid, e) {
+  if (!s.rivers || !Rivers.isCrossing(s.board, e) || s.roads[e] !== undefined) return false;
+  const E = s.board.edges[e];
+  for (const v of [E.a, E.b]) {
+    const b = s.buildings[v];
+    if (b && b.owner === pid) return true;
+    if (b) continue;
+    if (s.board.vertices[v].edges.some(x => x !== e && s.roads[x] === pid)) return true;
+  }
+  return false;
+}
+export const legalBridges = (s, pid) => (s.rivers ? s.board.bridgeSpots.filter(e => canBuildBridge(s, pid, e)) : []);
+
+H.buildBridge = (s, a) => {
+  if (!s.rivers) fail('No hay ríos en esta partida.');
+  assertMain(s, a);
+  const p = s.players[a.pid];
+  if (p.bridgesLeft <= 0) fail('No te quedan puentes.');
+  if (!canBuildBridge(s, a.pid, a.at)) fail('El puente va sobre el río, junto a tu camino o tu poblado.');
+  if (!canAfford(p.res, Rivers.BRIDGE_COST)) fail('Te faltan recursos.');
+  pay(s, a.pid, Rivers.BRIDGE_COST);
+  p.bridgesLeft--;
+  s.roads[a.at] = a.pid; // a bridge is a road piece: it links the network and counts for Longest Road
+  s.rivers.bridges[a.at] = a.pid;
+  s.fx.push({ kind: 'build', what: 'bridge', pid: a.pid, at: a.at });
+  log(s, msg('🌉 @{p} construye un puente.', { p: a.pid }), a.pid);
+  riverGold(s, a.pid, 'bridge', a.at);
+  updateLongestRoad(s);
+};
+
+H.goldBuy = (s, a) => {
+  if (!s.rivers) fail('No hay ríos en esta partida.');
+  assertMain(s, a);
+  const p = s.players[a.pid];
+  if (!RES.includes(a.res)) fail('Elige un recurso.');
+  if (Rivers.goldBuysLeft(s) <= 0) fail('Solo puedes comprar con oro 2 veces por turno.');
+  if (p.gold < Rivers.GOLD_PER_RESOURCE) fail('Te falta oro.');
+  if (s.bank[a.res] < 1) fail('El banco no tiene ese recurso.');
+  p.gold -= Rivers.GOLD_PER_RESOURCE;
+  const used = s.rivers.buys && s.rivers.buys.turn === s.turn ? s.rivers.buys.n : 0;
+  s.rivers.buys = { turn: s.turn, n: used + 1 };
+  giveFromBank(s, a.pid, a.res, 1);
+  s.fx.push({ kind: 'fromBank', pid: a.pid, res: [a.res] });
+  log(s, msg('🪙 @{p} paga {n} de oro por {r}.', { p: a.pid, n: Rivers.GOLD_PER_RESOURCE, r: resName(a.res) }), a.pid);
+};
+
+H.goldSell = (s, a) => {
+  if (!s.rivers) fail('No hay ríos en esta partida.');
+  assertMain(s, a);
+  const p = s.players[a.pid];
+  if (!RES.includes(a.give)) fail('Elige un recurso.');
+  const ratio = tradeRatio(s, a.pid, a.give); // the same rate as a bank trade (4:1, or your harbour)
+  if (p.res[a.give] < ratio) fail(msg('Necesitas {n} de ese recurso.', { n: ratio }));
+  pay(s, a.pid, { [a.give]: ratio });
+  p.gold += 1;
+  s.fx.push({ kind: 'gold', pid: a.pid, n: 1, what: 'trade' });
+  log(s, msg('🪙 @{p} cambia {n}{give} por 1 de oro.', { p: a.pid, n: ratio, give: resName(a.give) }), a.pid);
 };
 
 // ---- Cities & Knights barbarians ----
@@ -1789,6 +1865,7 @@ H.build = (s, a) => {
     revealAround(s, E.b);
     exploreFrom(s, a.pid, a.at);
     log(s, free ? msg('🛤️ @{p} construye un camino gratis.', { p: a.pid }) : msg('🛤️ @{p} construye un camino.', { p: a.pid }), a.pid);
+    riverGold(s, a.pid, 'road', a.at);
     if (free) {
       s.freeRoads--;
       if (s.freeRoads <= 0 || noFreeBuildLeft(s, a.pid)) s.phase = 'main';
@@ -1819,6 +1896,7 @@ H.build = (s, a) => {
       s.fx.push({ kind: 'islandBonus', pid: a.pid, at: a.at, n: bonus });
     }
     log(s, msg('🏠 @{p} construye un poblado.', { p: a.pid }), a.pid);
+    riverGold(s, a.pid, 'settlement', a.at);
   } else if (a.what === 'city') {
     if (p.citiesLeft <= 0) fail('No te quedan ciudades.');
     if (!canBuildCity(s, a.pid, a.at)) fail('Solo puedes mejorar tus poblados.');

@@ -1058,6 +1058,107 @@ t('Ríos: 2 pantanos en el nacimiento, ríos de 3 y 4, 7 sitios de puente', () =
   ok(!('rivers' in base) && !('rivers' in base.board) && !('marsh' in base.board) && base.players.every(p => !('gold' in p)), 'el juego base no tiene datos de ríos');
 });
 
+// ---------- Traders & Barbarians: Rivers of Catan (rules) ----------
+const riverGame = () => fresh(c => { c.expansions = { tradersBarbarians: true, tbScenario: 'rivers' }; });
+// a settlement of `pid` at one end of a bridge spot, ready to build there
+function atSpot(s, pid, spot) {
+  const E = s.board.edges[spot];
+  s.buildings[E.a] = { owner: pid, type: 'settlement' };
+  return E;
+}
+
+t('Ríos: ningún camino cruza el río; el puente sí', () => {
+  const s = riverGame();
+  const spot = s.board.bridgeSpots[0];
+  atSpot(s, 0, spot);
+  ok(!G.canBuildRoad(s, 0, spot), 'un camino no puede cruzar el río');
+  ok(!G.legalRoads(s, 0).includes(spot), 'ni aparece entre los caminos legales');
+  ok(G.legalBridges(s, 0).includes(spot), 'el puente sí');
+  ok(!G.legalBridges(s, 1).includes(spot), 'pero no para quien no llega');
+  const p = s.players[0];
+  give(s, 0, { brick: 2, wood: 1 });
+  const gold = p.gold, roadsLeft = p.roadsLeft;
+  ok(act(s, { type: 'buildBridge', pid: 0, at: spot }).ok, 'construye el puente');
+  eq(p.res.brick + p.res.wood, 0, 'paga 2 ladrillos y 1 madera');
+  eq(p.gold - gold, Rivers.GOLD.bridge, '+3 de oro');
+  eq(p.bridgesLeft, 2, 'le quedan 2 puentes');
+  eq(p.roadsLeft, roadsLeft, 'no gasta caminos');
+  eq(s.roads[spot], 0, 'cuenta como camino (red y camino más largo)');
+  eq(s.rivers.bridges[spot], 0, 'y queda apuntado como puente');
+  ok(!act(s, { type: 'buildBridge', pid: 0, at: spot }).ok, 'no dos veces en el mismo sitio');
+  // no more than 3
+  p.bridgesLeft = 0;
+  give(s, 0, { brick: 2, wood: 1 });
+  const other = s.board.bridgeSpots.find(e => e !== spot);
+  atSpot(s, 0, other);
+  ok(!act(s, { type: 'buildBridge', pid: 0, at: other }).ok, 'máximo 3 puentes');
+  // a plain road next to the water elsewhere still works
+  ok(!act(s, { type: 'buildBridge', pid: 0, at: s.board.edges.find(e => !Rivers.isCrossing(s.board, e.id)).id }).ok, 'el puente solo va en los sitios del río');
+});
+
+t('Ríos: oro por poblado y camino junto al río (no por ciudad)', () => {
+  const s = riverGame(), b = s.board;
+  const p = s.players[0];
+  // a corner of a river hex that is free, then build there
+  const v = b.vertices.find(V => Rivers.riverVertex(b, V.id) && V.hexes.length === 3);
+  const e = v.edges.find(x => !Rivers.isCrossing(b, x));
+  s.roads[e] = 0;
+  give(s, 0, { wood: 1, brick: 1, sheep: 1, wheat: 1 });
+  ok(act(s, { type: 'build', pid: 0, what: 'settlement', at: v.id }).ok, 'poblado junto al río');
+  eq(p.gold, 1, '+1 de oro');
+  give(s, 0, { wheat: 2, ore: 3 });
+  ok(act(s, { type: 'build', pid: 0, what: 'city', at: v.id }).ok, 'ciudad');
+  eq(p.gold, 1, 'la ciudad no da oro');
+  const re = G.legalRoads(s, 0).find(x => Rivers.riverEdge(b, x));
+  if (re !== undefined) {
+    give(s, 0, { wood: 1, brick: 1 });
+    ok(act(s, { type: 'build', pid: 0, what: 'road', at: re }).ok, 'camino junto al río');
+    eq(p.gold, 2, '+1 de oro por el camino');
+  }
+  const dry = G.legalRoads(s, 0).find(x => !Rivers.riverEdge(b, x));
+  if (dry !== undefined) {
+    const before = p.gold;
+    give(s, 0, { wood: 1, brick: 1 });
+    act(s, { type: 'build', pid: 0, what: 'road', at: dry });
+    eq(p.gold, before, 'lejos del río no hay oro');
+  }
+});
+
+t('Ríos: 2 de oro = 1 recurso, máximo 2 veces por turno; recursos por oro al cambio del banco', () => {
+  const s = riverGame();
+  const p = s.players[0];
+  p.gold = 7;
+  ok(act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'compra 1');
+  ok(act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'compra 2');
+  ok(!act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'la tercera no');
+  eq(p.res.ore, 2, '2 minerales');
+  eq(p.gold, 3, '4 de oro gastados');
+  act(s, { type: 'endTurn', pid: 0 });
+  s.phase = 'main'; s.current = 0; s.turn += 1;
+  ok(act(s, { type: 'goldBuy', pid: 0, res: 'wood' }).ok, 'el turno siguiente vuelve a poder');
+  p.gold = 1;
+  ok(!act(s, { type: 'goldBuy', pid: 0, res: 'wood' }).ok, 'con 1 de oro no llega');
+  give(s, 0, { sheep: 4 });
+  ok(act(s, { type: 'goldSell', pid: 0, give: 'sheep' }).ok, '4 ovejas por 1 de oro');
+  eq(p.gold, 2, '+1 de oro');
+  eq(p.res.sheep, 0, 'paga las 4');
+  ok(!act(s, { type: 'goldSell', pid: 0, give: 'sheep' }).ok, 'sin ovejas no');
+});
+
+t('Ríos: el colono más rico (+1) y los pobres (−2)', () => {
+  const s = riverGame();
+  const vp = pid => G.victoryPoints(s, pid) - Object.values(s.buildings).filter(b => b.owner === pid).length;
+  s.players.forEach(p => (p.gold = 0));
+  ok(s.players.every(p => vp(p.id) === -2), 'todos empatados a 0: todos pobres');
+  s.players[0].gold = 3; s.players[1].gold = 1; s.players[2].gold = 1; s.players[3].gold = 0;
+  eq([0, 1, 2, 3].map(vp), [1, 0, 0, -2], 'el rico +1, el de menos oro −2');
+  s.players[1].gold = 3;
+  eq([0, 1].map(vp), [0, 0], 'empate arriba: nadie es el más rico');
+  s.players[3].gold = 1;
+  eq([1, 2, 3].map(vp), [0, -2, -2], 'empatados abajo: todos pobres');
+  ok(G.handSize(s.players[0].res) === 0, 'el oro no es carta (no cuenta para el 7)');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {

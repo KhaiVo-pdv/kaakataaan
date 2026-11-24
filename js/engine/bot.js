@@ -5,8 +5,9 @@ import {
   canAfford, handSize, victoryPoints, tradeRatio, playableDev, pendingActors,
   legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities,
   legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets, playableProgress,
-  fishPerkReason, bootReceivers,
+  fishPerkReason, bootReceivers, legalBridges,
 } from './game.js';
+import * as Rivers from './tradersBarbarians/rivers.js';
 import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
@@ -392,6 +393,43 @@ function tryProgressPlay(s, pid) {
   return null;
 }
 
+// Rivers: a bridge when the far bank has a good spot (or we are a Poor Settler: 3 gold),
+// gold for the one card we miss (never dropping to the fewest gold), resources for gold when poor
+function tryRivers(s, pid) {
+  if (!s.rivers) return null;
+  const p = s.players[pid];
+  const others = s.players.filter(o => o.id !== pid && !o.retired).map(o => o.gold);
+  const minOther = others.length ? Math.min(...others) : 0;
+  const poor = p.gold <= minOther;
+  if (p.bridgesLeft > 0 && canAfford(p.res, Rivers.BRIDGE_COST)) {
+    const prod = production(s, pid);
+    const linked = (e, v) => (s.buildings[v] && s.buildings[v].owner === pid) || s.board.vertices[v].edges.some(x => x !== e && s.roads[x] === pid);
+    const score = e => {
+      const E = s.board.edges[e];
+      const from = linked(e, E.a) ? E.a : E.b;
+      return roadTargetScore(s, pid, e, from, prod) + noise(s, e) * 0.2;
+    };
+    const spots = legalBridges(s, pid);
+    const e = best(spots, score);
+    if (e !== null && (score(e) > 3 || poor)) return { type: 'buildBridge', pid, at: e };
+  }
+  if (p.gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0 && p.gold - Rivers.GOLD_PER_RESOURCE > minOther) {
+    const t = chooseTarget(s, pid);
+    const need = t && missing(p.res, t.cost);
+    if (need && need.n === 1) {
+      const r = Object.keys(need.m)[0];
+      if (s.bank[r] > 0) return { type: 'goldBuy', pid, res: r };
+    }
+  }
+  if (poor) {
+    // sell a surplus resource (one not needed for what we are saving for)
+    const t = chooseTarget(s, pid);
+    const spare = RES.filter(r => p.res[r] - ((t && t.cost[r]) || 0) >= tradeRatio(s, pid, r));
+    if (spare.length) return { type: 'goldSell', pid, give: best(spare, r => p.res[r]) };
+  }
+  return null;
+}
+
 // Fishermen: pass the old boot on, then spend fish on the most useful perk we can afford
 function tryFish(s, pid) {
   if (!s.fishermen) return null;
@@ -438,6 +476,8 @@ function mainAction(s, pid) {
   if (prog) return prog;
   const fish = tryFish(s, pid); // Traders & Barbarians: Fishermen
   if (fish) return fish;
+  const river = tryRivers(s, pid); // Traders & Barbarians: Rivers of Catan
+  if (river) return river;
 
   if (p.citiesLeft > 0 && canAfford(p.res, COSTS.city)) {
     const prod = production(s, pid);

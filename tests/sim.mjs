@@ -1,6 +1,6 @@
 // Headless self-play: runs many bot-only games over every map/mode combination and
 // checks rule invariants after every single action.  Usage: node tests/sim.mjs [games]
-import { createGame, applyAction, pendingActors, victoryPoints, handSize, canBuildRoad } from '../js/engine/game.js';
+import { createGame, applyAction, pendingActors, victoryPoints, handSize, canBuildRoad, canBuildBridge } from '../js/engine/game.js';
 import { botAct } from '../js/engine/bot.js';
 import { defaultConfig, MODES, PLAYER_COLORS } from '../js/engine/config.js';
 import { SHAPES } from '../js/engine/board.js';
@@ -82,7 +82,8 @@ function check(s, where) {
   for (const p of s.players) {
     const setts = Object.values(s.buildings).filter(b => b.owner === p.id && b.type === 'settlement').length;
     const cities = Object.values(s.buildings).filter(b => b.owner === p.id && b.type === 'city').length;
-    const roads = Object.values(s.roads).filter(o => o === p.id).length;
+    const bridges = s.rivers ? Object.values(s.rivers.bridges).filter(o => o === p.id).length : 0; // Rivers: bridges are road pieces too
+    const roads = Object.values(s.roads).filter(o => o === p.id).length - bridges;
     const blindS = s.blind.filter(b => b.pid === p.id && b.type === 'settlement').length;
     const blindC = s.blind.filter(b => b.pid === p.id && b.type === 'city').length;
     const blindR = s.blind.filter(b => b.pid === p.id && b.eid != null).length;
@@ -110,6 +111,14 @@ function check(s, where) {
       if (tot !== COMMODITY_BANK) errs.push(`conservación ${c}: ${tot}`);
       if (s.bank[c] < 0 || s.players.some(p => p.res[c] < 0)) errs.push(`${c} negativo`);
     }
+  // Rivers: gold never negative, at most 3 bridges each, bridges only on bridge spots and never a plain road there
+  if (s.rivers) {
+    for (const p of s.players) {
+      if (p.gold < 0) errs.push(`oro negativo ${p.id}`);
+      if (p.bridgesLeft < 0 || p.bridgesLeft + Object.values(s.rivers.bridges).filter(o => o === p.id).length !== 3) errs.push(`puentes ${p.id}`);
+    }
+    for (const e of s.board.bridgeSpots) if (s.roads[e] !== undefined && s.rivers.bridges[e] === undefined) errs.push(`camino cruzando el río ${e}`);
+  }
   // Fishermen: the 30 tokens (29 fish + the boot) are never created or lost
   if (s.fishermen) {
     const F = s.fishermen;
@@ -219,7 +228,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES; i++) {
         // a new road must connect at an end that isn't a rival's building (checked when it's built:
         // a rival may legally cut it later by settling in between)
         if (!setupBefore)
-          for (const k in s.roads) if (roadsBefore[k] === undefined && !canBuildRoad({ ...s, roads: roadsBefore }, s.roads[k], +k))
+          for (const k in s.roads) if (roadsBefore[k] === undefined && !(s.rivers && s.rivers.bridges[k] !== undefined ? canBuildBridge : canBuildRoad)({ ...s, roads: roadsBefore }, s.roads[k], +k))
             throw new Error(`[${a.type}] camino ${k} no conecta (o pasa por un edificio rival)`);
         acted = true;
         break;
@@ -242,6 +251,10 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES; i++) {
       summary.progress = (summary.progress || 0) + 54 - Object.values(s.progress).reduce((n, d) => n + d.length, 0);
     }
     if (s.config.expansions.citiesKnights) summary.commodities = (summary.commodities || 0) + s.players.reduce((a, p) => a + COMMODITIES.reduce((b, c) => b + p.res[c], 0), 0) + (s.ckProduced || 0);
+    if (s.rivers) {
+      summary.bridges = (summary.bridges || 0) + Object.keys(s.rivers.bridges).length;
+      summary.gold = (summary.gold || 0) + s.players.reduce((a, p) => a + p.gold, 0);
+    }
     if (s.fishermen) {
       summary.fishSpent = (summary.fishSpent || 0) + s.log.filter(l => JSON.stringify(l).includes('paga')).length;
       summary.boots = (summary.boots || 0) + (s.fishermen.boot >= 0 ? 1 : 0);
@@ -266,6 +279,7 @@ for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES; i++) {
 }
 if (summary.attacks != null) console.log(`🏴‍☠️ ataques bárbaros: ${summary.attacks} · puntos de Defensor de Catan: ${summary.defenders} · cartas de progreso robadas: ${summary.progress} · jugadas: ${summary.played}`);
 if (summary.knights != null) console.log(`⚔️ caballeros en el tablero al final de las partidas de Ciudades y Caballeros: ${summary.knights}`);
+if (summary.bridges != null) console.log(`🌉 ríos: ${summary.bridges} puentes · ${summary.gold} de oro al final`);
 if (summary.fishSpent != null) console.log(`🎣 pescadores: ${summary.fishSpent} compras con pescado · bota vieja repartida en ${summary.boots} partidas · ganadas con la bota: ${summary.bootWins}`);
 if (summary.ships != null) console.log(`\n⛵ barcos en el mar al final de las partidas de Navegantes: ${summary.ships} · 🏴‍☠️ movimientos del pirata: ${summary.pirate || 0} · 🏝️ puntos por islas nuevas: ${summary.islandVP || 0} · 🌫️ niebla descubierta: ${summary.fogSeen || 0}/${summary.fogAll || 0}`);
 console.log(`\nPartidas: ${summary.games}, terminadas: ${summary.finished}, errores: ${summary.errors}, turnos medios: ${(summary.turns / Math.max(1, summary.games)).toFixed(1)}`);

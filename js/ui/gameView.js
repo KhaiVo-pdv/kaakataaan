@@ -975,7 +975,7 @@ function speedControl() {
 
 function describe(a, st) {
   if (!a) return t('Nada que hacer ahora.');
-  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a); // expansion moves
+  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a) || Fishr.fishDescribe(a); // expansion moves
   if (sea) return sea;
   switch (a.type) {
     case 'roll': return t('Tira los dados.');
