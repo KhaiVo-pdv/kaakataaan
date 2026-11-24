@@ -11,6 +11,8 @@ import * as Caravans from './tradersBarbarians/caravans.js';
 import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
 import * as Traders from './tradersBarbarians/traders.js';
 import * as EvCards from './eventCards.js';
+import * as Two from './catanForTwo.js';
+import { PLAYER_COLORS } from './config.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -120,6 +122,8 @@ export function createGame(configIn) {
   s.devTotal = s.devDeck.length;
   if (config.rules.harbormaster) s.harbormaster = { owner: -1, count: 0 }; // Harbormaster variant (base games never get this key)
   if (config.rules.diceMode === 'eventCards') s.eventDeck = EvCards.newEventDeck(rng); // Catan Event Cards variant: cards instead of dice
+  // Catan for Two variant: two neutral seats (only in 2-player base games)
+  if (config.rules.catanForTwo && config.players.length === 2 && !seafarersOn(config) && !citiesKnightsOn(config) && !tradersBarbariansOn(config)) Two.initCatanForTwo(s, PLAYER_COLORS, R);
   if (seafarersOn(s)) {
     Ships.initShips(s);
     Islands.initIslands(s);
@@ -442,6 +446,7 @@ export function pendingActors(s) {
   if (s.phase === 'baCard') return [s.current]; // Barbarian Attack: resolve the card just bought
   if (s.phase === 'tbBarbarian') return [s.current]; // Traders & Barbarians: move a barbarian
   if (s.phase === 'evChoice') return Object.keys(s.evChoice.pending).map(Number); // Event Cards: choices
+  if (s.phase === 'neutralBuild') return [s.neutralBuild.pid]; // Catan for Two: place the neutral piece
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -528,7 +533,7 @@ function roadLength(s, pid) {
 
 function updateLongestRoad(s) {
   if (s.traders) { for (const p of s.players) p.roadLen = p.retired ? 0 : roadLength(s, p.id); return; } // Traders & Barbarians: no Longest Road card
-  const lens = s.players.map(p => (p.roadLen = p.retired ? 0 : roadLength(s, p.id)));
+  const lens = s.players.map(p => (p.roadLen = p.retired && !p.neutral ? 0 : roadLength(s, p.id))); // Catan for Two: neutrals can hold it
   const cur = s.longestRoad.owner;
   const max = Math.max(...lens);
   let owner;
@@ -1044,6 +1049,13 @@ H.roll = (s, a) => {
   let d = s.alchemy || throwDice(s, a.pid); // C&K Alchemist: the player chose the number dice
   if (s.alchemy) s.eventCard = null;
   delete s.alchemy;
+  if (s.two) { // Catan for Two: two production rolls a turn; the second must differ from the first
+    const R2 = s.two.roll;
+    if (R2 && R2.turn === s.turn && R2.n === 1.5) {
+      while (d[0] + d[1] === R2.first) d = throwDice(s, a.pid);
+      R2.n = 2;
+    } else s.two.roll = { turn: s.turn, n: 1, first: d[0] + d[1] };
+  }
   if (s.traders) while (d[0] + d[1] === 2 || d[0] + d[1] === 12) { // Traders & Barbarians: 2 and 12 are rolled again
     log(s, msg('🎲 Sale {n}: se vuelve a tirar.', { n: d[0] + d[1] }), a.pid);
     d = throwDice(s, a.pid);
@@ -2417,6 +2429,41 @@ H.build = (s, a) => {
   } else fail('Construcción desconocida.');
   s.fx.push({ kind: 'build', what: a.what, pid: a.pid, at: a.at });
   if (a.what !== 'city') updateLongestRoad(s);
+  if (s.two && (a.what === 'road' || a.what === 'settlement')) startNeutralBuild(s, a.pid, a.what); // Catan for Two
+};
+
+// ---- Catan for Two: every road / settlement a player builds gives a free one to a neutral ----
+// legal spots for a neutral piece: [{ nid, at }] (a settlement must reach a neutral road)
+export function neutralSpots(s, what) {
+  const out = [];
+  for (const nid of Two.neutrals(s)) {
+    const n = s.players[nid];
+    if (what === 'settlement' && n.settlementsLeft > 0) for (const v of s.board.vertices) { if (canBuildSettlement(s, nid, v.id)) out.push({ nid, at: v.id }); }
+    if (what === 'road' && n.roadsLeft > 0) for (const e of s.board.edges) { if (canBuildRoad(s, nid, e.id)) out.push({ nid, at: e.id }); }
+  }
+  return out;
+}
+function startNeutralBuild(s, pid, what) {
+  let kind = what;
+  if (kind === 'settlement' && !neutralSpots(s, 'settlement').length) kind = 'road'; // no spot: a neutral road instead
+  if (!neutralSpots(s, kind).length) return;
+  s.neutralBuild = { pid, what: kind, back: s.phase };
+  s.phase = 'neutralBuild';
+}
+H.neutralBuild = (s, a) => {
+  if (s.phase !== 'neutralBuild' || !s.neutralBuild) fail('Ahora no se construye para los neutrales.');
+  const N = s.neutralBuild;
+  if (a.pid !== N.pid) fail('No es tu turno.');
+  const spot = neutralSpots(s, N.what).find(x => x.at === a.at && (a.nid == null || x.nid === a.nid));
+  if (!spot) fail(N.what === 'road' ? 'El camino neutral debe conectar con su red.' : 'Ahí no se puede poner el poblado neutral.');
+  const n = s.players[spot.nid];
+  if (N.what === 'road') { s.roads[a.at] = spot.nid; n.roadsLeft--; }
+  else { s.buildings[a.at] = { owner: spot.nid, type: 'settlement' }; n.settlementsLeft--; }
+  s.fx.push({ kind: 'build', what: N.what, pid: spot.nid, at: a.at });
+  log(s, msg(N.what === 'road' ? '⚪ @{p} pone un camino de @{n}.' : '⚪ @{p} pone un poblado de @{n}.', { p: a.pid, n: spot.nid }), a.pid);
+  s.phase = N.back;
+  s.neutralBuild = null;
+  updateLongestRoad(s);
 };
 
 // Road Building: nothing left to place for free (base game: roads only; Seafarers: roads or ships)
@@ -2752,6 +2799,12 @@ export function applyAction(s, a) {
     h(s, a);
     s.actions++;
     if (s.harbormaster && s.phase !== 'gameOver') updateHarbormaster(s); // Harbormaster variant
+    // Catan for Two: once the first roll is fully resolved, the same player rolls again
+    if (s.two && s.two.roll && s.two.roll.turn === s.turn && s.two.roll.n === 1 && s.phase === 'main') {
+      s.two.roll.n = 1.5;
+      s.phase = 'roll';
+      log(s, '🎲 Segunda tirada del turno (no puede repetir el número).');
+    }
     checkWin(s);
     return { ok: true };
   } catch (e) {

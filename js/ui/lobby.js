@@ -340,7 +340,7 @@ export function lobbyScreen(root, opts = {}) {
     // modes
     left.append(h('div', { class: 'card' },
       h('h3', null, t('🎭 Modos de juego '), h('small', null, t('combínalos como quieras'))),
-      h('div', { class: 'modes' }, MODES.map(md => {
+      h('div', { class: 'modes' }, MODES.filter(md => !md.show || md.show(cfg)).map(md => { // some modes only fit some games
         const on = md.get(cfg);
         return h('div', { class: 'mode' + (on ? ' on' : '') + (md.flagship ? ' flag' : ''), onclick: () => { md.set(cfg, !on); refresh(); } },
           h('div', { class: 'mi' }, md.icon), h('div', null, md.flagship ? h('span', { class: 'flagship' }, t('★ MODO INSIGNIA')) : null, h('b', null, t(md.name)), h('small', null, t(md.desc))), h('div', { class: 'switch' }));

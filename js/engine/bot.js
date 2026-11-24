@@ -5,7 +5,7 @@ import {
   canAfford, handSize, victoryPoints, tradeRatio, playableDev, pendingActors,
   legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities,
   legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets, playableProgress,
-  fishPerkReason, bootReceivers, legalBridges, damagedRoadsOf, REPAIR_COST,
+  fishPerkReason, bootReceivers, legalBridges, damagedRoadsOf, REPAIR_COST, neutralSpots,
 } from './game.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
@@ -699,6 +699,7 @@ export function botAct(real, pid) {
   }
   if (s.phase === 'baCard') return baCardChoice(s, pid); // Barbarian Attack
   if (s.phase === 'evChoice') return evChoiceAction(s, pid); // Event Cards
+  if (s.phase === 'neutralBuild') return neutralBuildAction(s, pid); // Catan for Two
   if (s.phase === 'tbBarbarian') return tbBarbarianChoice(real && real.traders ? real : s, pid); // Traders & Barbarians
   if (s.phase === 'caravanPick') return { type: 'caravanPick', pid, spot: best(s.caravans.vote.tied, e => camelSpotValue(s, pid, e)) };
   if (s.phase === 'displace') {
@@ -969,4 +970,23 @@ function evChoiceAction(s, pid) {
     return { type: 'evChoose', pid, res, to };
   }
   return { type: 'evChoose', pid, target: best(task.options, o => victoryPoints(s, o, false) * 2 + handSize(s.players[o].res) + noise(s, o) * 0.1) };
+}
+
+// ---------------- Catan for Two: where the free neutral piece goes ----------------
+// a neutral settlement takes the spot the opponent would like most; a neutral road heads for the
+// opponent's pieces (to get in their way)
+export function neutralBuildAction(view, pid) {
+  const s = REAL && REAL.neutralBuild ? REAL : view; // fog hides pieces: where the neutral may build is decided on the real board
+  const N = s.neutralBuild, spots = neutralSpots(s, N.what);
+  const opp = s.players.find(o => o.id !== pid && !o.retired);
+  if (N.what === 'settlement') {
+    const prod = opp ? production(s, opp.id) : null;
+    const sp = best(spots, x => (opp ? vertexScore(s, opp.id, x.at, prod) : 0) + noise(s, x.at) * 0.1);
+    return { type: 'neutralBuild', pid, at: sp.at, nid: sp.nid };
+  }
+  const theirs = opp ? Object.keys(s.buildings).filter(v => s.buildings[v].owner === opp.id).map(Number) : [];
+  const mid = e => { const E = s.board.edges[e]; const a = s.board.vertices[E.a], b = s.board.vertices[E.b]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  const near = e => { const m = mid(e); return theirs.length ? -Math.min(...theirs.map(v => Math.hypot(s.board.vertices[v].x - m.x, s.board.vertices[v].y - m.y))) : 0; };
+  const sp = best(spots, x => near(x.at) + noise(s, x.at) * 0.05);
+  return { type: 'neutralBuild', pid, at: sp.at, nid: sp.nid };
 }

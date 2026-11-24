@@ -1791,6 +1791,43 @@ t('Cartas de evento: año abundante, buenos vecinos, vecino solidario, ventaja c
   if (e) ok(G.canBuildRoad(s, 0, e.id), 'ya puede');
 });
 
+t('Catan para dos: dos neutrales, doble tirada distinta, pieza neutral gratis', () => {
+  const two = (more = {}) => { const c = defaultConfig(); c.players = c.players.slice(0, 2); c.rules.catanForTwo = true; Object.assign(c, more); return c; };
+  const base = defaultConfig(); base.players = base.players.slice(0, 2);
+  eq(G.createGame(base).players.length, 2, 'sin la opción no hay neutrales');
+  const cx = two(); cx.expansions = { ...cx.expansions, seafarers: true };
+  eq(G.createGame(cx).players.length, 2, 'con expansiones no se aplica');
+  const s = G.createGame(two());
+  eq(s.players.length, 4, 'dos neutrales');
+  ok(s.players[2].neutral && s.players[3].neutral && s.players[2].retired, 'marcados como neutrales');
+  eq(Object.values(s.buildings).filter(b => b.owner >= 2).length, 2, 'un poblado cada uno');
+  ok(s.setup.queue.every(q => q.pid < 2), 'los neutrales no colocan al principio');
+  // two rolls a turn, the second different
+  s.phase = 'roll'; s.current = 0; s.turn = 5; s.round = 3;
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'primera tirada');
+  const first = s.dice[0] + s.dice[1];
+  if (s.phase === 'discard') for (const pid of G.pendingActors(s)) act(s, { type: 'discard', pid, res: {} });
+  if (s.phase === 'robber') { const tile = G.legalRobberTiles(s, 0)[0]; act(s, { type: 'moveRobber', pid: 0, tile }); }
+  if (s.phase === 'steal') act(s, { type: 'steal', pid: 0, target: G.pendingActors(s).length ? 1 : 1 });
+  eq(s.phase, 'roll', 'vuelve a tirar');
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'segunda tirada');
+  ok(s.dice[0] + s.dice[1] !== first, 'número distinto');
+  if (s.phase === 'main') ok(!act(s, { type: 'roll', pid: 0 }).ok, 'no hay tercera');
+  // building a road gives a neutral road
+  const s2 = G.createGame(two());
+  s2.phase = 'main'; s2.current = 0; s2.turn = 5;
+  const v = s2.board.vertices.find(V => V.hexes.length === 3 && G.canSetupSettlement(s2, 0, V.id));
+  s2.buildings[v.id] = { owner: 0, type: 'settlement' };
+  give(s2, 0, { wood: 1, brick: 1 });
+  ok(act(s2, { type: 'build', pid: 0, what: 'road', at: v.edges[0] }).ok, 'construye camino');
+  eq(s2.phase, 'neutralBuild', 'toca poner uno neutral');
+  const spot = G.neutralSpots(s2, 'road')[0];
+  ok(act(s2, { type: 'neutralBuild', pid: 0, at: spot.at }).ok, 'lo pone');
+  eq(s2.roads[spot.at], spot.nid, 'es del neutral');
+  eq(s2.phase, 'main', 'sigue el turno');
+  ok(s2.players.every(p => p.neutral || G.victoryPoints(s2, p.id) >= 0), 'los neutrales no juegan');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {

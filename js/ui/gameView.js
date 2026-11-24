@@ -4,7 +4,7 @@ import { BoardView } from './boardView.js';
 import { RES, TILE_INFO, COSTS, DEV_INFO, EVENTS } from '../engine/constants.js';
 import { PROGRESS_CARDS as CK_PROGRESS } from '../engine/citiesKnights/progress.js';
 import * as G from '../engine/game.js';
-import { hint } from '../engine/bot.js';
+import { hint, neutralBuildAction } from '../engine/bot.js';
 import { play } from './sfx.js';
 import { showHelp } from './help.js';
 import { toggleMusic } from './music.js';
@@ -27,6 +27,8 @@ let ui = null;
 const PHASE_TEXT = {
   setup: tk('Colocación inicial'), roll: tk('Tirar dados'), main: tk('Construir y comerciar'), discard: tk('Descartar'),
   robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), harbor: tk('Puerto comercial'), wedding: tk('Boda'), deserter: tk('Desertor'), deserterPlace: tk('Desertor'), displace: tk('Recolocar caballero'),
+  // Traders & Barbarians scenarios and variants
+  caravanVote: tk('Votación de camellos'), caravanPick: tk('Elegir el camello'), baSteal: tk('Robar una carta'), baCard: tk('Carta de los bárbaros'), tbBarbarian: tk('Mover un bárbaro'), evChoice: tk('Carta de evento'), neutralBuild: tk('Pieza neutral'),
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -691,6 +693,8 @@ function interaction(real, v) {
     ?? CK.progressInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), legalCities: G.legalCities, legalRoads: G.legalRoads })
     ?? CK.knightInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), canAfford: G.canAfford, liveRes: () => App.state.players[v].res });
   if (ck !== undefined) return ck;
+  const nb = EvUI.neutralInteraction(st, v, { mk, dispatch: a => App.dispatch(a) }); // Catan for Two
+  if (nb !== undefined) return nb;
   const tb = TrUI.tradersInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); // Traders & Barbarians
   if (tb !== undefined) return tb;
   const ba = BaUI.baInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), liveRes: () => App.state.players[v].res }); // Barbarian Attack
@@ -764,6 +768,8 @@ function bannerText(st, v, inter) {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
   }
+  const nbTxt = EvUI.neutralBanner(st, v); // Catan for Two
+  if (nbTxt) return nbTxt;
   const evTxt = EvUI.evBanner(st, v); // Event Cards: choices
   if (evTxt) return evTxt;
   const tbTxt = TrUI.tradersBanner(st, v, ui); // Traders & Barbarians: wagon moves, barbarians
@@ -829,7 +835,7 @@ function renderPlayers(st, v) {
     const all = G.victoryPoints(st, p.id, true);
     const me = p.id === v;
     const conn = online && p.kind === 'human' ? App.net.presence(p.id) : undefined;
-    const tag = p.retired ? t('retirado') : p.kind === 'bot' ? (p.remote ? t('bot sustituto') : { easy: t('bot fácil'), normal: t('bot normal'), hard: t('bot difícil') }[p.level] || t('bot')): me ? t('tú') : '';
+    const tag = p.neutral ? t('neutral') : p.retired ? t('retirado') : p.kind === 'bot' ? (p.remote ? t('bot sustituto') : { easy: t('bot fácil'), normal: t('bot normal'), hard: t('bot difícil') }[p.level] || t('bot')): me ? t('tú') : '';
     const card = h('div', { class: 'pcard' + (st.current === p.id ? ' current' : '') + (st.winner === p.id ? ' winner' : '') + (p.retired ? ' retired' : ''), style: { '--pc': p.color }, 'data-testid': 'pcard', 'data-seat': String(p.id) },
       h('div', { class: 'top' },
         h('div', { class: 'avatar' }, p.flag ? flagImg(p.flag, 30) : p.kind === 'bot' ? '🤖' : p.name.slice(0, 1).toUpperCase()),
@@ -924,6 +930,10 @@ function fillActions(bar, st, v, locked) {
   const myTurn = st.current === v;
   if (st.phase === 'gameOver') {
     acts.append(h('button', { class: 'btn primary', onclick: () => openGameOver(App.state) }, t('🏆 Ver resultados')));
+    return;
+  }
+  if (st.phase === 'neutralBuild') { // Catan for Two: the free neutral piece
+    acts.append(...EvUI.neutralActions(st, v, { h, dispatch: a => App.dispatch(a), suggest: neutralBuildAction }));
     return;
   }
   if (st.phase === 'tbBarbarian') { // Traders & Barbarians: tap a barbarian, then a free path

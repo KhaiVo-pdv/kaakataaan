@@ -65,3 +65,25 @@ export function drawDamagedRoads(S, U, st) {
   }
   return g;
 }
+
+// ---------------- Catan for Two: placing the free neutral piece ----------------
+import { neutralSpots } from '../engine/game.js';
+export function neutralInteraction(st, v, { mk, dispatch }) {
+  if (st.phase !== 'neutralBuild' || !st.neutralBuild || st.neutralBuild.pid !== v) return undefined;
+  const N = st.neutralBuild, spots = neutralSpots(st, N.what);
+  const inter = mk(N.what === 'road' ? 'road' : 'settlement', [...new Set(spots.map(x => x.at))], at => dispatch({ type: 'neutralBuild', pid: v, at, nid: spots.find(x => x.at === at).nid }));
+  if (spots.length) inter.color = st.players[spots[0].nid].color;
+  return inter;
+}
+export function neutralActions(st, v, { h, dispatch, suggest }) {
+  const N = st.neutralBuild;
+  if (N.pid !== v) return [h('div', { class: 'waiting' }, t('⚪ {name} coloca una pieza neutral...', { name: st.players[N.pid].name }))];
+  return [h('div', { class: 'waiting your-turn', 'data-testid': 'neutral-build' }, N.what === 'road' ? t('⚪ Pon un camino neutral') : t('⚪ Pon un poblado neutral'),
+    h('small', null, t('Toca un sitio resaltado: la pieza es de un jugador neutral (puedes usarla para cortarle el paso a tu rival).'))),
+  h('button', { class: 'btn ghost', 'data-testid': 'neutral-auto', title: t('Elige por ti lo que haría un bot'), onclick: () => dispatch(suggest(st, v)) }, t('🎲 Que elija el juego'))];
+}
+export function neutralBanner(st, v) {
+  if (st.phase !== 'neutralBuild' || !st.neutralBuild) return '';
+  if (st.neutralBuild.pid !== v) return t('⚪ {name} coloca una pieza neutral...', { name: st.players[st.neutralBuild.pid].name });
+  return st.neutralBuild.what === 'road' ? t('⚪ Pon un camino neutral: toca un camino resaltado') : t('⚪ Pon un poblado neutral: toca un cruce resaltado');
+}
