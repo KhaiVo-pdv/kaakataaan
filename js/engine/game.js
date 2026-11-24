@@ -168,7 +168,7 @@ export function createGame(configIn) {
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
   if (s.barbAttack) {
     log(s, msg('🏰 Un castillo en la costa; {n} casillas costeras vigilan el mar. {k} bárbaros acechan.', { n: board.coast.length, k: BarbAttack.BARBARIANS }));
-    log(s, '🚧 El ataque de los bárbaros está en construcción: los desembarcos, los caballeros y el oro llegarán en las próximas versiones.');
+    log(s, '🚧 El ataque de los bárbaros está en construcción: los caballeros y las cartas llegarán en la próxima versión.');
   }
   if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {
@@ -249,7 +249,7 @@ export function victoryPoints(s, pid, hidden = true) {
   let vp = 0;
   for (const k in s.buildings) {
     const b = s.buildings[k];
-    if (b.owner === pid) vp += b.type === 'city' ? 2 : 1;
+    if (b.owner === pid && !(s.barbAttack && BarbAttack.buildingConquered(s, +k))) vp += b.type === 'city' ? 2 : 1; // Barbarian Attack: conquered buildings score nothing
   }
   if (s.longestRoad.owner === pid) vp += 2;
   if (s.largestArmy.owner === pid) vp += 2;
@@ -273,6 +273,7 @@ export function tradeRatio(s, pid, res) {
   if (s.event && s.event.id === 'blackMarket' && s.event.res === res) best = 2;
   for (const k in s.buildings) {
     if (s.buildings[k].owner !== pid) continue;
+    if (s.barbAttack && BarbAttack.buildingConquered(s, +k)) continue; // Barbarian Attack: no harbour for a conquered building
     const port = s.board.vertices[k].port;
     if (port === null || port === undefined) continue;
     const p = s.board.ports[port];
@@ -295,6 +296,7 @@ const hasShip = (s, e) => !!s.ships && s.ships[e] !== undefined; // Seafarers on
 
 function vertexOpen(s, v) {
   if (s.buildings[v] || !onLand(s, v) || (s.knights && s.knights[v])) return false; // C&K: no building on a knight
+  if (s.barbAttack && BarbAttack.vertexBlocked(s, v)) return false; // Barbarian Attack: not next to a conquered hex
   return !s.board.vertices[v].adj.some(u => s.buildings[u]);
 }
 
@@ -312,6 +314,7 @@ export function canSetupRoad(s, pid, e) {
   const E = s.board.edges[e];
   if (!E || !landEdge(s, e) || hasShip(s, e) || (E.a !== s.setup.lastVid && E.b !== s.setup.lastVid)) return false;
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: never across the water
+  if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
   if (s.setup.blindActive) return !ownBlind(s, pid).edges.has(e);
   return s.roads[e] === undefined;
 }
@@ -320,6 +323,7 @@ export function canBuildRoad(s, pid, e) {
   const E = s.board.edges[e];
   if (!E || s.roads[e] !== undefined || !landEdge(s, e) || hasShip(s, e)) return false;
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: only bridges cross the water
+  if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
   for (const v of [E.a, E.b]) {
     const b = s.buildings[v];
     if (b && b.owner === pid) return true;
@@ -568,6 +572,7 @@ function produce(s, sum) {
     if (t.fog && !t.revealed) continue; // Seafarers: undiscovered fog land doesn't produce
     if (s.event && s.event.id === 'drought' && s.event.res === t.res) continue;
     if (t.res === 'desert') continue;
+    if (s.barbAttack && BarbAttack.isConquered(s, t.id)) continue; // Barbarian Attack: a conquered hex produces nothing
     let produced = false;
     for (const v of t.verts) {
       const b = s.buildings[v];
@@ -1069,6 +1074,7 @@ const afterSeven = s => {
     delete s.sabotage;
     return 'main';
   }
+  if (s.barbAttack) return BarbAttack.stealVictims(s, s.current).length ? 'baSteal' : 'main'; // Barbarian Attack: no robber, steal from anyone
   return s.config.rules.noRobber || Barb.robberAsleep(s) ? 'main' : 'robber';
 };
 
@@ -1206,7 +1212,7 @@ H.buildBridge = (s, a) => {
 };
 
 H.goldBuy = (s, a) => {
-  if (!s.rivers) fail('No hay ríos en esta partida.');
+  if (!s.rivers && !s.barbAttack) fail('No hay oro en esta partida.');
   assertMain(s, a);
   const p = s.players[a.pid];
   if (!RES.includes(a.res)) fail('Elige un recurso.');
@@ -1214,15 +1220,16 @@ H.goldBuy = (s, a) => {
   if (p.gold < Rivers.GOLD_PER_RESOURCE) fail('Te falta oro.');
   if (s.bank[a.res] < 1) fail('El banco no tiene ese recurso.');
   p.gold -= Rivers.GOLD_PER_RESOURCE;
-  const used = s.rivers.buys && s.rivers.buys.turn === s.turn ? s.rivers.buys.n : 0;
-  s.rivers.buys = { turn: s.turn, n: used + 1 };
+  const box = Rivers.goldBox(s); // Rivers or Barbarian Attack
+  const used = box.buys && box.buys.turn === s.turn ? box.buys.n : 0;
+  box.buys = { turn: s.turn, n: used + 1 };
   giveFromBank(s, a.pid, a.res, 1);
   s.fx.push({ kind: 'fromBank', pid: a.pid, res: [a.res] });
   log(s, msg('🪙 @{p} paga {n} de oro por {r}.', { p: a.pid, n: Rivers.GOLD_PER_RESOURCE, r: resName(a.res) }), a.pid);
 };
 
 H.goldSell = (s, a) => {
-  if (!s.rivers) fail('No hay ríos en esta partida.');
+  if (!s.rivers && !s.barbAttack) fail('No hay oro en esta partida.');
   assertMain(s, a);
   const p = s.players[a.pid];
   if (!RES.includes(a.give)) fail('Elige un recurso.');
@@ -1301,6 +1308,27 @@ function finishCamelVote(s, edge) {
   checkWin(s); // still the builder's turn: the camel may have given them the win
   if (s.phase !== 'gameOver') advanceTurn(s);
 }
+
+// ---- Traders & Barbarians: Barbarian Attack ----
+function barbariansLand(s, pid) {
+  const landed = BarbAttack.landBarbarians(s);
+  for (const l of landed) {
+    log(s, msg('⚔️ ¡Desembarco! Sale {n}: un bárbaro llega a la costa.', { n: l.roll }), pid);
+    if (l.conquered) log(s, msg('🔥 ¡Los bárbaros conquistan la casilla del {n}! Ya no produce.', { n: s.board.tiles[l.hex].num }), pid);
+  }
+  if (landed.length) s.fx.push({ kind: 'barbLand', hexes: landed.map(l => l.hex), conquered: landed.filter(l => l.conquered).map(l => l.hex) });
+  else if (s.barbAttack.pool <= 0) log(s, '⚔️ No quedan bárbaros: ya no hay más desembarcos.');
+}
+
+H.baSteal = (s, a) => {
+  if (!s.barbAttack || s.phase !== 'baSteal') fail('No toca robar.');
+  if (a.pid !== s.current) fail('No es tu turno.');
+  if (!BarbAttack.stealVictims(s, a.pid).includes(a.target)) fail('Elige a un rival con cartas.');
+  const r = stealRandom(s, a.target, a.pid);
+  s.fx.push({ kind: 'steal', from: a.target, to: a.pid, res: r });
+  log(s, msg('🫳 @{p} le roba una carta a @{v}.', { p: a.pid, v: a.target }), a.pid);
+  s.phase = 'main';
+};
 
 // ---- Cities & Knights barbarians ----
 // the ship moves one step; on landing the attack is fought. True while losers must still pick a city.
@@ -1978,6 +2006,7 @@ H.build = (s, a) => {
     log(s, msg('🏠 @{p} construye un poblado.', { p: a.pid }), a.pid);
     riverGold(s, a.pid, 'settlement', a.at);
     if (s.caravans) s.caravans.built = true; // Caravans: a camel vote at the end of this turn
+    if (s.barbAttack) barbariansLand(s, a.pid); // Barbarian Attack: building draws barbarians to the coast
   } else if (a.what === 'city') {
     if (p.citiesLeft <= 0) fail('No te quedan ciudades.');
     if (!canBuildCity(s, a.pid, a.at)) fail('Solo puedes mejorar tus poblados.');
@@ -1988,6 +2017,7 @@ H.build = (s, a) => {
     s.buildings[a.at].type = 'city';
     log(s, msg('🏰 @{p} mejora a ciudad.', { p: a.pid }), a.pid);
     if (s.caravans) s.caravans.built = true;
+    if (s.barbAttack) barbariansLand(s, a.pid);
   } else fail('Construcción desconocida.');
   s.fx.push({ kind: 'build', what: a.what, pid: a.pid, at: a.at });
   if (a.what !== 'city') updateLongestRoad(s);

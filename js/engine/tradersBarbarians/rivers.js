@@ -182,4 +182,9 @@ export function wealthTitles(s) {
 }
 
 // gold buys left this turn
-export const goldBuysLeft = s => (s.rivers.buys && s.rivers.buys.turn === s.turn ? GOLD_BUYS_PER_TURN - s.rivers.buys.n : GOLD_BUYS_PER_TURN);
+// (Barbarian Attack uses the same gold rules: the counter lives in s.barbAttack there)
+export const goldBox = s => s.rivers || s.barbAttack;
+export const goldBuysLeft = s => {
+  const box = goldBox(s);
+  return box.buys && box.buys.turn === s.turn ? GOLD_BUYS_PER_TURN - box.buys.n : GOLD_BUYS_PER_TURN;
+};

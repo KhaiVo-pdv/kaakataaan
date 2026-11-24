@@ -9,6 +9,7 @@ import {
 } from './game.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
+import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
 import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
@@ -42,7 +43,8 @@ function tileValue(s, t) {
   if (!t.revealed) return 2.2;
   if (t.res === 'desert') return 0;
   const p = t.numRevealed ? pips(t.num) : 2.8;
-  return p * RES_W[t.res] * (t.id === s.board.robber ? 0.5 : 1);
+  const coast = s.barbAttack ? (BarbAttack.isConquered(s, t.id) ? 0 : 1 - (s.barbAttack.on[t.id] || 0) * 0.2) : 1; // Barbarian Attack: threatened coast is worth less
+  return p * RES_W[t.res] * (t.id === s.board.robber ? 0.5 : 1) * coast;
 }
 
 function production(s, pid) {
@@ -514,6 +516,13 @@ function mainAction(s, pid) {
   if (fish) return fish;
   const river = tryRivers(s, pid); // Traders & Barbarians: Rivers of Catan
   if (river) return river;
+  if (s.barbAttack && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
+    const t = chooseTarget(s, pid), need = t && missing(s.players[pid].res, t.cost);
+    if (need && need.n === 1) {
+      const r = Object.keys(need.m)[0];
+      if (s.bank[r] > 0) return { type: 'goldBuy', pid, res: r };
+    }
+  }
 
   if (p.citiesLeft > 0 && canAfford(p.res, COSTS.city)) {
     const prod = production(s, pid);
@@ -673,6 +682,10 @@ export function botAct(real, pid) {
   if (!pendingActors(s).includes(pid)) return null;
   if (s.phase === 'discard') return s.pendingDiscards[pid] ? discard(s, pid) : null;
   if (s.phase === 'caravanVote') return camelBid(s, pid); // Caravans
+  if (s.phase === 'baSteal') { // Barbarian Attack 7: rob the leader who has cards
+    const vs = BarbAttack.stealVictims(s, pid);
+    return { type: 'baSteal', pid, target: best(vs, o => victoryPoints(s, o, false) * 2 + handSize(s.players[o].res) + noise(s, o) * 0.1) };
+  }
   if (s.phase === 'caravanPick') return { type: 'caravanPick', pid, spot: best(s.caravans.vote.tied, e => camelSpotValue(s, pid, e)) };
   if (s.phase === 'displace') {
     // Cities & Knights: our knight was pushed away: put it back next to our buildings if we can

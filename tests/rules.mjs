@@ -1302,6 +1302,100 @@ t('Ataque bárbaro: castillo en la costa, desierto enfrente, 2 bárbaros inicial
   ok(!('barbAttack' in base) && !('castle' in base.board) && base.players.every(p => !('prisoners' in p)), 'el juego base no tiene bárbaros');
 });
 
+// ---------- Traders & Barbarians: Barbarian Attack (landings, conquest, 7, gold) ----------
+const baGame = () => fresh(c => { c.expansions = { tradersBarbarians: true, tbScenario: 'barbarianAttack' }; });
+
+t('Ataque bárbaro: desembarcos al construir (3 casillas distintas de la costa)', () => {
+  const s = baGame(), b = s.board;
+  s.buildings = {}; s.roads = {};
+  const before = Object.values(s.barbAttack.on).reduce((x, y) => x + y, 0);
+  const v = b.vertices.find(V => V.hexes.length === 3 && !V.hexes.some(h => b.tiles[h].res === 'desert'));
+  s.roads[v.edges[0]] = 0;
+  give(s, 0, { wood: 1, brick: 1, sheep: 1, wheat: 1 });
+  ok(act(s, { type: 'build', pid: 0, what: 'settlement', at: v.id }).ok, 'poblado');
+  const after = Object.values(s.barbAttack.on).reduce((x, y) => x + y, 0);
+  ok(after - before >= 1 && after - before <= 3, 'llegan de 1 a 3 bárbaros (' + (after - before) + ')');
+  eq(after + s.barbAttack.pool, BarbAttack.BARBARIANS, 'el total no cambia');
+  ok(Object.keys(s.barbAttack.on).every(h => b.coast.includes(+h)), 'solo en la costa');
+  // landings directly: never twice on the same hex in one attack
+  const s2 = baGame();
+  for (let i = 0; i < 20; i++) {
+    const l = BarbAttack.landBarbarians(s2);
+    ok(new Set(l.map(x => x.hex)).size === l.length, 'casillas distintas en un desembarco');
+  }
+});
+
+t('Ataque bárbaro: 3 bárbaros conquistan; la casilla no produce ni deja construir', () => {
+  const s = baGame(), b = s.board;
+  s.buildings = {}; s.roads = {};
+  const hex = b.coast.find(h => b.tiles[h].num);
+  s.barbAttack.on[hex] = 2;
+  ok(BarbAttack.placeBarbarian(s, hex), 'el tercero conquista');
+  ok(BarbAttack.isConquered(s, hex), 'conquistada');
+  ok(!BarbAttack.placeBarbarian(s, hex), 'no llegan más');
+  const t0 = b.tiles[hex];
+  const v = t0.verts[0];
+  ok(!G.canBuildSettlement(s, 0, v), 'no se construye junto a ella');
+  ok(!G.canSetupSettlement(s, 0, v), 'ni al colocar al principio');
+  const e = b.edges.find(E => E.hexes.includes(hex)).id;
+  s.buildings[b.edges[e].a] = { owner: 0, type: 'settlement' };
+  ok(!G.canBuildRoad(s, 0, e), 'ni caminos a lo largo');
+});
+
+t('Ataque bárbaro: una ciudad rodeada de casillas conquistadas no recibe nada', () => {
+  const s = baGame(), b = s.board;
+  s.buildings = {}; s.roads = {};
+  const v = b.vertices.find(V => V.hexes.length >= 1 && V.hexes.every(h => b.coast.includes(h)));
+  for (const h of v.hexes) { s.barbAttack.on[h] = 3; if (!s.barbAttack.conquered.includes(h)) s.barbAttack.conquered.push(h); }
+  s.buildings[v.id] = { owner: 1, type: 'city' };
+  for (const r of Object.keys(s.players[1].res)) s.players[1].res[r] = 0;
+  for (let i = 0; i < 40; i++) {
+    s.phase = 'roll'; s.current = 0;
+    ok(act(s, { type: 'roll', pid: 0 }).ok, 'tira');
+    if (s.phase === 'baSteal') act(s, { type: 'baSteal', pid: 0, target: BarbAttack.stealVictims(s, 0)[0] });
+  }
+  eq(Object.values(s.players[1].res).reduce((x, y) => x + y, 0), 0, 'sin producción');
+});
+
+t('Ataque bárbaro: edificio conquistado sin puntos; el 7 roba sin ladrón; oro', () => {
+  const s = baGame(), b = s.board;
+  s.buildings = {}; s.roads = {};
+  // a corner whose land hexes are all coastal and numbered
+  const v = b.vertices.find(V => V.hexes.length >= 1 && V.hexes.every(h => b.coast.includes(h)));
+  s.buildings[v.id] = { owner: 1, type: 'city' };
+  const vp = G.victoryPoints(s, 1);
+  for (const h of v.hexes) { s.barbAttack.on[h] = 3; if (!s.barbAttack.conquered.includes(h)) s.barbAttack.conquered.push(h); }
+  ok(BarbAttack.buildingConquered(s, v.id), 'la ciudad está conquistada');
+  eq(G.victoryPoints(s, 1), vp - 2, 'y no da puntos');
+  // 7: roll until a 7 comes up; no robber, the roller steals from a chosen player
+  const s7 = baGame();
+  give(s7, 1, { ore: 2 });
+  let seen = false;
+  for (let i = 0; i < 200 && !seen; i++) {
+    s7.phase = 'roll'; s7.current = 0;
+    act(s7, { type: 'roll', pid: 0 });
+    if (s7.phase === 'discard') for (const pid of G.pendingActors(s7)) { const p = s7.players[pid]; const n = Math.floor(G.handSize(p.res) / 2); const res = {}; let k = n; for (const r of Object.keys(p.res)) { const x = Math.min(k, p.res[r]); if (x) res[r] = x; k -= x; } act(s7, { type: 'discard', pid, res }); }
+    if (s7.phase === 'baSteal') seen = true;
+  }
+  ok(seen, 'un 7 lleva a robar');
+  ok(s7.board.robber === -1, 'sin ladrón en el tablero');
+  ok(!act(s7, { type: 'moveRobber', pid: 0, tile: 0 }).ok, 'no hay ladrón que mover');
+  const t1 = BarbAttack.stealVictims(s7, 0)[0];
+  const h1 = G.handSize(s7.players[t1].res);
+  ok(act(s7, { type: 'baSteal', pid: 0, target: t1 }).ok, 'roba a quien elige');
+  eq(G.handSize(s7.players[t1].res), h1 - 1, 'una carta menos');
+  eq(s7.phase, 'main', 'y sigue el turno');
+  // gold: 2 gold buy a resource, twice per turn
+  const sg = baGame();
+  sg.players[0].gold = 6;
+  ok(act(sg, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'compra con oro');
+  ok(act(sg, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'dos veces');
+  ok(!act(sg, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'no tres');
+  eq(sg.players[0].gold, 2, 'gastó 4 de oro');
+  eq(sg.devDeck.length, 0, 'sin cartas de desarrollo normales');
+  ok(sg.config.rules.setupCity, 'el segundo poblado inicial es ciudad');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {

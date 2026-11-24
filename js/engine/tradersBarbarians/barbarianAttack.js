@@ -66,9 +66,64 @@ export function initBarbarianAttack(s) {
   const on = {};
   for (const id of s.board.barbStart) on[id] = 1;
   s.barbAttack = { on, pool: BARBARIANS - s.board.barbStart.length, conquered: [], knights: {} };
+  s.devDeck = []; // the base development cards are not used (the scenario's own deck comes later)
+  s.config.rules.setupCity = true; // the second starting settlement is a city
   for (const p of s.players) {
     p.gold = 0;
     p.prisoners = 0;
     p.knightsLeft = KNIGHTS;
   }
 }
+
+// ---------------- rules ----------------
+
+export const LANDINGS = 3; // barbarians per attack (each on a different hex)
+const MAX_ROLLS = 40; // safety net for odd maps (a number missing on the coast is simply re-rolled)
+
+export const isConquered = (s, hex) => !!s.barbAttack && s.barbAttack.conquered.includes(hex);
+// a building is conquered when every land hex around it is (the sea frame counts as conquered)
+export function buildingConquered(s, v) {
+  if (!s.barbAttack) return false;
+  const hexes = s.board.vertices[v].hexes;
+  return hexes.length > 0 && hexes.every(h => s.barbAttack.conquered.includes(h));
+}
+// no new settlement next to a conquered hex, no road along one
+export const vertexBlocked = (s, v) => !!s.barbAttack && s.board.vertices[v].hexes.some(h => s.barbAttack.conquered.includes(h));
+export const edgeBlocked = (s, e) => !!s.barbAttack && s.board.edges[e].hexes.some(h => s.barbAttack.conquered.includes(h));
+
+// One barbarian onto a coastal hex; 3 conquer it. Returns true if this one conquered it.
+export function placeBarbarian(s, hex) {
+  const B = s.barbAttack;
+  if (B.pool <= 0 || isConquered(s, hex)) return false;
+  B.on[hex] = (B.on[hex] || 0) + 1;
+  B.pool--;
+  if (B.on[hex] >= CONQUER_AT) {
+    B.conquered.push(hex);
+    return true;
+  }
+  return false;
+}
+
+// An attack after a settlement / city: up to 3 rolls, each lands on a different coastal hex with
+// that number. 7s, hexes already hit in this attack and conquered hexes are re-rolled; when the
+// number sits on several coastal hexes one of them is picked at random.
+// Returns [{ hex, roll, conquered }].
+export function landBarbarians(s) {
+  const B = s.barbAttack, bd = s.board, out = [];
+  const d6 = () => 1 + Math.floor(rand(s.rng) * 6);
+  const free = bd.coast.filter(h => !isConquered(s, h));
+  for (let n = 0, tries = 0; n < LANDINGS && B.pool > 0 && tries < MAX_ROLLS; tries++) {
+    if (!free.some(h => !out.some(o => o.hex === h))) break; // nowhere left to land
+    const roll = d6() + d6();
+    if (roll === 7) continue;
+    const spots = free.filter(h => bd.tiles[h].num === roll && !out.some(o => o.hex === h));
+    if (!spots.length) continue;
+    const hex = spots[Math.floor(rand(s.rng) * spots.length)];
+    out.push({ hex, roll, conquered: placeBarbarian(s, hex) });
+    n++;
+  }
+  return out;
+}
+
+// who the current player may steal from on a 7 (no robber: anyone with cards)
+export const stealVictims = (s, pid) => s.players.filter(o => o.id !== pid && !o.retired && Object.values(o.res).some(n => n > 0)).map(o => o.id);

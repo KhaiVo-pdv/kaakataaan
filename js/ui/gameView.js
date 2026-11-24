@@ -261,6 +261,10 @@ function handleFx(st) {
       case 'gold':
         Riv.riverFx(st, f, v, { toast }); // Traders & Barbarians: Rivers
         break;
+      case 'barbLand': // Barbarian Attack
+        if (f.conquered.length) toast(t('🔥 ¡Los bárbaros conquistan {n} casilla(s) de la costa!', { n: f.conquered.length }), 'error', 3500);
+        else toast(t('⚔️ {n} bárbaro(s) desembarcan en la costa', { n: f.hexes.length }), 'info', 2200);
+        break;
       case 'camel':
       case 'camelVote':
       case 'camelBid':
@@ -724,6 +728,7 @@ function bannerText(st, v, inter) {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
   }
+  if (st.phase === 'baSteal') return st.current === v ? t('🫳 Elige a quién robar una carta') : t('🫳 {name} elige a quién robar...', { name: cur.name }); // Barbarian Attack
   const camel = Car.voteBanner(st, v); // Caravans: whose vote it is
   if (camel) return camel;
   if (st.current !== v) return st.trade ? t('🤝 {name} ofrece un intercambio', { name: cur.name }) : t('Turno de {name}', { name: cur.name });
@@ -1281,6 +1286,15 @@ function modalContent(st, v) {
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
     return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
+  // Barbarian Attack: a 7 without a robber — pick who to steal from
+  if (st.phase === 'baSteal' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
+    const victims = st.players.filter(o => o.id !== v && !o.retired && G.handSize(o.res) > 0);
+    return { kind: 'basteal' + v + '-' + st.turn, body: h('div', { 'data-testid': 'ba-steal' },
+      h('h2', null, t('🫳 ¿A quién le robas?')),
+      h('p', null, t('No hay ladrón en este escenario: robas una carta al azar a quien elijas.')),
+      h('div', { class: 'chips' }, victims.map(p => h('button', { class: 'btn', style: { borderColor: p.color }, 'data-testid': 'ba-steal-' + p.id, onclick: () => App.dispatch({ type: 'baSteal', pid: v, target: p.id }) },
+        h('span', { class: 'turn-dot', style: { background: p.color } }), t('{name} ({n} cartas)', { name: p.name, n: G.handSize(p.res) }))))) };
+  }
   // Caravans: your vote / your pick after a tie
   if (st.phase === 'caravanVote' && st.caravans && G.pendingActors(st)[0] === v && localHumans(st).includes(v))
     return { kind: 'camelvote' + v + '-' + st.turn, body: Car.voteModal(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => renderModal(App.state) }) };
