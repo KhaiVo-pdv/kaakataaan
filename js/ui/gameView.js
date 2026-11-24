@@ -52,7 +52,7 @@ export function gameScreen(root) {
     h('div', { class: 'brand' }, 'Kaakataaan'),
     els.turn, els.event, els.dice,
     h('div', { class: 'top-actions' },
-      h('button', { class: 'btn sm', title: t('Ayuda'), onclick: () => showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state), rivers: Riv.hasRivers(App.state), caravans: Car.hasCaravans(App.state), barbarianAttack: BaUI.hasBA(App.state) }) }, '❔'),
+      h('button', { class: 'btn sm', title: t('Ayuda'), onclick: () => showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state), rivers: Riv.hasRivers(App.state), caravans: Car.hasCaravans(App.state), barbarianAttack: BaUI.hasBA(App.state), traders: TrUI.hasTraders(App.state) }) }, '❔'),
       h('button', { class: 'btn sm', title: t('Menú'), onclick: () => openMenu() }, '☰')));
   els.topView = h('button', { class: 'btn', title: t('Vista desde arriba'), onclick: () => toggleTopView() }, '🗺️');
   boardWrap.append(els.banner, els.offer, els.rolls, els.barb,
@@ -836,7 +836,7 @@ function renderPlayers(st, v) {
     if (said) card.append(h('div', { class: 'pc-emote' + (ONLY_EMOJI.test(said.e) ? ' big' : ''), style: { animationDelay: `-${now - said.at}ms` } }, said.e));
     box.append(card);
   }
-  clear(ui.els.bank).append(h('span', null, '🏦'), ...CK.cardList(st).map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), ...(CK.hasCK(st) ? CK.progressDecks(st, h) : BaUI.hasBA(st) ? BaUI.baBankInfo(st, { h }) : [h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`)]),
+  clear(ui.els.bank).append(h('span', null, '🏦'), ...CK.cardList(st).map(r => h('span', { title: t(TILE_INFO[r].name) }, `${TILE_INFO[r].icon}${st.bank[r]}`)), ...(CK.hasCK(st) ? CK.progressDecks(st, h) : BaUI.hasBA(st) ? BaUI.baBankInfo(st, { h }) : TrUI.hasTraders(st) ? TrUI.tradersBankInfo(st, { h }) : [h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`)]),
     h('span', { title: t('Meta') },`🏆 ${st.config.rules.vpTarget}`));
   sync(ui.els.barb, CK.barbarianHud(st, h) || ''); // Cities & Knights
 }
@@ -1400,7 +1400,7 @@ function openMenu() {
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_Q() === 'high' ? ' on' : ''), onclick: () => { ui.board3d.setGraphics({ quality: ui.board3d.constructor.SETTINGS_Q() === 'high' ? 'low' : 'high' }); toast(t('Calidad cambiada: se aplica al recargar el mapa')); renderModal(App.state); } }, t('✨ Alta calidad')),
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_OUTLINE() ? ' on' : ''), title: t('Contorno fino del color de cada jugador, visible a través de montañas y árboles'), onclick: () => { ui.board3d.setGraphics({ outline: !ui.board3d.constructor.SETTINGS_OUTLINE() }); renderModal(App.state); } }, t('🔲 Contorno de piezas')))) : null,
       // resource icons are always the classic set (see pixel.js), so there is no picker here
-      h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state), rivers: Riv.hasRivers(App.state), caravans: Car.hasCaravans(App.state), barbarianAttack: BaUI.hasBA(App.state) }); } }, t('📖 Cómo se juega')),
+      h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state), rivers: Riv.hasRivers(App.state), caravans: Car.hasCaravans(App.state), barbarianAttack: BaUI.hasBA(App.state), traders: TrUI.hasTraders(App.state) }); } }, t('📖 Cómo se juega')),
       h('button', { class: 'btn', onclick: () => { const on = App.toggleSound(); toast(on ? t('🔊 Sonido activado') : t('🔇 Sonido desactivado')); } }, t('🔊 Sonido on/off')),
       h('button', { class: 'btn', onclick: () => { const on = toggleMusic(); toast(on ? t('🎵 Música activada') : t('🎵 Música desactivada')); } }, t('🎵 Música on/off')),
       h('div', null, h('div', { class: 'section-label' }, t('Velocidad de los bots')), speedControl()),

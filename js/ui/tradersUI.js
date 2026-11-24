@@ -47,7 +47,8 @@ export function tradersButtons(st, v, { h, dispatch, costIcons, openGold, ui, re
 export function tradersStats(st, p, { h }) {
   if (!hasTraders(st)) return [];
   const W = st.traders.wagons[p.id];
-  const out = [h('span', { title: t('Oro') }, `🪙 ${p.gold}`), h('span', { title: t('Nivel del carromato') }, `🛒 ${W.level}`)];
+  const mine = st.current === p.id && st.phase === 'main';
+  const out = [h('span', { title: t('Oro') }, `🪙 ${p.gold}`), h('span', { title: t('Nivel del carromato') + (mine ? ' · ' + t('movimiento que le queda este turno') : '') }, mine ? `🛒 ${W.level} · ${TR.mpLeft(st, p.id)}🦶` : `🛒 ${W.level}`)];
   if (W.cargo) out.push(h('span', { title: t('Mercancía que lleva y su destino') }, `${GOOD_ICONS[W.cargo]}→${TRADE_ICONS[TR.NEEDED_AT[W.cargo]]}`));
   if (W.delivered) out.push(h('span', { class: 'award', title: t('Entregas: 1 punto cada una') }, `📦 +${W.delivered}`));
   if (W.level === TR.WAGON_LEVELS.length) out.push(h('span', { class: 'award', title: t('Carromato al máximo: +1 punto') }, '🛒 +1'));
@@ -141,4 +142,10 @@ export function tradersBanner(st, v, ui) {
   }
   if (st.phase === 'main' && ui.pick === 'tbWagon' && st.current === v) return t('🛒 Toca el cruce adonde va el carromato (número = movimiento, 🪙 = peaje; Esc para cancelar)');
   return '';
+}
+
+// the bank row: development cards left and the commodities left beside each trade hex
+export function tradersBankInfo(st, { h }) {
+  return [h('span', { title: t('Cartas de desarrollo restantes') }, `🃏${st.devDeck.length}`),
+    ...TR.TRADE_KINDS.map(k => h('span', { title: t('Mercancías que quedan junto a esta casilla') }, `${TRADE_ICONS[k]}${st.traders.stacks[k].length}`))];
 }

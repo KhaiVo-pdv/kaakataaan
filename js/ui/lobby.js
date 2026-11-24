@@ -11,6 +11,7 @@ import { showFishermenHelp } from './fishermenHelp.js';
 import { showRiversHelp } from './riversHelp.js';
 import { showCaravansHelp } from './caravansHelp.js';
 import { showBarbarianAttackHelp } from './barbarianAttackHelp.js';
+import { showTradersHelp } from './tradersHelp.js';
 import { showHelp } from './help.js';
 import { SHAPES, generateBoard } from '../engine/board.js';
 import { DEV_DECKS, TILE_INFO } from '../engine/constants.js';
@@ -385,7 +386,8 @@ export function lobbyScreen(root, opts = {}) {
         cur === 'fishermen' ? h('button', { class: 'btn sm', 'data-testid': 'fishermen-rules', onclick: () => showFishermenHelp() }, t('📖 Reglas de Los pescadores')) : null,
         cur === 'rivers' ? h('button', { class: 'btn sm', 'data-testid': 'rivers-rules', onclick: () => showRiversHelp() }, t('📖 Reglas de Los ríos')) : null,
         cur === 'caravans' ? h('button', { class: 'btn sm', 'data-testid': 'caravans-rules', onclick: () => showCaravansHelp() }, t('📖 Reglas de Las caravanas')) : null,
-        cur === 'barbarianAttack' ? h('button', { class: 'btn sm', 'data-testid': 'ba-rules', onclick: () => showBarbarianAttackHelp() }, t('📖 Reglas de El ataque de los bárbaros')) : null);
+        cur === 'barbarianAttack' ? h('button', { class: 'btn sm', 'data-testid': 'ba-rules', onclick: () => showBarbarianAttackHelp() }, t('📖 Reglas de El ataque de los bárbaros')) : null,
+        cur === 'tradersBarbarians' ? h('button', { class: 'btn sm', 'data-testid': 'tb-rules', onclick: () => showTradersHelp() }, t('📖 Reglas de Mercaderes y bárbaros')) : null);
     }
 
     // rules

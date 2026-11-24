@@ -7,6 +7,7 @@ import { showFishermenHelp } from './fishermenHelp.js';
 import { showRiversHelp } from './riversHelp.js';
 import { showCaravansHelp } from './caravansHelp.js';
 import { showBarbarianAttackHelp } from './barbarianAttackHelp.js';
+import { showTradersHelp } from './tradersHelp.js';
 
 export const REPO_URL = 'https://github.com/KurusuDes/CatanTestFriendos';
 const repoLink = () => h('a', { href: REPO_URL, target: '_blank', rel: 'noopener' }, t('código en GitHub'));
@@ -16,7 +17,7 @@ export function creditLine() {
   return h('div', { class: 'credits' }, t('Kaakataaan · basado en Katanittes de Sowtank · '), repoLink(), t(' · proyecto de fans no oficial'));
 }
 
-// opts.seafarers / opts.citiesKnights / opts.fishermen / opts.rivers / opts.caravans / opts.barbarianAttack: the current game uses that expansion -> link to its rules
+// opts.seafarers / opts.citiesKnights / opts.fishermen / opts.rivers / opts.caravans / opts.barbarianAttack / opts.traders: the current game uses that expansion -> link to its rules
 export function showHelp(opts = {}) {
   const close = () => ov.remove();
   const ov = h('div', { class: 'overlay', onclick: e => e.target === ov && close() },
@@ -28,6 +29,7 @@ export function showHelp(opts = {}) {
       opts.rivers ? h('button', { class: 'btn', 'data-testid': 'rivers-rules', onclick: () => { close(); showRiversHelp(); } }, t('📖 Reglas de Los ríos')) : null,
       opts.caravans ? h('button', { class: 'btn', 'data-testid': 'caravans-rules', onclick: () => { close(); showCaravansHelp(); } }, t('📖 Reglas de Las caravanas')) : null,
       opts.barbarianAttack ? h('button', { class: 'btn', 'data-testid': 'ba-rules', onclick: () => { close(); showBarbarianAttackHelp(); } }, t('📖 Reglas de El ataque de los bárbaros')) : null,
+      opts.traders ? h('button', { class: 'btn', 'data-testid': 'tb-rules', onclick: () => { close(); showTradersHelp(); } }, t('📖 Reglas de Mercaderes y bárbaros')) : null,
       h('p', null, t('Construye poblados, ciudades y caminos. El primero en llegar a los puntos de victoria de la partida (10 por defecto) gana.')),
       h('h3', null, t('Turno')),
       h('ul', null,
