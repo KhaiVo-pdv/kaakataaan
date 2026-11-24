@@ -6,6 +6,7 @@ import { drawShips, drawPirate, drawSeaHotspots, drawSeaFog } from './seafarers2
 import { drawKnights, drawWallsAndMetros, drawMerchant, drawBarbarians } from './citiesKnights2d.js';
 import { drawFishermen } from './fishermen2d.js';
 import { drawRivers, drawBridge } from './rivers2d.js';
+import { drawCaravans, drawCamelSpots } from './caravans2d.js';
 
 const U = 100; // svg units per hex radius
 const hexPoints = (cx, cy, r) =>
@@ -188,6 +189,7 @@ export class BoardView {
     }
     svg.append(gLand);
     if (bd.fishing) svg.append(drawFishermen(S, U, st, hexPoints, rolled)); // Traders & Barbarians: lake + fishing grounds
+    if (bd.caravanStarts) svg.append(drawCaravans(S, U, st, hexPoints)); // Traders & Barbarians: oasis, camels, vote spots
     if (bd.rivers) {
       svg.append(drawRivers(S, U, st, hexPoints)); // Traders & Barbarians: marshes, rivers, bridge spots
       // the number tokens stay readable on top of the water
@@ -247,6 +249,7 @@ export class BoardView {
     }
     for (const b of view.blindOwn || []) if (b.eid != null) drawRoad(b.eid, st.players[b.pid].color, ' ghost');
     svg.append(gRoads);
+    if (st.caravans && st.caravans.vote) svg.append(drawCamelSpots(S, U, st)); // Caravans: lettered vote spots on top
 
     // Seafarers: ships and the pirate
     if (st.ships) {

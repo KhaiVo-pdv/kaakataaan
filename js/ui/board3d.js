@@ -28,6 +28,8 @@ import { makeStyledBuilding, makeStyledMetro, makeStyledWall } from './pieceStyl
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 import { makeFishingGround } from './fishermen3d.js';
 import { makeBridge, makeBridgeSpot } from './rivers3d.js';
+import { makeCamel, makePalm, makeArrow } from './caravans3d.js';
+import { camelPose, spotLetter } from './caravans2d.js';
 import { LAKE_NUMS } from '../engine/tradersBarbarians/fishermen.js';
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
@@ -44,7 +46,7 @@ try {
 const INR = Math.sqrt(3) / 2; // hex inradius
 const NORMALS = [0, 1, 2].map(k => [Math.cos((k * Math.PI) / 3), Math.sin((k * Math.PI) / 3)]);
 const L = { grass: 0, forest: 1, dirt: 2, rock: 3, sand: 4, snow: 5, field: 6, meadow: 7 };
-const TINT = { marsh: new THREE.Color('#c9d79a'), brick: new THREE.Color('#ffa488'), desert: new THREE.Color('#f4ece2'), back: new THREE.Color('#b99873'), unknown: new THREE.Color('#9aa39c'), gold: new THREE.Color('#f0d27a'), white: new THREE.Color('#ffffff') };
+const TINT = { oasis: new THREE.Color('#f6dc98'), marsh: new THREE.Color('#c9d79a'), brick: new THREE.Color('#ffa488'), desert: new THREE.Color('#f4ece2'), back: new THREE.Color('#b99873'), unknown: new THREE.Color('#9aa39c'), gold: new THREE.Color('#f0d27a'), white: new THREE.Color('#ffffff') };
 const ASSET = p => new URL('../../assets/' + p, import.meta.url).href;
 
 // ---------- noise ----------
@@ -409,7 +411,7 @@ function tileLook(res, seed) {
 function terrainOf(st, faceDown) {
   const tiles = st.board.tiles;
   const land = new Map(tiles.map(t => [hk(t.q, t.r), t]));
-  const kindOf = t => (!t.revealed ? (faceDown ? 'back' : 'unknown') : t.lake ? 'lake' : t.marsh ? 'marsh' : t.res); // Fishermen lake / Rivers marsh
+  const kindOf = t => (!t.revealed ? (faceDown ? 'back' : 'unknown') : t.lake ? 'lake' : t.marsh ? 'marsh' : t.oasis ? 'oasis' : t.res); // Fishermen lake / Rivers marsh / Caravans oasis
   // Rivers of Catan: the river courses as straight segments through the hex centres, from the
   // marsh to the middle of the mouth edge and a little out to sea (the channel is carved in sample)
   const riverSegs = [];
@@ -477,6 +479,11 @@ function terrainOf(st, faceDown) {
       case 'desert':
         // pale sand in clear dune ripples, so it never reads as a golden wheat field
         return 0.27 + fade * (Math.sin(dx * 8 + dz * 3.5 + seed) * 0.06 + n * 0.06);
+      case 'oasis': {
+        // Caravans: flat golden sand with a small round pond under the water line in the middle
+        const pond = smooth(0.36, 0.16, Math.hypot(dx, dz));
+        return 0.25 - pond * 0.42 + fade * (Math.sin(dx * 7 + seed) * 0.025 + n * 0.03);
+      }
       case 'marsh':
         // Rivers: low, soggy ground just above the water, with puddles dipping under it
         return 0.06 + fade * (n * 0.07 + Math.sin(dx * 11 + seed) * Math.cos(dz * 9 - seed) * 0.05 - 0.03);
@@ -529,6 +536,13 @@ function terrainOf(st, faceDown) {
       case 'desert':
         w[L.sand] += k;
         break;
+      case 'oasis': {
+        // sand, with a green rim around the pond
+        const rim = smooth(0.5, 0.3, Math.hypot(dx, dz));
+        w[L.sand] += k * (1 - rim * 0.7);
+        w[L.meadow] += k * rim * 0.7;
+        break;
+      }
       case 'marsh':
         w[L.meadow] += k * 0.55;
         w[L.dirt] += k * 0.45;
@@ -1634,6 +1648,28 @@ export class Board3D {
         this.staticGroup.add(tok);
       }
     }
+    // ---- Caravans: palms around the oasis pond and a sandstone arrow at each caravan start
+    if (bd.caravanStarts && bd.tiles[bd.oasis] && bd.tiles[bd.oasis].revealed) {
+      const o = bd.tiles[bd.oasis];
+      for (let i = 0; i < 5; i++) {
+        const a = i * 1.26 + 0.4, r = 0.47 + (i % 2) * 0.1;
+        const x = o.x + Math.cos(a) * r, z = o.y + Math.sin(a) * r;
+        const palm = makePalm(i);
+        palm.position.set(x, this.heightAt(x, z) - 0.01, z);
+        palm.scale.setScalar(1.25);
+        this.staticGroup.add(palm);
+      }
+      for (const st0 of bd.caravanStarts) {
+        const V = bd.vertices[st0.vertex], E = bd.edges[st0.edge];
+        const W = bd.vertices[E.a === st0.vertex ? E.b : E.a];
+        const x = V.x + (W.x - V.x) * 0.28, z = V.y + (W.y - V.y) * 0.28;
+        const ar = makeArrow();
+        ar.position.set(x, this.heightAt(x, z), z);
+        ar.rotation.y = -Math.atan2(W.y - V.y, W.x - V.x);
+        ar.scale.setScalar(1.4);
+        this.staticGroup.add(ar);
+      }
+    }
     if (bd.lake >= 0 && bd.tiles[bd.lake] && bd.tiles[bd.lake].revealed) {
       const t = bd.tiles[bd.lake];
       const tok = css2d('tok3d-at', `<div class="tok3d wide fish3d"><span>${LAKE_NUMS.join('·')}</span></div>`);
@@ -1727,7 +1763,10 @@ export class Board3D {
       const along = (x, z) => (x - t.x) * tc + (z - t.y) * ts;
       const look = field.lookOf(t);
       const R = () => rnd() * 6.3;
-      switch (t.lake ? 'lake' : t.marsh ? 'marsh' : t.res) {
+      switch (t.lake ? 'lake' : t.marsh ? 'marsh' : t.oasis ? 'oasis' : t.res) {
+        case 'oasis':
+          spots(4, 0.55, 0.8, (x, z) => put('rock', x, z, 0.35 + rnd() * 0.3, R()), null, 0.05); // palms are added with the caravan pieces
+          break;
         case 'marsh':
           // reeds (low bushes), a few drowned trees and stones
           spots(10, 0.15, 0.8, (x, z) => put('bush', x, z, 0.45 + rnd() * 0.35, R()), null, 0.04);
@@ -2060,7 +2099,7 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
       inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b)], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
@@ -2131,6 +2170,29 @@ export class Board3D {
         o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
         add(o, 'br' + k);
       } else road(+k, st.players[st.roads[k]].color);
+    }
+    // Caravans: camels beside their paths, facing away from the oasis; ghost camels + letters on vote spots
+    if (st.caravans) {
+      const camelAt = (e, ghost) => {
+        const P = camelPose(bd, e);
+        const o = makeCamel(ghost);
+        o.position.set(P.x, Math.max(this.heightAt(P.x, P.y), 0.03), P.y);
+        o.rotation.y = -P.ang;
+        o.scale.setScalar(1.5);
+        return o;
+      };
+      for (const e in st.caravans.camels) add(camelAt(+e, false), 'cm' + e);
+      const V = st.caravans.vote;
+      if (V) {
+        for (const e of st.phase === 'caravanPick' && V.tied ? V.tied : V.options) {
+          const o = camelAt(e, true);
+          const tag = css2d('tok3d-at', `<div class="tok3d camel3d">${spotLetter(st, e)}</div>`);
+          tag.position.set(0, 0.32, 0);
+          tag.scale.setScalar(1 / 1.5);
+          o.add(tag);
+          add(o, 'cs' + e);
+        }
+      }
     }
     for (const e of bd.bridgeSpots || []) {
       if (st.roads[e] !== undefined) continue;
