@@ -27,6 +27,7 @@ import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafare
 import { makeStyledBuilding, makeStyledMetro, makeStyledWall } from './pieceStyles3d.js';
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 import { makeFishingGround } from './fishermen3d.js';
+import { makeBridge, makeBridgeSpot } from './rivers3d.js';
 import { LAKE_NUMS } from '../engine/tradersBarbarians/fishermen.js';
 
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
@@ -43,7 +44,7 @@ try {
 const INR = Math.sqrt(3) / 2; // hex inradius
 const NORMALS = [0, 1, 2].map(k => [Math.cos((k * Math.PI) / 3), Math.sin((k * Math.PI) / 3)]);
 const L = { grass: 0, forest: 1, dirt: 2, rock: 3, sand: 4, snow: 5, field: 6, meadow: 7 };
-const TINT = { brick: new THREE.Color('#ffa488'), desert: new THREE.Color('#f4ece2'), back: new THREE.Color('#b99873'), unknown: new THREE.Color('#9aa39c'), gold: new THREE.Color('#f0d27a'), white: new THREE.Color('#ffffff') };
+const TINT = { marsh: new THREE.Color('#c9d79a'), brick: new THREE.Color('#ffa488'), desert: new THREE.Color('#f4ece2'), back: new THREE.Color('#b99873'), unknown: new THREE.Color('#9aa39c'), gold: new THREE.Color('#f0d27a'), white: new THREE.Color('#ffffff') };
 const ASSET = p => new URL('../../assets/' + p, import.meta.url).href;
 
 // ---------- noise ----------
@@ -408,7 +409,29 @@ function tileLook(res, seed) {
 function terrainOf(st, faceDown) {
   const tiles = st.board.tiles;
   const land = new Map(tiles.map(t => [hk(t.q, t.r), t]));
-  const kindOf = t => (!t.revealed ? (faceDown ? 'back' : 'unknown') : t.lake ? 'lake' : t.res); // Fishermen: the desert is a lake
+  const kindOf = t => (!t.revealed ? (faceDown ? 'back' : 'unknown') : t.lake ? 'lake' : t.marsh ? 'marsh' : t.res); // Fishermen lake / Rivers marsh
+  // Rivers of Catan: the river courses as straight segments through the hex centres, from the
+  // marsh to the middle of the mouth edge and a little out to sea (the channel is carved in sample)
+  const riverSegs = [];
+  for (const rv of st.board.rivers || []) {
+    const pts = rv.hexes.map(id => [tiles[id].x, tiles[id].y]);
+    const mouth = st.board.edges[rv.mouth];
+    if (mouth) {
+      const va = st.board.vertices[mouth.a], vb = st.board.vertices[mouth.b];
+      const mx = (va.x + vb.x) / 2, my = (va.y + vb.y) / 2, last = pts[pts.length - 1];
+      pts.push([mx, my], [mx + (mx - last[0]) * 0.6, my + (my - last[1]) * 0.6]);
+    }
+    for (let i = 0; i + 1 < pts.length; i++) riverSegs.push([...pts[i], ...pts[i + 1]]);
+  }
+  const riverDist = (x, z) => {
+    let d = 9;
+    for (const [ax, az, bx, bz] of riverSegs) {
+      const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
+      const u = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / l2));
+      d = Math.min(d, Math.hypot(x - ax - vx * u, z - az - vz * u));
+    }
+    return d;
+  };
   const seedOf = t => t.id * 7 + (t.q * 131 + t.r * 71);
   const lookOf = t => (t.revealed ? tileLook(t.res, seedOf(t)) : 0);
 
@@ -454,6 +477,9 @@ function terrainOf(st, faceDown) {
       case 'desert':
         // pale sand in clear dune ripples, so it never reads as a golden wheat field
         return 0.27 + fade * (Math.sin(dx * 8 + dz * 3.5 + seed) * 0.06 + n * 0.06);
+      case 'marsh':
+        // Rivers: low, soggy ground just above the water, with puddles dipping under it
+        return 0.06 + fade * (n * 0.07 + Math.sin(dx * 11 + seed) * Math.cos(dz * 9 - seed) * 0.05 - 0.03);
       case 'lake': {
         // Fishermen: a round basin dipping under the sea level, so the water shows through
         const bowl = smooth(0.64, 0.3, Math.hypot(dx, dz));
@@ -502,6 +528,10 @@ function terrainOf(st, faceDown) {
       }
       case 'desert':
         w[L.sand] += k;
+        break;
+      case 'marsh':
+        w[L.meadow] += k * 0.55;
+        w[L.dirt] += k * 0.45;
         break;
       case 'lake': {
         // sandy shore down to the water, a grassy ring on top
@@ -603,6 +633,15 @@ function terrainOf(st, faceDown) {
     if (out) {
       const a = (seed % 6) * 0.52;
       out.row = dx * Math.cos(a) + dz * Math.sin(a);
+    }
+    // Rivers: carve the channel below the water line, sandy banks along it
+    if (riverSegs.length) {
+      const d = riverDist(x, z);
+      if (d < 0.3) {
+        const c = smooth(0.17, 0.07, d);
+        h = h * (1 - c) - 0.14 * c;
+        if (out) out.w[L.sand] += smooth(0.3, 0.12, d) * 1.4;
+      }
     }
     return h;
   }
@@ -1646,7 +1685,12 @@ export class Board3D {
     const field = this.field;
     const bd = st.board;
     const inst = {};
-    const put = (name, x, z, s = 1, ry = 0) => (inst[name] = inst[name] || []).push([x, field.sample(x, z) - 0.01, z, s, ry]);
+    const wet = !!bd.rivers; // Rivers: nothing grows in the river channel or the marsh puddles
+    const put = (name, x, z, s = 1, ry = 0) => {
+      const y = field.sample(x, z);
+      if (wet && y < 0.03) return;
+      (inst[name] = inst[name] || []).push([x, y - 0.01, z, s, ry]);
+    };
     // which way is downhill at a point (to turn a mine's entrance away from its mountain)
     const downhill = (x, z) => {
       const d = 0.05;
@@ -1683,7 +1727,13 @@ export class Board3D {
       const along = (x, z) => (x - t.x) * tc + (z - t.y) * ts;
       const look = field.lookOf(t);
       const R = () => rnd() * 6.3;
-      switch (t.lake ? 'lake' : t.res) {
+      switch (t.lake ? 'lake' : t.marsh ? 'marsh' : t.res) {
+        case 'marsh':
+          // reeds (low bushes), a few drowned trees and stones
+          spots(10, 0.15, 0.8, (x, z) => put('bush', x, z, 0.45 + rnd() * 0.35, R()), null, 0.04);
+          spots(3, 0.3, 0.75, (x, z) => put('oak', x, z, 0.45 + rnd() * 0.2, R()), null, 0.12);
+          spots(3, 0.2, 0.8, (x, z) => put('rock', x, z, 0.35 + rnd() * 0.3, R()), null, 0.05);
+          break;
         case 'lake':
           spots(5, 0.6, 0.78, (x, z) => put('rock', x, z, 0.45 + rnd() * 0.4, R()), null, 0.05);
           spots(4, 0.64, 0.8, (x, z) => put('pine', x, z, 0.65 + rnd() * 0.25, R()), null, 0.04);
@@ -2071,7 +2121,27 @@ export class Board3D {
       o.scale.set(1.08, 2.2, 2.1);
       add(o, 'r' + eid + (ghost ? 'g' : ''), color);
     };
-    for (const k in st.roads) road(+k, st.players[st.roads[k]].color);
+    // Rivers: a bridge (not a plank road) on the crossings that have one; marker posts on free spots
+    const bridges = (st.rivers && st.rivers.bridges) || {};
+    for (const k in st.roads) {
+      if (bridges[k] !== undefined) {
+        const E = bd.edges[+k], a = bd.vertices[E.a], b = bd.vertices[E.b];
+        const o = makeBridge(st.players[st.roads[k]].color);
+        o.position.set((a.x + b.x) / 2, Math.max(vy(E.a), vy(E.b)), (a.y + b.y) / 2);
+        o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+        add(o, 'br' + k);
+      } else road(+k, st.players[st.roads[k]].color);
+    }
+    for (const e of bd.bridgeSpots || []) {
+      if (st.roads[e] !== undefined) continue;
+      const E = bd.edges[e], a = bd.vertices[E.a], b = bd.vertices[E.b];
+      const mx = (a.x + b.x) / 2, mz = (a.y + b.y) / 2, ux = (b.x - a.x) * 0.24, uz = (b.y - a.y) * 0.24;
+      const ga = Math.max(this.heightAt(mx - ux, mz - uz), 0.02), gb = Math.max(this.heightAt(mx + ux, mz + uz), 0.02);
+      const o = makeBridgeSpot(ga, gb);
+      o.position.set(mx, 0, mz);
+      o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+      add(o, 'bs' + e);
+    }
     for (const b of view.blindOwn || []) if (b.eid != null) road(b.eid, st.players[b.pid].color, true);
     // road joints: the plank model stops short of the corners, so every road end gets an arm
     // that reaches its vertex plus a round cap there: bends connect and dead ends get a round tip

@@ -5,6 +5,7 @@ import { s as S, clear } from './dom.js';
 import { drawShips, drawPirate, drawSeaHotspots, drawSeaFog } from './seafarers2d.js';
 import { drawKnights, drawWallsAndMetros, drawMerchant, drawBarbarians } from './citiesKnights2d.js';
 import { drawFishermen } from './fishermen2d.js';
+import { drawRivers, drawBridge } from './rivers2d.js';
 
 const U = 100; // svg units per hex radius
 const hexPoints = (cx, cy, r) =>
@@ -187,6 +188,13 @@ export class BoardView {
     }
     svg.append(gLand);
     if (bd.fishing) svg.append(drawFishermen(S, U, st, hexPoints, rolled)); // Traders & Barbarians: lake + fishing grounds
+    if (bd.rivers) {
+      svg.append(drawRivers(S, U, st, hexPoints)); // Traders & Barbarians: marshes, rivers, bridge spots
+      // the number tokens stay readable on top of the water
+      const gTok = S('g', { class: 'river-tokens' });
+      for (const tk of [...gLand.querySelectorAll('.token')]) gTok.append(tk);
+      svg.append(gTok);
+    }
     if (bd.islands) svg.append(drawSeaFog(S, U, bd, hexPoints)); // Seafarers: fog over the sea too
 
     // ports
@@ -232,7 +240,11 @@ export class BoardView {
       g.append(S('line', { x1, y1, x2, y2, class: 'road-in', stroke: color }));
       gRoads.append(g);
     };
-    for (const k in st.roads) drawRoad(+k, st.players[st.roads[k]].color);
+    for (const k in st.roads) {
+      // Rivers: a bridge instead of a road on the crossings that have one
+      if (st.rivers && st.rivers.bridges[k] !== undefined) gRoads.append(drawBridge(S, U, st, +k, st.players[st.roads[k]].color));
+      else drawRoad(+k, st.players[st.roads[k]].color);
+    }
     for (const b of view.blindOwn || []) if (b.eid != null) drawRoad(b.eid, st.players[b.pid].color, ' ghost');
     svg.append(gRoads);
 
