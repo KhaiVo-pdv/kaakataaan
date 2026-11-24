@@ -5,6 +5,7 @@ import { botAct } from '../js/engine/bot.js';
 import { seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, EXPANSIONS } from '../js/engine/expansions.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Fish from '../js/engine/tradersBarbarians/fishermen.js';
+import * as Rivers from '../js/engine/tradersBarbarians/rivers.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -1030,6 +1031,31 @@ t('Pescadores: no hay acciones de pescado en el juego base', () => {
   const s = fresh();
   ok(!act(s, { type: 'spendFish', pid: 0, perk: 'robber' }).ok, 'spendFish falla');
   ok(!act(s, { type: 'giveBoot', pid: 0, to: 1 }).ok, 'giveBoot falla');
+});
+
+// ---------- Traders & Barbarians: Rivers of Catan (board data) ----------
+t('Ríos: 2 pantanos en el nacimiento, ríos de 3 y 4, 7 sitios de puente', () => {
+  for (const [shape, np, seed] of [['classic', 4, 3], ['classic', 3, 8], ['mini', 3, 2], ['big', 4, 5], ['huge', 4, 5], ['pangea', 4, 42], ['ring', 4, 1]]) {
+    const c = defaultConfig();
+    c.seed = seed; c.map.shape = shape; c.players = c.players.slice(0, np);
+    c.expansions = { tradersBarbarians: true, tbScenario: 'rivers' };
+    const s = G.createGame(c), b = s.board;
+    eq(b.rivers.map(r => r.hexes.length), [4, 3], shape + ': un río de 4 y otro de 3');
+    eq(b.bridgeSpots.length, 7, shape + ': 7 sitios de puente');
+    eq(new Set(b.bridgeSpots).size, 7, shape + ': sin repetir');
+    eq(b.marsh.length, 2, shape + ': 2 pantanos');
+    ok(b.rivers.every(r => b.tiles[r.hexes[0]].marsh), shape + ': cada río nace en un pantano');
+    ok(b.marsh.every(id => b.tiles[id].res === 'desert' && !b.tiles[id].num), shape + ': los pantanos no producen');
+    ok(b.tiles[b.robber].marsh, shape + ': el ladrón empieza en un pantano');
+    ok(b.rivers.every(r => r.hexes.slice(1).every(id => b.tiles[id].res !== 'desert')), shape + ': ningún desierto dentro de un río');
+    ok(b.rivers.every(r => b.edges[r.mouth].hexes.length === 1 && b.edges[r.mouth].hexes[0] === r.hexes[r.hexes.length - 1]), shape + ': desemboca en la costa');
+    ok(b.rivers.every(r => r.crossings.slice(0, -1).every((e, i) => b.edges[e].hexes.includes(r.hexes[i]) && b.edges[e].hexes.includes(r.hexes[i + 1]))), shape + ': cruza entre casillas seguidas');
+    ok(new Set(b.rivers.flatMap(r => r.hexes)).size === 7, shape + ': los ríos no comparten casillas');
+    ok(s.players.every(p => p.gold === 0 && p.bridgesLeft === Rivers.MAX_BRIDGES) && Object.keys(s.rivers.bridges).length === 0, shape + ': sin oro ni puentes al empezar');
+    eq(b.tiles.filter(t => t.res !== 'desert').every(t => t.num), true, shape + ': todas las demás casillas tienen número');
+  }
+  const base = G.createGame(defaultConfig());
+  ok(!('rivers' in base) && !('rivers' in base.board) && !('marsh' in base.board) && base.players.every(p => !('gold' in p)), 'el juego base no tiene datos de ríos');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

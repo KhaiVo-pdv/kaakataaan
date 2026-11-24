@@ -1257,4 +1257,6 @@ export default {
   "👢 ¡Has pescado la bota vieja! Necesitas 1 punto más para ganar": "👢 Bạn vớt phải ủng cũ! Cần thêm 1 điểm mới thắng",
   "📖 Reglas de Los pescadores": "📖 Luật Ngư dân",
   "🫳 ¿A quién le robas? (3 🐟)": "🫳 Cướp của ai? (3 🐟)",
+  "🏞️ {n} ríos y {m} pantanos; {k} sitios para puentes.": "🏞️ {n} con sông, {m} đầm lầy, {k} vị trí xây cầu.",
+  "🚧 Los ríos de Catán está en construcción: los puentes y el oro llegarán en la próxima versión.": "🚧 Sông ngòi Catan đang được làm: cầu và vàng sẽ có ở bản tiếp theo.",
 };

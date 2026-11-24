@@ -1258,4 +1258,6 @@ export default {
   "👢 ¡Has pescado la bota vieja! Necesitas 1 punto más para ganar": "👢 You fished up the old boot! You need 1 more point to win",
   "📖 Reglas de Los pescadores": "📖 Fishermen rules",
   "🫳 ¿A quién le robas? (3 🐟)": "🫳 Who do you steal from? (3 🐟)",
+  "🏞️ {n} ríos y {m} pantanos; {k} sitios para puentes.": "🏞️ {n} rivers and {m} marshes; {k} bridge spots.",
+  "🚧 Los ríos de Catán está en construcción: los puentes y el oro llegarán en la próxima versión.": "🚧 The Rivers of Catan is under construction: bridges and gold arrive in the next version.",
 };

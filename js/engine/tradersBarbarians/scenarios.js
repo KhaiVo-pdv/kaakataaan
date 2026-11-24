@@ -8,7 +8,7 @@ export const TB_SCENARIOS = {
     desc: 'Un lago sustituye al desierto y seis caladeros rodean la isla. Pesca fichas de pescado y gástalas en ventajas. ¡Cuidado con la bota vieja!',
   },
   rivers: {
-    icon: '🏞️', name: 'Los ríos de Catán', vp: 10, players: [3, 4], ready: false,
+    icon: '🏞️', name: 'Los ríos de Catán', vp: 10, players: [3, 4], ready: true,
     desc: 'Dos ríos cruzan la isla: puentes, monedas de oro y el título de colono más rico.',
   },
   caravans: {

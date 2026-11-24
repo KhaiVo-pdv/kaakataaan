@@ -6,6 +6,7 @@ import { generateBoard } from './board.js';
 import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn } from './expansions.js';
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Fish from './tradersBarbarians/fishermen.js';
+import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -128,6 +129,7 @@ export function createGame(configIn) {
     s.devTotal = 0;
   }
   if (tbScenarioOn(s) === 'fishermen') Fish.initFishermen(s, rng);
+  if (tbScenarioOn(s) === 'rivers') Rivers.initRivers(s);
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -160,6 +162,10 @@ export function createGame(configIn) {
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
   if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
+  if (s.rivers) {
+    log(s, msg('🏞️ {n} ríos y {m} pantanos; {k} sitios para puentes.', { n: board.rivers.length, m: board.marsh.length, k: board.bridgeSpots.length }));
+    log(s, '🚧 Los ríos de Catán está en construcción: los puentes y el oro llegarán en la próxima versión.');
+  }
   if (s.fishermen) {
     if (board.lake >= 0) log(s, '🏞️ Un lago sustituye al desierto: da pescado con 2, 3, 11 y 12.');
     else log(s, '🏞️ Sin desierto en este mapa: no hay lago.');
