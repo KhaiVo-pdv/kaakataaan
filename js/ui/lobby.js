@@ -7,6 +7,7 @@ import { TB_SCENARIOS } from '../engine/tradersBarbarians/scenarios.js';
 import { SCENARIOS } from '../engine/seafarers/scenarios.js';
 import { showSeafarersHelp } from './seafarersHelp.js';
 import { showCitiesKnightsHelp } from './citiesKnightsHelp.js';
+import { showFishermenHelp } from './fishermenHelp.js';
 import { showHelp } from './help.js';
 import { SHAPES, generateBoard } from '../engine/board.js';
 import { DEV_DECKS, TILE_INFO } from '../engine/constants.js';
@@ -377,7 +378,8 @@ export function lobbyScreen(root, opts = {}) {
         ),
         h('p', { style: { color: 'var(--muted)', fontSize: '12px', margin: '6px 0 0' } },
           t('Para {a}-{b} jugadores · {vp} puntos para ganar', { a: sc.players[0], b: sc.players[1], vp: sc.vp }),
-          cfg.players.length > sc.players[1] ? h('b', { style: { color: 'var(--warn, #ef7d57)' } }, ' · ' + t('⚠️ Demasiados jugadores para este escenario')) : null));
+          cfg.players.length > sc.players[1] ? h('b', { style: { color: 'var(--warn, #ef7d57)' } }, ' · ' + t('⚠️ Demasiados jugadores para este escenario')) : null),
+        cur === 'fishermen' ? h('button', { class: 'btn sm', 'data-testid': 'fishermen-rules', onclick: () => showFishermenHelp() }, t('📖 Reglas de Los pescadores')) : null);
     }
 
     // rules

@@ -14,6 +14,7 @@ import { mountAdhd, updateAdhd, adhdButton, celebrate, disposeAdhd } from './adh
 import { t, tx, tk } from '../i18n.js';
 import * as Sea from './seafarersUI.js';
 import * as CK from './citiesKnightsUI.js';
+import * as Fishr from './fishermenUI.js';
 
 let ui = null;
 
@@ -47,7 +48,7 @@ export function gameScreen(root) {
     h('div', { class: 'brand' }, 'Kaakataaan'),
     els.turn, els.event, els.dice,
     h('div', { class: 'top-actions' },
-      h('button', { class: 'btn sm', title: t('Ayuda'), onclick: () => showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state) }) }, '❔'),
+      h('button', { class: 'btn sm', title: t('Ayuda'), onclick: () => showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state) }) }, '❔'),
       h('button', { class: 'btn sm', title: t('Menú'), onclick: () => openMenu() }, '☰')));
   els.topView = h('button', { class: 'btn', title: t('Vista desde arriba'), onclick: () => toggleTopView() }, '🗺️');
   boardWrap.append(els.banner, els.offer, els.rolls, els.barb,
@@ -249,6 +250,11 @@ function handleFx(st) {
       case 'islandBonus':
       case 'revealSea':
         Sea.seaFx(st, f, { toast, rich });
+        break;
+      case 'fish':
+      case 'boot':
+      case 'fishSpent':
+        Fishr.fishFx(st, f, v, { toast, rich }); // Traders & Barbarians: Fishermen
         break;
       case 'pirate':
         play.robber();
@@ -777,6 +783,7 @@ function renderPlayers(st, v) {
         ...CK.ckStats(st, p, { h }), // Cities & Knights: improvements, metropolises, walls
         ...CK.knightStats(st, p, { h }),
         ...CK.merchantStats(st, p, { h }),
+        ...Fishr.fishStats(st, p, v, { h }), // Traders & Barbarians: fish tokens, old boot
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
         st.pendingDiscards[p.id] ? h('span', { style: { color: 'var(--red)' } }, `🗑️ ${st.pendingDiscards[p.id]}`) : null));
@@ -930,6 +937,7 @@ function fillActions(bar, st, v, locked) {
       class: 'btn', disabled: !st.devDeck.length || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
     }, h('span', { class: 'bicon' }, '🃏'), h('span', null, t('Carta'), h('span', { class: 'cost' }, costIcons(COSTS.dev)))),
+    ...Fishr.fishButtons(st, v, { h, open: () => openFish(v) }), // Traders & Barbarians: spend fish
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
     h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => App.dispatch({ type: 'endTurn', pid: v }) }, t('✅ Terminar')));
@@ -1183,6 +1191,12 @@ function openImprove(v) {
   openModal(() => CK.improveModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, rerender: () => render(App.state), canAfford: G.canAfford, costIcons }));
 }
 
+// Fishermen: the fish panel (perks, then who / which resource, and the old boot)
+function openFish(v) {
+  ui.fishStep = null;
+  openModal(() => Fishr.fishModal(App.state, v, ui, { h, dispatch: a => App.dispatch(a), close: closeModal, refresh: () => renderModal(App.state) }));
+}
+
 function openModal(fn) {
   ui.modal = fn;
   ui.modalId = ++modalSeq;
@@ -1317,7 +1331,7 @@ function openMenu() {
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_Q() === 'high' ? ' on' : ''), onclick: () => { ui.board3d.setGraphics({ quality: ui.board3d.constructor.SETTINGS_Q() === 'high' ? 'low' : 'high' }); toast(t('Calidad cambiada: se aplica al recargar el mapa')); renderModal(App.state); } }, t('✨ Alta calidad')),
         h('button', { class: 'chip' + (ui.board3d.constructor.SETTINGS_OUTLINE() ? ' on' : ''), title: t('Contorno fino del color de cada jugador, visible a través de montañas y árboles'), onclick: () => { ui.board3d.setGraphics({ outline: !ui.board3d.constructor.SETTINGS_OUTLINE() }); renderModal(App.state); } }, t('🔲 Contorno de piezas')))) : null,
       // resource icons are always the classic set (see pixel.js), so there is no picker here
-      h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state) }); } }, t('📖 Cómo se juega')),
+      h('button', { class: 'btn', onclick: () => { closeModal(); showHelp({ seafarers: Sea.hasShips(App.state || {}), citiesKnights: CK.hasCK(App.state), fishermen: Fishr.hasFish(App.state) }); } }, t('📖 Cómo se juega')),
       h('button', { class: 'btn', onclick: () => { const on = App.toggleSound(); toast(on ? t('🔊 Sonido activado') : t('🔇 Sonido desactivado')); } }, t('🔊 Sonido on/off')),
       h('button', { class: 'btn', onclick: () => { const on = toggleMusic(); toast(on ? t('🎵 Música activada') : t('🎵 Música desactivada')); } }, t('🎵 Música on/off')),
       h('div', null, h('div', { class: 'section-label' }, t('Velocidad de los bots')), speedControl()),
