@@ -209,7 +209,7 @@ export const stopped = (s, pid) => !!(s.traders.move && s.traders.move.turn === 
 // what moving along path e costs pid: MP, and a toll to the owner of a rival road
 export function pathCost(s, pid, e) {
   const owner = s.roads[e];
-  let mp = owner === undefined ? 2 : 1;
+  let mp = owner === undefined || (s.damagedRoads && s.damagedRoads[e]) ? 2 : 1; // a road broken by the Event Cards earthquake counts as no road
   if (s.traders.barbarians.includes(e)) mp += BARBARIAN_MP;
   const toll = owner !== undefined && owner !== pid ? TOLL : 0;
   return { mp, toll, owner };

@@ -20,6 +20,7 @@ import * as Car from './caravansUI.js';
 import * as BaUI from './barbarianAttackUI.js';
 import * as TrUI from './tradersUI.js';
 import { eventInfo } from '../engine/eventCards.js';
+import * as EvUI from './eventCardsUI.js';
 
 let ui = null;
 
@@ -178,7 +179,7 @@ function computeViewer(st) {
   const humans = localHumans(st);
   if (!humans.length) return -1;
   const actors = G.pendingActors(st).filter(p => humans.includes(p));
-  if (st.phase === 'discard' && actors.length) return actors.includes(App.viewer) ? App.viewer : actors[0];
+  if ((st.phase === 'discard' || st.phase === 'evChoice') && actors.length) return actors.includes(App.viewer) ? App.viewer : actors[0]; // several players may choose at once
   if (actors.includes(st.current)) return st.current;
   if (st.phase === 'setup' && actors.length) return actors[0];
   if (humans.includes(App.viewer)) return App.viewer;
@@ -270,6 +271,9 @@ function handleFx(st) {
         toast(`${info.icon} ${t(info.name)}: ${t(info.desc)}`, f.event === 'robberAttack' ? 'error' : 'info', 3500);
         break;
       }
+      case 'roadDamaged':
+        if (f.pid === App.viewer) toast(t('🌋 ¡Terremoto! Uno de tus caminos está dañado: repáralo para volver a construir caminos'), 'error', 4000);
+        break;
       case 'newYear':
         toast(t('🎆 ¡Año nuevo! Se barajan las cartas de evento.'), 'info', 2500);
         break;
@@ -760,6 +764,8 @@ function bannerText(st, v, inter) {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
   }
+  const evTxt = EvUI.evBanner(st, v); // Event Cards: choices
+  if (evTxt) return evTxt;
   const tbTxt = TrUI.tradersBanner(st, v, ui); // Traders & Barbarians: wagon moves, barbarians
   if (tbTxt) return tbTxt;
   const baTxt = BaUI.baBanner(st, v, ui); // Barbarian Attack: placing / moving knights, Treason, Intrigue
@@ -1011,6 +1017,7 @@ function fillActions(bar, st, v, locked) {
     ...Riv.riverButtons(st, v, ui, { h, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Rivers
     ...BaUI.baKnightButtons(st, v, ui, { h, rerender: () => render(App.state) }), // Barbarian Attack: move a knight
     ...BaUI.baGoldButton(st, v, { h, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Barbarian Attack: gold
+    ...EvUI.repairButtons(st, v, { h, dispatch: a => App.dispatch(a) }), // Event Cards: repair a damaged road
     ...TrUI.tradersButtons(st, v, { h, dispatch: a => App.dispatch(a), costIcons, ui, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Traders & Barbarians: wagon
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
@@ -1336,6 +1343,8 @@ function modalContent(st, v) {
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
     return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
+  // Event Cards: take / give a resource, or rob a player
+  if (st.phase === 'evChoice' && localHumans(st).includes(v)) { const m = EvUI.evChoiceModal(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); if (m) return m; }
   // Barbarian Attack: a 7 without a robber — pick who to steal from
   if (st.phase === 'baSteal' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
     const victims = st.players.filter(o => o.id !== v && !o.retired && G.handSize(o.res) > 0);

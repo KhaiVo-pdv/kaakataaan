@@ -2138,7 +2138,7 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, st.barbAttack ? [st.barbAttack.on, st.barbAttack.knights, st.barbAttack.conquered] : null, st.traders ? [st.traders.barbarians, st.traders.wagons, Object.values(st.traders.stacks).map(x => x.length), st.players.map(p => tbWagonAt(st, p.id))] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, st.barbAttack ? [st.barbAttack.on, st.barbAttack.knights, st.barbAttack.conquered] : null, st.damagedRoads ? Object.keys(st.damagedRoads) : null, st.traders ? [st.traders.barbarians, st.traders.wagons, Object.values(st.traders.stacks).map(x => x.length), st.players.map(p => tbWagonAt(st, p.id))] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
       inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b), inter.labels || null], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
@@ -2266,6 +2266,13 @@ export class Board3D {
         o.scale.setScalar(1.6);
         add(o, 'kn' + e + ':' + B.knights[e], st.players[B.knights[e]].color);
       }
+    }
+    // Event Cards earthquake: a crack tag on damaged roads
+    for (const e in st.damagedRoads || {}) {
+      const E = bd.edges[e], a = bd.vertices[E.a], b = bd.vertices[E.b];
+      const tag = css2d('tok3d-at', '<div class="tok3d">💥</div>');
+      tag.position.set((a.x + b.x) / 2, Math.max(vy(E.a), vy(E.b)) + 0.25, (a.y + b.y) / 2);
+      this.dynGroup.add(tag);
     }
     // Traders & Barbarians: barbarians on their paths, wagons on their intersections, stack counts
     if (st.traders) {

@@ -339,6 +339,7 @@ export function canBuildRoad(s, pid, e) {
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: only bridges cross the water
   if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
   if (s.traders && Traders.edgeBlocked(s, e)) return false; // Traders & Barbarians: closed sea side / barbarian
+  if (s.damagedRoads && damagedRoadsOf(s, pid).length) return false; // Event Cards earthquake: repair first
   for (const v of [E.a, E.b]) {
     const b = s.buildings[v];
     if (b && b.owner === pid) return true;
@@ -351,6 +352,7 @@ export function canBuildRoad(s, pid, e) {
 
 export function canBuildSettlement(s, pid, v) {
   if (!s.board.vertices[v] || !vertexOpen(s, v)) return false;
+  if (s.damagedRoads && s.board.vertices[v].edges.some(e => s.damagedRoads[e])) return false; // Event Cards earthquake: not next to a damaged road
   // a road reaches it, or (Seafarers) a ship lands there
   return s.board.vertices[v].edges.some(e => s.roads[e] === pid || (!!s.ships && s.ships[e] === pid));
 }
@@ -439,6 +441,7 @@ export function pendingActors(s) {
   if (s.phase === 'caravanPick') return [s.caravans.vote.decider];
   if (s.phase === 'baCard') return [s.current]; // Barbarian Attack: resolve the card just bought
   if (s.phase === 'tbBarbarian') return [s.current]; // Traders & Barbarians: move a barbarian
+  if (s.phase === 'evChoice') return Object.keys(s.evChoice.pending).map(Number); // Event Cards: choices
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -1109,6 +1112,7 @@ function throwDice(s, pid) {
     s.fx.push({ kind: 'newYear' });
   }
   s.eventCard = card;
+  s.evDone = false;
   const info = EvCards.eventInfo(card.event);
   s.fx.push({ kind: 'eventCard', id: card.id, event: card.event });
   if (card.event) log(s, msg('🃏 Carta de evento: {icon} {name}.', { icon: info.icon, name: info.name }), pid);
@@ -1125,11 +1129,108 @@ function eventCardEffect(s) {
     s.board.robber = desert ? desert.id : -1;
     s.fx.push({ kind: 'robber', tile: s.board.robber });
     log(s, desert ? '🏃 El ladrón huye al desierto.' : '🏃 El ladrón huye del tablero.');
-  } else if (card.event !== 'robberAttack' && card.event !== 'epidemic') log(s, '🚧 Este evento tendrá efecto en la próxima versión.');
+  } else if (card.event === 'earthquake') earthquake(s);
 }
 
+// Catan Event Cards: events where players choose (a resource to take or give, a player to rob).
+// They happen before production: phase 'evChoice' until everyone involved has chosen.
+function eventChoices(s) {
+  const card = s.eventCard, ev = card.event, live = s.players.filter(p => !p.retired);
+  const hasCards = p => handSize(p.res) > 0;
+  const tasks = {};
+  const most = (score) => { const sc = live.map(p => score(p)); const max = Math.max(0, ...sc); return max > 0 ? live.filter((p, i) => sc[i] === max) : []; };
+  if (ev === 'plentifulYear') for (const p of live) tasks[p.id] = { type: 'take' };
+  else if (ev === 'calmSeas') for (const p of most(p => Object.keys(s.buildings).filter(v => s.buildings[v].owner === p.id && s.board.vertices[v].port != null).length)) tasks[p.id] = { type: 'take' };
+  else if (ev === 'tournament') for (const p of most(p => p.knights || 0)) tasks[p.id] = { type: 'take' };
+  else if (ev === 'goodNeighbors') live.forEach((p, i) => { if (hasCards(p) && live.length > 1) tasks[p.id] = { type: 'give', to: live[(i + 1) % live.length].id }; });
+  else if (ev === 'helpfulNeighbor') {
+    const vp = p => victoryPoints(s, p.id, false), max = Math.max(...live.map(vp));
+    const poorer = live.filter(p => vp(p) < max).map(p => p.id);
+    if (poorer.length) for (const p of live) if (vp(p) === max && hasCards(p)) tasks[p.id] = { type: 'give', options: poorer };
+  } else if (ev === 'tradeAdvantage' || ev === 'conflict') {
+    let who = ev === 'tradeAdvantage' ? s.longestRoad.owner : s.largestArmy.owner;
+    if (ev === 'conflict' && who < 0) { const top = most(p => p.knights || 0); who = top.length === 1 ? top[0].id : -1; }
+    const victims = who >= 0 ? live.filter(p => p.id !== who && hasCards(p)).map(p => p.id) : [];
+    if (victims.length) tasks[who] = { type: 'steal', options: victims };
+  }
+  for (const pid in tasks) if (tasks[pid].type === 'take' && !RES.some(r => s.bank[r] > 0)) delete tasks[pid];
+  return tasks;
+}
+
+// 'take': a resource from the bank (a.res); 'give': one of yours (a.res) to the left / to a.to;
+// 'steal': a random card from a.target
+H.evChoose = (s, a) => {
+  if (s.phase !== 'evChoice' || !s.evChoice) fail('No hay ningún evento que resolver.');
+  const task = s.evChoice.pending[a.pid];
+  if (!task) fail('No te toca elegir.');
+  const p = s.players[a.pid];
+  if (task.type === 'take') {
+    if (!RES.includes(a.res) || s.bank[a.res] < 1) fail('El banco no tiene ese recurso.');
+    giveFromBank(s, a.pid, a.res, 1);
+    s.fx.push({ kind: 'fromBank', pid: a.pid, res: [a.res] });
+    log(s, msg('🃏 @{p} toma {r}.', { p: a.pid, r: resName(a.res) }), a.pid);
+  } else if (task.type === 'give') {
+    const to = task.to != null ? task.to : a.to;
+    if (task.options && !task.options.includes(to)) fail('Elige a alguien con menos puntos.');
+    if (!cardsOf(s).includes(a.res) || !(p.res[a.res] > 0)) fail('No tienes ese recurso.');
+    p.res[a.res]--;
+    s.players[to].res[a.res]++;
+    s.fx.push({ kind: 'steal', from: a.pid, to, res: a.res });
+    log(s, msg('🎁 @{p} da una carta a @{o}.', { p: a.pid, o: to }), a.pid);
+  } else if (task.type === 'steal') {
+    if (!task.options.includes(a.target)) fail('Elige a quién robar.');
+    const r = stealRandom(s, a.target, a.pid);
+    if (r) s.fx.push({ kind: 'steal', from: a.target, to: a.pid, res: r });
+    log(s, msg('🫳 @{p} roba una carta a @{o}.', { p: a.pid, o: a.target }), a.pid);
+  }
+  delete s.evChoice.pending[a.pid];
+  if (!Object.keys(s.evChoice.pending).length) {
+    const sum = s.evChoice.sum;
+    s.evChoice = null;
+    s.evDone = true;
+    afterRoll(s, sum);
+  }
+};
+
+// Earthquake: one road of each player is damaged (the game picks it); until it's repaired
+// (1 wood + 1 brick) that player can't build roads, nor settlements next to a damaged road
+function earthquake(s) {
+  s.damagedRoads ||= {};
+  for (const p of s.players) {
+    if (p.retired) continue;
+    const roads = Object.keys(s.roads).filter(e => s.roads[e] === p.id && !s.damagedRoads[e] && !(s.bridges && s.bridges[e] != null));
+    if (!roads.length) continue;
+    const e = roads[Math.floor(rand(s.rng) * roads.length)];
+    s.damagedRoads[e] = true;
+    s.fx.push({ kind: 'roadDamaged', pid: p.id, edge: +e });
+  }
+  log(s, '🌋 ¡Terremoto! Cada jugador tiene un camino dañado: repáralo (1 madera + 1 arcilla) para volver a construir caminos.');
+}
+export const damagedRoadsOf = (s, pid) => (s.damagedRoads ? Object.keys(s.damagedRoads).map(Number).filter(e => s.roads[e] === pid) : []);
+export const REPAIR_COST = { wood: 1, brick: 1 };
+H.evRepair = (s, a) => {
+  assertMain(s, a);
+  const mine = damagedRoadsOf(s, a.pid);
+  const e = a.edge != null ? a.edge : mine[0];
+  if (!mine.includes(e)) fail('No tienes ese camino dañado.');
+  if (!canAfford(s.players[a.pid].res, REPAIR_COST)) fail('Te faltan recursos.');
+  pay(s, a.pid, REPAIR_COST);
+  delete s.damagedRoads[e];
+  s.fx.push({ kind: 'roadRepaired', pid: a.pid, edge: e });
+  log(s, msg('🔧 @{p} repara un camino.', { p: a.pid }), a.pid);
+};
+
 function afterRoll(s, sum) {
-  if (s.eventCard) eventCardEffect(s); // Catan Event Cards
+  if (s.eventCard && !s.evDone) { // Catan Event Cards: the card's event first
+    eventCardEffect(s);
+    const tasks = eventChoices(s);
+    s.evDone = true;
+    if (Object.keys(tasks).length) {
+      s.evChoice = { event: s.eventCard.event, sum, pending: tasks };
+      s.phase = 'evChoice';
+      return;
+    }
+  }
   if (sum !== 7) {
     const gains = produce(s, sum);
     if (s.fishermen) fishProduction(s, sum);

@@ -1732,6 +1732,65 @@ t('Cartas de evento: 36 cartas como dos dados, año nuevo, epidemia y ladrón qu
   eq(b3.robber, desert ? desert.id : -1, 'al desierto');
 });
 
+t('Cartas de evento: año abundante, buenos vecinos, vecino solidario, ventaja comercial, terremoto', () => {
+  const mk = ev => {
+    const c = defaultConfig(); c.rules.diceMode = 'eventCards';
+    const s = G.createGame(c);
+    s.phase = 'roll'; s.current = 0; s.turn = 6; s.round = 4;
+    for (const p of s.players) for (const r of Object.keys(p.res)) p.res[r] = 0;
+    s.eventDeck.push(EvCards.EVENT_CARDS.find(x => x.event === ev).id);
+    return s;
+  };
+  // plentiful year: everybody takes 1, then production
+  let s = mk('plentifulYear');
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'roba');
+  eq(s.phase, 'evChoice', 'todos eligen');
+  eq(G.pendingActors(s).length, s.players.length, 'todos');
+  for (const pid of G.pendingActors(s)) ok(act(s, { type: 'evChoose', pid, res: 'ore' }).ok, 'toma');
+  ok(s.players.every(p => p.res.ore >= 1), 'un mineral cada uno');
+  eq(s.phase, 'main', 'y sigue el turno');
+  // good neighbors: give to the left
+  s = mk('goodNeighbors');
+  s.players.forEach((p, i) => { p.res.wood = 1; });
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'roba');
+  ok(!act(s, { type: 'evChoose', pid: 0, res: 'brick' }).ok, 'no da lo que no tiene');
+  for (const pid of G.pendingActors(s)) ok(act(s, { type: 'evChoose', pid, res: 'wood' }).ok, 'da');
+  ok(s.players.every(p => p.res.wood === 1), 'cada uno da una y recibe una');
+  // helpful neighbor: the leader gives to someone with fewer points
+  s = mk('helpfulNeighbor');
+  s.buildings = {}; s.buildings[s.board.vertices.find(v => v.hexes.length === 3).id] = { owner: 2, type: 'city' };
+  s.players[2].res.sheep = 2;
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'roba');
+  eq(G.pendingActors(s), [2], 'da el que va primero');
+  ok(!act(s, { type: 'evChoose', pid: 2, res: 'sheep', to: 2 }).ok, 'no a sí mismo');
+  ok(act(s, { type: 'evChoose', pid: 2, res: 'sheep', to: 1 }).ok, 'a otro');
+  eq(s.players[1].res.sheep >= 1, true, 'recibió');
+  // trade advantage: the longest road steals
+  s = mk('tradeAdvantage');
+  s.longestRoad = { owner: 3, len: 5 };
+  s.players[1].res.wheat = 1;
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'roba');
+  eq(G.pendingActors(s), [3], 'roba el del camino más largo');
+  ok(act(s, { type: 'evChoose', pid: 3, target: 1 }).ok, 'elige víctima');
+  eq(s.players[1].res.wheat, 0, 'perdió la carta');
+  // earthquake: a damaged road blocks roads and settlements next to it until repaired
+  s = mk('earthquake');
+  s.buildings = {}; s.roads = {};
+  const v0 = s.board.vertices.find(v => v.hexes.length === 3);
+  s.buildings[v0.id] = { owner: 0, type: 'settlement' };
+  s.roads[v0.edges[0]] = 0;
+  ok(act(s, { type: 'roll', pid: 0 }).ok, 'terremoto');
+  const dmg = G.damagedRoadsOf(s, 0);
+  eq(dmg.length, 1, 'un camino dañado');
+  s.phase = 'main';
+  const e = s.board.edges.find(E => G.canBuildRoad({ ...s, damagedRoads: {} }, 0, E.id));
+  if (e) ok(!G.canBuildRoad(s, 0, e.id), 'no construye caminos');
+  give(s, 0, { wood: 1, brick: 1 });
+  ok(act(s, { type: 'evRepair', pid: 0 }).ok, 'repara');
+  eq(G.damagedRoadsOf(s, 0).length, 0, 'reparado');
+  if (e) ok(G.canBuildRoad(s, 0, e.id), 'ya puede');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {

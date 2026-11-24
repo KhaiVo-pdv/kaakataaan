@@ -5,7 +5,7 @@ import {
   canAfford, handSize, victoryPoints, tradeRatio, playableDev, pendingActors,
   legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities,
   legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets, playableProgress,
-  fishPerkReason, bootReceivers, legalBridges,
+  fishPerkReason, bootReceivers, legalBridges, damagedRoadsOf, REPAIR_COST,
 } from './game.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
@@ -522,6 +522,7 @@ function mainAction(s, pid) {
   if (river) return river;
   const knight = s.barbAttack && baKnightMove(s, pid); // Barbarian Attack: knights march on the barbarians
   if (knight) return knight;
+  if (s.damagedRoads && damagedRoadsOf(s, pid).length && canAfford(s.players[pid].res, REPAIR_COST)) return { type: 'evRepair', pid }; // Event Cards earthquake
   const wagon = s.traders && tbWagonAction(s, pid); // Traders & Barbarians: upgrade, boost and drive the wagon
   if (wagon) return wagon;
   if ((s.barbAttack || s.traders) && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
@@ -697,6 +698,7 @@ export function botAct(real, pid) {
     return { type: 'baSteal', pid, target: best(vs, o => victoryPoints(s, o, false) * 2 + handSize(s.players[o].res) + noise(s, o) * 0.1) };
   }
   if (s.phase === 'baCard') return baCardChoice(s, pid); // Barbarian Attack
+  if (s.phase === 'evChoice') return evChoiceAction(s, pid); // Event Cards
   if (s.phase === 'tbBarbarian') return tbBarbarianChoice(real && real.traders ? real : s, pid); // Traders & Barbarians
   if (s.phase === 'caravanPick') return { type: 'caravanPick', pid, spot: best(s.caravans.vote.tied, e => camelSpotValue(s, pid, e)) };
   if (s.phase === 'displace') {
@@ -949,4 +951,22 @@ function tbDevPlay(s, pid, playable) {
   }
   if (playable.includes('roadBuilding') && p.roadsLeft > 0 && bestRoad(s, pid) !== null) return { type: 'playDev', pid, card: 'roadBuilding' };
   return null;
+}
+
+// ---------------- Catan Event Cards: choices ----------------
+function evChoiceAction(s, pid) {
+  const task = s.evChoice.pending[pid], p = s.players[pid];
+  if (task.type === 'take') {
+    const tgt = chooseTarget(s, pid);
+    const need = tgt ? Object.keys(missing(p.res, tgt.cost).m).filter(r => s.bank[r] > 0) : [];
+    return { type: 'evChoose', pid, res: need[0] || best(RES.filter(r => s.bank[r] > 0), r => -p.res[r] + noise(s, r.length) * 0.1) };
+  }
+  if (task.type === 'give') {
+    const tgt = chooseTarget(s, pid);
+    const keep = tgt ? tgt.cost : {};
+    const res = best(cardsOf(s).filter(r => p.res[r] > 0), r => p.res[r] - (keep[r] || 0) * 2);
+    const to = task.to != null ? task.to : best(task.options, o => -victoryPoints(s, o, false) + noise(s, o) * 0.1);
+    return { type: 'evChoose', pid, res, to };
+  }
+  return { type: 'evChoose', pid, target: best(task.options, o => victoryPoints(s, o, false) * 2 + handSize(s.players[o].res) + noise(s, o) * 0.1) };
 }

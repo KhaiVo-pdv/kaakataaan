@@ -32,7 +32,7 @@ export const EVENT_INFO = {
   helpfulNeighbor: { icon: '🤝', name: 'Vecino solidario', desc: 'Quien tenga más puntos da 1 recurso a elegir a alguien con menos.' },
   plentifulYear: { icon: '🌾', name: 'Año abundante', desc: 'Cada jugador toma 1 recurso a elegir.' },
   goodNeighbors: { icon: '🎁', name: 'Buenos vecinos', desc: 'Cada jugador da 1 recurso a elegir al de su izquierda.' },
-  earthquake: { icon: '🌋', name: 'Terremoto', desc: 'Cada jugador daña uno de sus caminos: hasta repararlo (1 madera + 1 arcilla) no construye caminos.' },
+  earthquake: { icon: '🌋', name: 'Terremoto', desc: 'Un camino de cada jugador queda dañado: hasta repararlo (1 madera + 1 arcilla) no construye caminos.' },
   tradeAdvantage: { icon: '📈', name: 'Ventaja comercial', desc: 'Quien tenga el camino más largo roba 1 recurso a quien elija.' },
   tournament: { icon: '🏇', name: 'Torneo', desc: 'Quien haya jugado más caballeros toma 1 recurso a elegir.' },
   conflict: { icon: '⚔️', name: 'Conflicto', desc: 'Quien tenga el mayor ejército roba 1 recurso a quien elija.' },

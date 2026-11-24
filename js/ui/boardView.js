@@ -10,6 +10,7 @@ import { drawCaravans, drawCamelSpots } from './caravans2d.js';
 import { drawBarbarianAttack, drawBaKnights } from './barbarianAttack2d.js';
 import { drawTradeHexes, drawTradersPieces } from './traders2d.js';
 import { wagonAt } from '../engine/tradersBarbarians/traders.js';
+import { drawDamagedRoads } from './eventCardsUI.js';
 
 const U = 100; // svg units per hex radius
 const hexPoints = (cx, cy, r) =>
@@ -257,6 +258,7 @@ export class BoardView {
     if (st.caravans && st.caravans.vote) svg.append(drawCamelSpots(S, U, st)); // Caravans: lettered vote spots on top
     if (st.barbAttack) svg.append(drawBaKnights(S, U, st)); // Barbarian Attack: knights on their paths
     if (st.traders) svg.append(drawTradersPieces(S, U, st, wagonAt)); // Traders & Barbarians: barbarians and wagons
+    if (st.damagedRoads) svg.append(drawDamagedRoads(S, U, st)); // Event Cards earthquake: cracked roads
 
     // Seafarers: ships and the pirate
     if (st.ships) {
