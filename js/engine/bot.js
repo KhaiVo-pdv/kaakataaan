@@ -246,6 +246,7 @@ function tryDevPlay(s, pid) {
   const playable = playableDev(s, pid);
   if (!playable.length || noise(s, 7) > L.dev) return null;
   const p = s.players[pid];
+  if (s.traders) return tbDevPlay(s, pid, playable); // Traders & Barbarians: knights move barbarians, Swift Journey
   if (playable.includes('knight')) {
     const robberOnMe = s.board.robber >= 0 && s.board.tiles[s.board.robber].verts.some(v => s.buildings[v] && s.buildings[v].owner === pid);
     const la = s.largestArmy;
@@ -695,6 +696,7 @@ export function botAct(real, pid) {
     return { type: 'baSteal', pid, target: best(vs, o => victoryPoints(s, o, false) * 2 + handSize(s.players[o].res) + noise(s, o) * 0.1) };
   }
   if (s.phase === 'baCard') return baCardChoice(s, pid); // Barbarian Attack
+  if (s.phase === 'tbBarbarian') return tbBarbarianChoice(real && real.traders ? real : s, pid); // Traders & Barbarians
   if (s.phase === 'caravanPick') return { type: 'caravanPick', pid, spot: best(s.caravans.vote.tied, e => camelSpotValue(s, pid, e)) };
   if (s.phase === 'displace') {
     // Cities & Knights: our knight was pushed away: put it back next to our buildings if we can
@@ -897,5 +899,53 @@ function tbWagonAction(view, pid) {
   const reaches = pl => pl.steps.length && pl.steps[pl.steps.length - 1].to === pl.goal;
   if (!reaches(plan) && !Traders.boostUsed(s, pid) && p.res.wheat >= 1 && reaches(Traders.wagonPlan(s, pid, Traders.mpLeft(s, pid) + Traders.BOOST_MP)))
     return { type: 'tbBoost', pid };
-  return plan.steps.length ? { type: 'tbMove', pid, to: plan.steps[0].to } : null;
+  if (plan.steps.length) return { type: 'tbMove', pid, to: plan.steps[0].to };
+  return tbDriveAction(s, pid);
+}
+
+// barbarians the wagon would like gone: on its route, on our roads
+function tbRouteEdges(s, pid, mp = 99) {
+  return new Set(Traders.wagonPlan(s, pid, mp).steps.map(x => x.e));
+}
+function tbDriveAction(s, pid) {
+  const targets = Traders.driveTargets(s, pid);
+  if (!targets.length) return null;
+  const route = tbRouteEdges(s, pid);
+  return { type: 'tbDrive', pid, edge: best(targets, e => (route.has(e) ? 2 : 0) + (s.roads[e] === pid ? 3 : 0) + noise(s, e) * 0.1) };
+}
+function tbLeader(s, pid) {
+  return best(s.players.filter(o => o.id !== pid && !o.retired).map(o => o.id), o => victoryPoints(s, o, false) + noise(s, o) * 0.1);
+}
+export function tbBarbarianChoice(s, pid) {
+  const T = s.traders, R = T.relocate || { from: null, steal: true };
+  const mine = tbRouteEdges(s, pid);
+  const leader = tbLeader(s, pid);
+  const theirs = leader != null ? tbRouteEdges(s, leader) : new Set();
+  const from = R.from != null ? R.from : best(T.barbarians, e => (s.roads[e] === pid ? 3 : 0) + (mine.has(e) ? 2 : 0) - (s.roads[e] === leader ? 2 : 0) - (theirs.has(e) ? 1 : 0) + noise(s, e) * 0.1);
+  const to = best(Traders.freeBarbPaths(s).filter(e => e !== from), e => {
+    let v = 0;
+    const victim = R.steal ? Traders.roadVictim(s, pid, e) : null;
+    if (victim != null) v += victim === leader ? 3 : 1.5;
+    if (s.roads[e] === pid) v -= 4;
+    if (mine.has(e)) v -= 3;
+    if (theirs.has(e)) v += 1.5;
+    return v + noise(s, e) * 0.2;
+  });
+  return { type: 'tbMoveBarbarian', pid, from, to };
+}
+function tbDevPlay(s, pid, playable) {
+  const p = s.players[pid];
+  if (playable.includes('knight')) {
+    const T = s.traders, route = tbRouteEdges(s, pid);
+    const inMyWay = T.barbarians.some(e => s.roads[e] === pid || route.has(e));
+    if (inMyWay || (s.phase === 'main' && p.dev.filter(c => c.type === 'knight').length >= 2) || noise(s, 13) < 0.15) return { type: 'playDev', pid, card: 'knight' };
+  }
+  if (s.phase !== 'main') return null;
+  if (playable.includes('swiftJourney') && Traders.wagonAt(s, pid) != null) {
+    const plan = Traders.wagonPlan(s, pid);
+    const blocked = Traders.stopped(s, pid) || !plan.steps.length;
+    if (blocked && Traders.wagonPlan(s, pid, Traders.mpLeft(s, pid) + Traders.wagonLevel(s, pid).mp).steps.length) return { type: 'playDev', pid, card: 'swiftJourney' };
+  }
+  if (playable.includes('roadBuilding') && p.roadsLeft > 0 && bestRoad(s, pid) !== null) return { type: 'playDev', pid, card: 'roadBuilding' };
+  return null;
 }

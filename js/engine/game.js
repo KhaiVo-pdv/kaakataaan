@@ -174,7 +174,7 @@ export function createGame(configIn) {
   }
   if (s.traders) {
     log(s, msg('🛒 Castillo, cantera y vidriería esperan mercancías; {n} bárbaros cortan los caminos. Cada jugador empieza con {g} de oro.', { n: s.traders.barbarians.length, g: Traders.START_GOLD }));
-    log(s, '🚧 Mercaderes y bárbaros está en construcción: espantar bárbaros, el 7 y las cartas llegarán en la próxima versión.');
+    log(s, '🚧 Mercaderes y bárbaros está en construcción: el tablero se dibujará en la próxima versión.');
   }
   if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {
@@ -434,6 +434,7 @@ export function pendingActors(s) {
   if (s.phase === 'caravanVote') return [s.caravans.vote.order[s.caravans.vote.idx]]; // Caravans: one voter at a time
   if (s.phase === 'caravanPick') return [s.caravans.vote.decider];
   if (s.phase === 'baCard') return [s.current]; // Barbarian Attack: resolve the card just bought
+  if (s.phase === 'tbBarbarian') return [s.current]; // Traders & Barbarians: move a barbarian
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -999,8 +1000,12 @@ H.moveShip = (s, a) => {
 H.roll = (s, a) => {
   if (s.phase !== 'roll') fail('Ahora no se tiran dados.');
   if (a.pid !== s.current) fail('No es tu turno.');
-  const d = s.alchemy || rollDice(s); // C&K Alchemist: the player chose the number dice
+  let d = s.alchemy || rollDice(s); // C&K Alchemist: the player chose the number dice
   delete s.alchemy;
+  if (s.traders) while (d[0] + d[1] === 2 || d[0] + d[1] === 12) { // Traders & Barbarians: 2 and 12 are rolled again
+    log(s, msg('🎲 Sale {n}: se vuelve a tirar.', { n: d[0] + d[1] }), a.pid);
+    d = rollDice(s);
+  }
   const sum = d[0] + d[1];
   s.dice = d;
   // Cities & Knights: the event die rolls along (its effects come with barbarians / progress cards)
@@ -1088,6 +1093,7 @@ const afterSeven = s => {
     return 'main';
   }
   if (s.barbAttack) return BarbAttack.stealVictims(s, s.current).length ? 'baSteal' : 'main'; // Barbarian Attack: no robber, steal from anyone
+  if (s.traders) { s.traders.relocate = { from: null, steal: true }; return 'tbBarbarian'; } // Traders & Barbarians: move a barbarian
   return s.config.rules.noRobber || Barb.robberAsleep(s) ? 'main' : 'robber';
 };
 
@@ -1503,6 +1509,52 @@ H.tbUpgrade = (s, a) => {
   s.fx.push({ kind: 'tbUpgrade', pid: a.pid, level: next.level });
   log(s, msg('🛒 @{p} mejora su carromato al nivel {n}.', { p: a.pid, n: next.level }) , a.pid);
   checkWin(s);
+};
+
+// Traders & Barbarians: move a barbarian (7, Knight, or one the wagon drove off) to a free path;
+// after a 7 / Knight, a barbarian put on a rival road robs its owner of 1 resource
+H.tbMoveBarbarian = (s, a) => {
+  if (!s.traders || s.phase !== 'tbBarbarian') fail('Ahora no se mueve ningún bárbaro.');
+  if (a.pid !== s.current) fail('No es tu turno.');
+  const T = s.traders, R = T.relocate || { from: null, steal: true };
+  const from = R.from != null ? R.from : a.from;
+  if (!T.barbarians.includes(from)) fail('Elige un bárbaro.');
+  if (!Traders.freeBarbPaths(s).includes(a.to)) fail('Ese camino no está libre.');
+  T.barbarians[T.barbarians.indexOf(from)] = a.to;
+  if (T.tried && T.tried.turn === s.turn) T.tried.edges.push(a.to); // the same barbarian is not tried twice
+  s.fx.push({ kind: 'tbBarbarian', from, to: a.to });
+  log(s, msg('🪓 @{p} mueve un bárbaro.', { p: a.pid }), a.pid);
+  const victim = R.steal ? Traders.roadVictim(s, a.pid, a.to) : null;
+  if (victim != null) {
+    const r = stealRandom(s, victim, a.pid);
+    if (r) {
+      s.fx.push({ kind: 'steal', from: victim, to: a.pid, res: r });
+      log(s, msg('🫳 @{p} roba una carta a @{o}.', { p: a.pid, o: victim }), a.pid);
+    }
+  }
+  T.relocate = null;
+  s.phase = s.robberReturn || 'main';
+  s.robberReturn = null;
+};
+
+// the wagon next to a barbarian: roll a die; the wagon's numbers drive it off (then it is moved)
+H.tbDrive = (s, a) => {
+  assertMain(s, a);
+  if (!s.traders) fail('No hay bárbaros que espantar.');
+  if (!Traders.driveTargets(s, a.pid).includes(a.edge)) fail('Tu carromato no puede espantar ese bárbaro ahora.');
+  const T = s.traders;
+  if (!T.tried || T.tried.turn !== s.turn) T.tried = { turn: s.turn, edges: [] };
+  T.tried.edges.push(a.edge);
+  const die = 1 + randInt(s.rng, 6), ok = Traders.wagonLevel(s, a.pid).drive.includes(die);
+  s.fx.push({ kind: 'tbDrive', pid: a.pid, edge: a.edge, die, ok });
+  if (!ok) {
+    log(s, msg('🎲 @{p} intenta espantar un bárbaro: sale {n}, no se mueve.', { p: a.pid, n: die }), a.pid);
+    return;
+  }
+  log(s, msg('🎲 @{p} espanta un bárbaro con un {n}.', { p: a.pid, n: die }), a.pid);
+  T.relocate = { from: a.edge, steal: false };
+  s.robberReturn = 'main';
+  s.phase = 'tbBarbarian';
 };
 
 // ---- Cities & Knights barbarians ----
@@ -2247,6 +2299,12 @@ H.playDev = (s, a) => {
   switch (a.card) {
     case 'knight':
       p.knights++;
+      if (s.traders) { // Traders & Barbarians: no Largest Army; the knight moves a barbarian (as a 7)
+        s.traders.relocate = { from: null, steal: true };
+        s.robberReturn = s.phase;
+        s.phase = 'tbBarbarian';
+        break;
+      }
       updateLargestArmy(s, a.pid);
       if (s.config.rules.noRobber) break;
       s.robberReturn = s.phase;
@@ -2256,6 +2314,12 @@ H.playDev = (s, a) => {
       s.freeRoads = Math.min(2, p.roadsLeft + (s.ships ? p.shipsLeft : 0));
       if (s.freeRoads > 0 && !noFreeBuildLeft(s, a.pid)) s.phase = 'roadBuilding';
       break;
+    case 'swiftJourney': { // Traders & Barbarians: the wagon moves again with all its points
+      const M = Traders.turnMove(s, a.pid);
+      M.mp += Traders.wagonLevel(s, a.pid).mp;
+      M.stopped = false;
+      break;
+    }
     case 'yearOfPlenty':
       for (const r of a.res) giveFromBank(s, a.pid, r, 1);
       s.fx.push({ kind: 'fromBank', pid: a.pid, res: a.res });

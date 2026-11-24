@@ -27,6 +27,7 @@ export const DEV_INFO = {
   yearOfPlenty: { name: 'Año de abundancia', icon: '🎁', desc: 'Toma 2 recursos del banco.' },
   monopoly: { name: 'Monopolio', icon: '👑', desc: 'Todos te dan un recurso.' },
   vp: { name: 'Punto de victoria', icon: '🏆', desc: '+1 punto (oculto).' },
+  swiftJourney: { name: 'Viaje rápido', icon: '💨', desc: 'Tu carromato vuelve a moverse este turno con todos sus puntos.' }, // Traders & Barbarians only
 };
 
 export const DEV_DECKS = {

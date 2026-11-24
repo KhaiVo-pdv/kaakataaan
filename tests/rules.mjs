@@ -1585,6 +1585,74 @@ t('Mercaderes y bárbaros: el carromato se mueve, paga peajes, carga y entrega',
   ok(act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'oro → recurso');
 });
 
+t('Mercaderes y bárbaros: sin 2 ni 12, el 7 y el caballero mueven bárbaros, espantar, viaje rápido', () => {
+  const mk = () => { const c = defaultConfig(); c.seed = 11; c.rules.robberGrace = 0; c.expansions = { tradersBarbarians: true, tbScenario: 'tradersBarbarians' }; return G.createGame(c); };
+  const s = mk(), b = s.board, T = s.traders;
+  // the deck
+  const count = {};
+  for (const c of s.devDeck) count[c] = (count[c] || 0) + 1;
+  eq([count.knight, count.roadBuilding, count.swiftJourney, count.vp, s.devDeck.length], [16, 3, 3, 3, 25], '25 cartas propias');
+  // dice: never 2 or 12
+  s.round = 5; s.turn = 5;
+  let seven = false;
+  for (let i = 0; i < 300; i++) {
+    s.phase = 'roll'; s.current = 0;
+    ok(act(s, { type: 'roll', pid: 0 }).ok, 'tira');
+    const sum = s.dice[0] + s.dice[1];
+    ok(sum !== 2 && sum !== 12, 'nunca 2 ni 12');
+    if (s.phase === 'discard') for (const pid of G.pendingActors(s)) { const p = s.players[pid]; let k = s.pendingDiscards[pid]; const res = {}; for (const r of Object.keys(p.res)) { const x = Math.min(k, p.res[r]); if (x) res[r] = x; k -= x; } act(s, { type: 'discard', pid, res }); }
+    if (s.phase === 'tbBarbarian') { seven = true; break; }
+  }
+  ok(seven, 'un 7 lleva a mover un bárbaro');
+  // the moved barbarian lands on a rival road: steal
+  s.buildings = {}; s.roads = {};
+  const to = Traders.freeBarbPaths(s)[0];
+  s.roads[to] = 1;
+  for (const r of Object.keys(s.players[1].res)) s.players[1].res[r] = 0;
+  s.players[1].res.ore = 2;
+  const from = T.barbarians[0];
+  ok(!act(s, { type: 'tbMoveBarbarian', pid: 0, from, to: from }).ok, 'no a un camino ocupado');
+  ok(act(s, { type: 'tbMoveBarbarian', pid: 0, from, to }).ok, 'mueve el bárbaro');
+  ok(T.barbarians.includes(to) && !T.barbarians.includes(from), 'cambió de camino');
+  eq(s.players[1].res.ore, 1, 'roba al dueño del camino');
+  eq(s.phase, 'main', 'sigue el turno');
+  // knight card: moves a barbarian, no Largest Army
+  s.players[0].dev.push({ type: 'knight', turn: 0 }, { type: 'knight', turn: 0 }, { type: 'knight', turn: 0 });
+  s.devPlayed = false;
+  ok(act(s, { type: 'playDev', pid: 0, card: 'knight' }).ok, 'juega caballero');
+  eq(s.phase, 'tbBarbarian', 'mueve un bárbaro');
+  ok(act(s, { type: 'tbMoveBarbarian', pid: 0, from: T.barbarians[1], to: Traders.freeBarbPaths(s)[3] }).ok, 'lo mueve');
+  eq(s.largestArmy.owner, -1, 'sin ejército más grande');
+  // driving off: level 2 needed; once per barbarian per turn; on success the player moves it (no steal)
+  const s2 = mk(), T2 = s2.traders;
+  s2.phase = 'main'; s2.current = 0; s2.turn = 3;
+  const be = s2.board.edges[T2.barbarians[0]];
+  T2.wagons[0].at = be.a;
+  ok(!Traders.driveTargets(s2, 0).length, 'nivel 1: no puede');
+  T2.wagons[0].level = 5; // drives off on 3-6
+  let driven = false;
+  for (let turn = 3; turn < 60 && !driven; turn++) {
+    s2.turn = turn; s2.phase = 'main';
+    ok(act(s2, { type: 'tbDrive', pid: 0, edge: be.id }).ok, 'lo intenta');
+    ok(!act(s2, { type: 'tbDrive', pid: 0, edge: be.id }).ok, 'una vez por turno');
+    if (s2.phase === 'tbBarbarian') driven = true;
+  }
+  ok(driven, 'acaba espantándolo');
+  ok(!act(s2, { type: 'tbMoveBarbarian', pid: 0, from: T2.barbarians[1], to: Traders.freeBarbPaths(s2)[0] }).ok || T2.barbarians.includes(be.id) === false, 'solo se mueve el espantado');
+  if (s2.phase === 'tbBarbarian') ok(act(s2, { type: 'tbMoveBarbarian', pid: 0, to: Traders.freeBarbPaths(s2)[0] }).ok, 'lo mueve a otro camino');
+  ok(!T2.barbarians.includes(be.id), 'ya no está allí');
+  eq(s2.phase, 'main', 'sigue el turno');
+  // swift journey: the wagon moves again with all its points
+  const s3 = mk(), T3 = s3.traders;
+  s3.phase = 'main'; s3.current = 0; s3.turn = 4; T3.barbarians = [];
+  T3.move = { turn: 4, pid: 0, mp: 0, boost: false, stopped: true };
+  s3.players[0].dev.push({ type: 'swiftJourney', turn: 0 });
+  s3.devPlayed = false;
+  ok(act(s3, { type: 'playDev', pid: 0, card: 'swiftJourney' }).ok, 'viaje rápido');
+  eq(Traders.mpLeft(s3, 0), 4, '4 puntos más');
+  ok(!Traders.stopped(s3, 0), 'puede salir de la plaza');
+});
+
 // ---------- Cities & Knights: commodities and event die ----------
 function ckMain(seed = 11) {
   const s = fresh(c => {

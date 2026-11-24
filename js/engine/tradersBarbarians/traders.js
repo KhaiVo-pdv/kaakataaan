@@ -22,6 +22,7 @@ export const TRADE_KINDS = ['castle', 'quarry', 'glassworks'];
 export const SUPPLIES = { castle: ['tools', 'sand'], quarry: ['marble', 'sand'], glassworks: ['glass', 'tools'] };
 export const NEEDED_AT = { marble: 'castle', glass: 'castle', tools: 'quarry', sand: 'glassworks' };
 export const TOKENS_EACH = 6;
+export const DEV_CARDS = { knight: 16, roadBuilding: 3, swiftJourney: 3, vp: 3 }; // 25 (6th-edition counts)
 // the 2 and 12 tokens are removed: these stand in for them (keeps the token count)
 export const NO_2_12 = [3, 11, 4, 10, 5, 9];
 
@@ -158,7 +159,11 @@ export function initTraders(s) {
     p.gold = START_GOLD;
     wagons[p.id] = { at: null, cargo: null, level: 1, delivered: 0 };
   }
-  s.traders = { barbarians: [...(s.board.tbBarbPaths || [])], stacks, wagons };
+  s.traders = { barbarians: [...(s.board.tbBarbPaths || [])], stacks, wagons, relocate: null, tried: null };
+  // the scenario's own development cards: no Year of Plenty / Monopoly, Swift Journey instead
+  const deck = [];
+  for (const [type, n] of Object.entries(DEV_CARDS)) for (let i = 0; i < n; i++) deck.push(type);
+  s.devDeck = shuffle(s.rng, deck);
   s.config.rules.setupCity = true; // the second starting settlement is a city (the wagon starts there)
 }
 
@@ -246,6 +251,7 @@ export function wagonRoutes(s, pid, from = wagonAt(s, pid)) {
 }
 // the next steps along the cheapest route to the nearest goal that fit in mp (and the gold in hand)
 export function wagonPlan(s, pid, mp = mpLeft(s, pid)) {
+  if (wagonAt(s, pid) == null) return { goal: null, steps: [], total: Infinity }; // no city yet (setup)
   const goals = wagonGoals(s, pid);
   const R = wagonRoutes(s, pid);
   const goal = goals.filter(g => R.cost.has(g)).sort((a, b) => R.cost.get(a) - R.cost.get(b))[0];
@@ -262,4 +268,22 @@ export function wagonPlan(s, pid, mp = mpLeft(s, pid)) {
     steps.push(st);
   }
   return { goal, steps, total: R.cost.get(goal) };
+}
+
+// ---------------- barbarians ----------------
+// where a barbarian may be put: any land path without one (not a trade hex's closed sea side or an
+// inner path to a plaza)
+export const freeBarbPaths = s => s.board.edges.filter(e => !e.noRoad && !e.inner && !s.traders.barbarians.includes(e.id)).map(e => e.id);
+// barbarians next to the wagon (paths touching its intersection) not yet tried this turn
+export function driveTargets(s, pid) {
+  const T = s.traders, at = wagonAt(s, pid);
+  if (at == null || !wagonLevel(s, pid).drive.length) return [];
+  const tried = T.tried && T.tried.turn === s.turn ? T.tried.edges : [];
+  return s.board.vertices[at].edges.filter(e => T.barbarians.includes(e) && !tried.includes(e));
+}
+// a robbed road owner (7 / Knight): the owner of a road on that path, if it isn't the mover and has cards
+export function roadVictim(s, pid, e) {
+  const o = s.roads[e];
+  if (o === undefined || o === pid) return null;
+  return Object.values(s.players[o].res).some(n => n > 0) ? o : null;
 }

@@ -740,6 +740,7 @@ function bannerText(st, v, inter) {
     const n = Object.keys(st.pendingDiscards).length;
     return n > 1 ? t('🗑️ ¡Salió 7! Descartando ({n} pendientes)', { n }) : t('🗑️ ¡Salió 7! Descartando ({n} pendiente)', { n });
   }
+  if (st.phase === 'tbBarbarian') return st.current === v ? t('🪓 Mueve un bárbaro') : t('🪓 {name} mueve un bárbaro...', { name: cur.name }); // Traders & Barbarians
   const baTxt = BaUI.baBanner(st, v, ui); // Barbarian Attack: placing / moving knights, Treason, Intrigue
   if (baTxt) return baTxt;
   if (st.phase === 'baSteal') return st.current === v ? t('🫳 Elige a quién robar una carta') : t('🫳 {name} elige a quién robar...', { name: cur.name }); // Barbarian Attack
@@ -880,7 +881,7 @@ function fillActions(bar, st, v, locked) {
   for (const c of p.dev) (groups[c.type] ||= []).push(c);
   if (p.dev.length)
     bar.append(h('div', { class: 'devcards' }, Object.entries(groups).map(([type, cards]) => {
-      const info = DEV_INFO[type];
+      const info = st.traders && type === 'knight' ? { ...DEV_INFO.knight, desc: 'Mueve un bárbaro a otro camino; si cae sobre el camino de un rival, le robas 1 recurso.' } : DEV_INFO[type]; // Traders & Barbarians
       const can = playable.has(type);
       const fresh = cards.every(c => c.turn >= st.turn);
       return h('div', {
@@ -1062,7 +1063,7 @@ function showHint(st, v) {
 }
 
 function playDev(st, v, type) {
-  if (type === 'knight' || type === 'roadBuilding') {
+  if (type === 'knight' || type === 'roadBuilding' || type === 'swiftJourney') {
     App.dispatch({ type: 'playDev', pid: v, card: type });
     return;
   }
@@ -1309,6 +1310,8 @@ function modalContent(st, v) {
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
     return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
+  // Traders & Barbarians: move a barbarian (temporary panel; board taps come with the graphics)
+  if (st.phase === 'tbBarbarian' && st.traders && st.current === v && localHumans(st).includes(v)) return TrUI.barbarianModal(st, v, { h, dispatch: a => App.dispatch(a) });
   // Barbarian Attack: a 7 without a robber — pick who to steal from
   if (st.phase === 'baSteal' && st.barbAttack && st.current === v && localHumans(st).includes(v)) {
     const victims = st.players.filter(o => o.id !== v && !o.retired && G.handSize(o.res) > 0);
