@@ -9,6 +9,7 @@ import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
 import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
+import * as Traders from './tradersBarbarians/traders.js';
 import * as Ships from './seafarers/ships.js';
 import { legalPirateTiles, pirateVictims } from './seafarers/pirate.js';
 import * as Islands from './seafarers/islands.js';
@@ -134,6 +135,7 @@ export function createGame(configIn) {
   if (tbScenarioOn(s) === 'rivers') Rivers.initRivers(s);
   if (tbScenarioOn(s) === 'caravans') Caravans.initCaravans(s);
   if (tbScenarioOn(s) === 'barbarianAttack') BarbAttack.initBarbarianAttack(s);
+  if (tbScenarioOn(s) === 'tradersBarbarians') Traders.initTraders(s);
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -169,6 +171,10 @@ export function createGame(configIn) {
   if (s.barbAttack) {
     log(s, msg('🏰 Un castillo en la costa; {n} casillas costeras vigilan el mar. {k} bárbaros acechan.', { n: board.coast.length, k: BarbAttack.BARBARIANS }));
     log(s, '🛡️ Compra cartas para armar caballeros: rodea a los bárbaros para expulsarlos y hacerlos prisioneros.');
+  }
+  if (s.traders) {
+    log(s, msg('🛒 Castillo, cantera y vidriería esperan mercancías; {n} bárbaros cortan los caminos. Cada jugador empieza con {g} de oro.', { n: s.traders.barbarians.length, g: Traders.START_GOLD }));
+    log(s, '🚧 Mercaderes y bárbaros está en construcción: los carromatos, las mercancías y los bárbaros llegarán en las próximas versiones.');
   }
   if (s.caravans) log(s, msg('🐪 Un oasis en el centro: {n} caravanas y {k} camellos esperan.', { n: board.caravanStarts.length, k: Caravans.CAMELS }));
   if (s.rivers) {
@@ -298,6 +304,7 @@ const hasShip = (s, e) => !!s.ships && s.ships[e] !== undefined; // Seafarers on
 function vertexOpen(s, v) {
   if (s.buildings[v] || !onLand(s, v) || (s.knights && s.knights[v])) return false; // C&K: no building on a knight
   if (s.barbAttack && BarbAttack.vertexBlocked(s, v)) return false; // Barbarian Attack: not next to a conquered hex
+  if (s.traders && Traders.vertexBlocked(s, v)) return false; // Traders & Barbarians: not on a trade hex's sea corner
   return !s.board.vertices[v].adj.some(u => s.buildings[u]);
 }
 
@@ -316,6 +323,7 @@ export function canSetupRoad(s, pid, e) {
   if (!E || !landEdge(s, e) || hasShip(s, e) || (E.a !== s.setup.lastVid && E.b !== s.setup.lastVid)) return false;
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: never across the water
   if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
+  if (s.traders && Traders.edgeBlocked(s, e)) return false; // Traders & Barbarians: closed sea side / barbarian
   if (s.setup.blindActive) return !ownBlind(s, pid).edges.has(e);
   return s.roads[e] === undefined;
 }
@@ -325,6 +333,7 @@ export function canBuildRoad(s, pid, e) {
   if (!E || s.roads[e] !== undefined || !landEdge(s, e) || hasShip(s, e)) return false;
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: only bridges cross the water
   if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
+  if (s.traders && Traders.edgeBlocked(s, e)) return false; // Traders & Barbarians: closed sea side / barbarian
   for (const v of [E.a, E.b]) {
     const b = s.buildings[v];
     if (b && b.owner === pid) return true;

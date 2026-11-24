@@ -875,12 +875,12 @@ t('Mercaderes y Bárbaros: interruptor, escenario y una expansión a la vez', ()
   tb.set(c, true);
   tb.set(c, false);
   eq(c.rules.vpTarget, 10, 'apagada vuelve a 10');
-  // a scenario that isn't playable yet falls back to the fishermen
+  // an unknown scenario falls back to the fishermen
   const c2 = defaultConfig();
-  c2.expansions = { tradersBarbarians: true, tbScenario: 'tradersBarbarians' };
+  c2.expansions = { tradersBarbarians: true, tbScenario: 'nope' };
   const s = G.createGame(c2);
   ok(tradersBarbariansOn(s) && !seafarersOn(s) && !citiesKnightsOn(s), 'solo Mercaderes y Bárbaros');
-  eq(tbScenarioOn(s), 'fishermen', 'escenario no disponible -> pescadores');
+  eq(tbScenarioOn(s), 'fishermen', 'escenario desconocido -> pescadores');
   ok(s.log.some(l => JSON.stringify(l).includes('Mercaderes y Bárbaros')), 'aviso en el historial');
   const all = defaultConfig();
   all.expansions = { seafarers: false, citiesKnights: true, tradersBarbarians: true };
@@ -1478,6 +1478,51 @@ t('Ataque bárbaro: traición e intriga', () => {
   act(s, { type: 'buyDev', pid: 0 });
   ok(act(s, { type: 'baCard', pid: 0, hex: c }).ok, 'de una casilla conquistada');
   ok(!BarbAttack.isConquered(s, c), 'queda liberada');
+});
+
+// ---------- Traders & Barbarians: the main scenario (board) ----------
+t('Mercaderes y bárbaros: 3 casillas de comercio con plaza, sin 2 ni 12, bárbaros y oro', () => {
+  for (const shape of ['classic', 'big', 'pangea', 'extended']) for (let seed = 1; seed <= 12; seed++) {
+    const c = defaultConfig(); c.seed = seed * 31; c.map.shape = shape;
+    c.expansions = { tradersBarbarians: true, tbScenario: 'tradersBarbarians' };
+    const s = G.createGame(c), b = s.board;
+    eq(b.trade.length, 3, 'tres casillas de comercio');
+    eq(new Set(b.trade.map(t => t.kind)).size, 3, 'castillo, cantera y vidriería');
+    for (const T of b.trade) {
+      const tile = b.tiles[T.hex];
+      ok(tile.trade === T.kind && tile.res === 'desert' && !tile.num, 'sin número ni producción');
+      const P = b.vertices[T.plaza];
+      ok(P.plaza === T.hex && P.hexes.length === 0, 'plaza en el centro');
+      ok(T.inner.length >= 2 && T.inner.every(e => b.edges[e].inner && (b.edges[e].a === T.plaza || b.edges[e].b === T.plaza)), 'caminos interiores a la plaza');
+      ok(T.closed.length >= 2 && T.closed.every(e => b.edges[e].noRoad), 'lado del mar cerrado');
+      ok(!G.canSetupSettlement(s, 0, T.plaza), 'nadie construye en la plaza');
+    }
+    ok(b.tiles.every(t => t.num !== 2 && t.num !== 12), 'sin 2 ni 12');
+    ok(b.ports.every(p => !b.edges[p.edge].noRoad && b.vertices[b.edges[p.edge].a].port === p.id), 'ningún puerto en el lado cerrado');
+    eq(s.traders.barbarians.length, 3, 'tres bárbaros');
+    ok(s.traders.barbarians.every(e => !b.edges[e].inner && !b.edges[e].noRoad), 'en caminos de tierra');
+    eq(b.robber, -1, 'sin ladrón');
+    ok(s.players.every(p => p.gold === 5), '5 de oro');
+    for (const k of ['castle', 'quarry', 'glassworks']) eq(s.traders.stacks[k].length, 12, '12 mercancías por montón');
+    ok(s.config.rules.setupCity, 'el segundo poblado inicial es ciudad');
+  }
+  // roads: inner paths yes, sea side and barbarian paths no
+  const c = defaultConfig(); c.seed = 5;
+  c.expansions = { tradersBarbarians: true, tbScenario: 'tradersBarbarians' };
+  const s = G.createGame(c), b = s.board, T = b.trade[0];
+  s.buildings = {}; s.roads = {};
+  const inner = b.edges[T.inner[0]], corner = inner.a === T.plaza ? inner.b : inner.a;
+  s.buildings[corner] = { owner: 0, type: 'settlement' };
+  ok(G.canBuildRoad(s, 0, T.inner[0]), 'camino interior');
+  const cl = b.edges[T.closed[0]];
+  s.buildings[cl.a] = { owner: 0, type: 'settlement' }; s.buildings[cl.b] = { owner: 0, type: 'settlement' };
+  ok(!G.canBuildRoad(s, 0, T.closed[0]), 'no por el lado del mar');
+  const be = b.edges[s.traders.barbarians[0]];
+  s.buildings[be.a] = { owner: 0, type: 'settlement' };
+  ok(!G.canBuildRoad(s, 0, be.id), 'no donde hay un bárbaro');
+  // base boards are untouched
+  const base = G.createGame(defaultConfig());
+  ok(!base.board.trade && !base.traders && base.board.vertices.every(v => v.plaza == null), 'el juego base no cambia');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

@@ -1481,4 +1481,6 @@ export default {
   "🛡️ Coloca un caballero.": "🛡️ Đặt một hiệp sĩ.",
   "🛡️ Mueve un caballero.": "🛡️ Di chuyển một hiệp sĩ.",
   "🫳 Roba una carta.": "🫳 Rút một lá bài.",
+  "🚧 Mercaderes y bárbaros está en construcción: los carromatos, las mercancías y los bárbaros llegarán en las próximas versiones.": "🚧 Kịch bản Traders & Barbarians đang được làm: xe hàng, hàng hóa và man di sẽ có ở các bản tiếp theo.",
+  "🛒 Castillo, cantera y vidriería esperan mercancías; {n} bárbaros cortan los caminos. Cada jugador empieza con {g} de oro.": "🛒 Lâu đài, mỏ đá và xưởng thủy tinh đang chờ hàng; {n} quân man di chặn đường. Mỗi người bắt đầu với {g} vàng.",
 };

@@ -1482,4 +1482,6 @@ export default {
   "🛡️ Coloca un caballero.": "🛡️ Places a knight.",
   "🛡️ Mueve un caballero.": "🛡️ Moves a knight.",
   "🫳 Roba una carta.": "🫳 Steals a card.",
+  "🚧 Mercaderes y bárbaros está en construcción: los carromatos, las mercancías y los bárbaros llegarán en las próximas versiones.": "🚧 Traders & Barbarians is under construction: wagons, commodities and barbarians arrive in the next versions.",
+  "🛒 Castillo, cantera y vidriería esperan mercancías; {n} bárbaros cortan los caminos. Cada jugador empieza con {g} de oro.": "🛒 The castle, quarry and glassworks await commodities; {n} barbarians block the paths. Everyone starts with {g} gold.",
 };

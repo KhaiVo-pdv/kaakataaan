@@ -20,7 +20,7 @@ export const TB_SCENARIOS = {
     desc: 'Los bárbaros desembarcan en la costa y conquistan casillas. Defiéndete con caballeros.',
   },
   tradersBarbarians: {
-    icon: '🛒', name: 'Mercaderes y bárbaros', vp: 13, players: [3, 4], ready: false,
+    icon: '🛒', name: 'Mercaderes y bárbaros', vp: 13, players: [3, 4], ready: true,
     desc: 'Lleva mercancías en carromato entre castillos, cantera y vidriería mientras los bárbaros acechan.',
   },
 };

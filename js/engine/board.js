@@ -5,6 +5,7 @@ import { addFishermen } from './tradersBarbarians/fishermen.js';
 import { addRivers, MARSHES } from './tradersBarbarians/rivers.js';
 import { addCaravans } from './tradersBarbarians/caravans.js';
 import { addBarbarianAttack, BA_DESERTS } from './tradersBarbarians/barbarianAttack.js';
+import { addTraders, TRADE_HEXES, NO_2_12 } from './tradersBarbarians/traders.js';
 import { buildScenario } from './seafarers/scenarios.js';
 import { makeSea, addSeaGraph, findIslands } from './seafarers/board.js';
 
@@ -264,6 +265,7 @@ export function generateBoard(config, rng) {
   if (tbScenarioOn(config) === 'rivers') deserts = Math.max(deserts, MARSHES); // Rivers: two marshes
   if (tbScenarioOn(config) === 'caravans') deserts = Math.max(deserts, 1); // Caravans: the oasis
   if (tbScenarioOn(config) === 'barbarianAttack') deserts = Math.max(deserts, BA_DESERTS); // Barbarian Attack: castle + desert
+  if (tbScenarioOn(config) === 'tradersBarbarians') deserts = Math.max(deserts, TRADE_HEXES); // Traders & Barbarians: the 3 trade hexes
   if (fixed) {
     // on custom maps deserts/gold painted by hand count towards the totals
     deserts = Math.max(0, deserts - tiles.filter(t => t.res === 'desert').length);
@@ -288,7 +290,9 @@ export function generateBoard(config, rng) {
     if (f && f.num) t.num = f.num;
     else needNum.push(i);
   });
-  const tokens = shuffle(rng, genTokens(needNum.length));
+  let tokens = genTokens(needNum.length);
+  if (tbScenarioOn(config) === 'tradersBarbarians') { let k = 0; tokens = tokens.map(n => (n === 2 || n === 12 ? NO_2_12[k++ % NO_2_12.length] : n)); } // Traders & Barbarians: no 2 or 12
+  tokens = shuffle(rng, tokens);
   needNum.forEach((ti, k) => (tiles[ti].num = tokens[k]));
   placeNumbers(rng, tiles, adj, needNum, m.numbers !== 'random');
 
@@ -404,6 +408,7 @@ export function generateBoard(config, rng) {
   if (tbScenarioOn(config) === 'rivers') Object.assign(extra, addRivers({ tiles, vertices, edges }, rng)); // rivers, marshes, bridge spots
   if (tbScenarioOn(config) === 'caravans') Object.assign(extra, addCaravans({ tiles, vertices, edges }, rng)); // oasis + caravan starts
   if (tbScenarioOn(config) === 'barbarianAttack') Object.assign(extra, addBarbarianAttack({ tiles, vertices, edges }, rng)); // castle, coast, first barbarians
+  if (tbScenarioOn(config) === 'tradersBarbarians') Object.assign(extra, addTraders({ tiles, vertices, edges, ports }, rng)); // trade hexes, plazas, barbarians
 
   const all = [...tiles, ...sea];
   const bounds = {

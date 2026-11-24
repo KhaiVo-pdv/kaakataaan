@@ -22,7 +22,7 @@ function makeFishermenConfig(i) {
   const c = makeConfig(i);
   c.players = c.players.slice(0, 3 + (i % 2));
   if (!['classic', 'big', 'extended', 'pangea', 'ring'].includes(c.map.shape)) c.map.shape = 'classic';
-  c.expansions = { tradersBarbarians: true, tbScenario: ['fishermen', 'rivers', 'caravans', 'barbarianAttack'][i % 4] };
+  c.expansions = { tradersBarbarians: true, tbScenario: ['fishermen', 'rivers', 'caravans', 'barbarianAttack', 'tradersBarbarians'][i % 5] };
   c.rules.vpTarget = 10;
   c.map.shape = 'tb:' + c.map.shape; // a label for the summary; stripped below
   return c;
