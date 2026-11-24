@@ -265,3 +265,11 @@ body:has(.game.wood-table) .overlay .fish-txt small { color: var(--wood-muted); 
 .gold-panel .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .gold-panel .gold-titles { margin-top: 12px; padding: 8px 10px; border-radius: 10px; border: 2px dashed #b08a3e; }
 .gold-panel .gold-titles p { margin: 2px 0; }
+
+/* ---------- Traders & Barbarians, Caravans: the vote panel ---------- */
+.camel-panel .camel-spots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 8px 0; }
+.camel-panel .camel-spot-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.camel-panel .camel-spot-btn b { font-size: 18px; }
+.camel-panel .camel-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 8px 0; }
+.camel-panel .camel-step { display: inline-flex; align-items: center; gap: 4px; }
+.camel-panel .camel-spot-btn small { white-space: normal; line-height: 1.3; font-size: 11px; }

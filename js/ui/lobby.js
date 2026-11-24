@@ -9,6 +9,7 @@ import { showSeafarersHelp } from './seafarersHelp.js';
 import { showCitiesKnightsHelp } from './citiesKnightsHelp.js';
 import { showFishermenHelp } from './fishermenHelp.js';
 import { showRiversHelp } from './riversHelp.js';
+import { showCaravansHelp } from './caravansHelp.js';
 import { showHelp } from './help.js';
 import { SHAPES, generateBoard } from '../engine/board.js';
 import { DEV_DECKS, TILE_INFO } from '../engine/constants.js';
@@ -381,7 +382,8 @@ export function lobbyScreen(root, opts = {}) {
           t('Para {a}-{b} jugadores · {vp} puntos para ganar', { a: sc.players[0], b: sc.players[1], vp: sc.vp }),
           cfg.players.length > sc.players[1] ? h('b', { style: { color: 'var(--warn, #ef7d57)' } }, ' · ' + t('⚠️ Demasiados jugadores para este escenario')) : null),
         cur === 'fishermen' ? h('button', { class: 'btn sm', 'data-testid': 'fishermen-rules', onclick: () => showFishermenHelp() }, t('📖 Reglas de Los pescadores')) : null,
-        cur === 'rivers' ? h('button', { class: 'btn sm', 'data-testid': 'rivers-rules', onclick: () => showRiversHelp() }, t('📖 Reglas de Los ríos')) : null);
+        cur === 'rivers' ? h('button', { class: 'btn sm', 'data-testid': 'rivers-rules', onclick: () => showRiversHelp() }, t('📖 Reglas de Los ríos')) : null,
+        cur === 'caravans' ? h('button', { class: 'btn sm', 'data-testid': 'caravans-rules', onclick: () => showCaravansHelp() }, t('📖 Reglas de Las caravanas')) : null);
     }
 
     // rules
