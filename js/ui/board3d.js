@@ -1657,8 +1657,15 @@ export class Board3D {
       const t = bd.tiles[T.hex];
       if (!t.revealed) continue;
       const o = T.kind === 'castle' ? makeCastle() : T.kind === 'quarry' ? makeQuarry() : makeGlassworks();
-      const bx = t.x, bz = t.y - 0.38;
+      // stand on the side without inner tracks (the closed, sea-facing corners), door facing the plaza
+      const tracked = new Set(T.inner.map(e => (bd.edges[e].a === T.plaza ? bd.edges[e].b : bd.edges[e].a)));
+      let dx = 0, dz = 0;
+      for (const v of t.verts) if (!tracked.has(v)) { dx += bd.vertices[v].x - t.x; dz += bd.vertices[v].y - t.y; }
+      const dl = Math.hypot(dx, dz);
+      if (dl < 1e-6) { dx = 0; dz = -1; } else { dx /= dl; dz /= dl; }
+      const bx = t.x + dx * 0.4, bz = t.y + dz * 0.4;
       o.position.set(bx, this.heightAt(bx, bz) - 0.01, bz);
+      o.rotation.y = Math.atan2(-dx, -dz);
       o.scale.setScalar(T.kind === 'castle' ? 1.1 : 1.4);
       this.staticGroup.add(o);
       this.tbKit ||= { plaza: new THREE.CylinderGeometry(0.17, 0.17, 0.03, 16), track: new THREE.BoxGeometry(1, 0.015, 0.06), stone: new THREE.MeshStandardMaterial({ color: 0xcdb892, roughness: 0.9 }), dirt: new THREE.MeshStandardMaterial({ color: 0x7a6040, roughness: 1 }) };
@@ -2233,6 +2240,11 @@ export class Board3D {
         }
       }
     }
+    // T&B figures on a path: on the ground, or on top of the road plank (about 0.067 thick) if there is one
+    const pathY = e => {
+      const E = bd.edges[e];
+      return st.roads[e] !== undefined ? (vy(E.a) + vy(E.b)) / 2 + 0.07 : Math.max(vy(E.a), vy(E.b)) + 0.02;
+    };
     // Barbarian Attack: barbarians on the coast, knights on their paths, conquered hexes in smoke
     if (st.barbAttack) {
       const B = st.barbAttack;
@@ -2250,10 +2262,9 @@ export class Board3D {
       }
       for (const h of B.conquered) {
         const t = bd.tiles[h];
-        this.baSmokeKit ||= { geo: new THREE.CylinderGeometry(0.78, 0.78, 0.02, 6), mat: new THREE.MeshBasicMaterial({ color: 0x1a0806, transparent: true, opacity: 0.45, depthWrite: false }) };
+        this.baSmokeKit ||= { geo: new THREE.CylinderGeometry(0.9, 0.9, 0.02, 6), mat: new THREE.MeshBasicMaterial({ color: 0x1a0806, transparent: true, opacity: 0.45, depthWrite: false }) };
         const m = new THREE.Mesh(this.baSmokeKit.geo, this.baSmokeKit.mat);
         m.position.set(t.x, Math.max(this.heightAt(t.x, t.y), 0.05) + 0.06, t.y);
-        m.rotation.y = Math.PI / 6;
         add(m, 'bc' + h);
       }
       for (const tok of this.tokens) if (tok.userData.tile != null) tok.element.classList.toggle('ba-conq', B.conquered.includes(tok.userData.tile));
@@ -2261,7 +2272,7 @@ export class Board3D {
         const E = bd.edges[+e], a = bd.vertices[E.a], b = bd.vertices[E.b];
         const o = makeBaKnight(st.players[B.knights[e]].color);
         const x = (a.x + b.x) / 2, z = (a.y + b.y) / 2;
-        o.position.set(x, Math.max(vy(E.a), vy(E.b)) + 0.02, z);
+        o.position.set(x, pathY(+e), z);
         o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
         o.scale.setScalar(1.6);
         add(o, 'kn' + e + ':' + B.knights[e], st.players[B.knights[e]].color);
@@ -2281,7 +2292,7 @@ export class Board3D {
         const E = bd.edges[e], a = bd.vertices[E.a], b = bd.vertices[E.b];
         const o = makeBarbarian();
         const x = (a.x + b.x) / 2, z = (a.y + b.y) / 2;
-        o.position.set(x, Math.max(vy(E.a), vy(E.b)) + 0.02, z);
+        o.position.set(x, pathY(+e), z);
         o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
         o.scale.setScalar(1.8);
         add(o, 'tbb' + e);
@@ -2290,10 +2301,18 @@ export class Board3D {
       for (const p of st.players) { const v = tbWagonAt(st, p.id); if (v != null) (at[v] ||= []).push(p.id); }
       for (const [v, pids] of Object.entries(at)) {
         const V = bd.vertices[v];
+        // on a house or city the wagon would sink into it: park it out along a path, a free one if any
+        let ox = 0, oz = 0.12;
+        if (st.buildings[v]) {
+          const free = V.edges.filter(e => st.roads[e] === undefined && !T.barbarians.includes(e));
+          const E = bd.edges[(free.length ? free : V.edges)[0]], W = bd.vertices[E.a === +v ? E.b : E.a];
+          const l = Math.hypot(W.x - V.x, W.y - V.y) || 1;
+          ox = ((W.x - V.x) / l) * 0.34; oz = ((W.y - V.y) / l) * 0.34;
+        }
         pids.forEach((pid, i) => {
           const o = makeWagon(st.players[pid].color, T.wagons[pid].cargo);
-          const x = V.x + (i - (pids.length - 1) / 2) * 0.22;
-          o.position.set(x, vy(+v) + 0.02, V.y + 0.12);
+          const x = V.x + ox + (i - (pids.length - 1) / 2) * 0.22, z = V.y + oz;
+          o.position.set(x, Math.max(this.heightAt(x, z), vy(+v)) + 0.02, z);
           o.scale.setScalar(1.5);
           add(o, 'tbw' + pid + ':' + v + ':' + (T.wagons[pid].cargo || ''), st.players[pid].color);
         });
