@@ -9,6 +9,7 @@ import * as Rivers from '../js/engine/tradersBarbarians/rivers.js';
 import * as Caravans from '../js/engine/tradersBarbarians/caravans.js';
 import * as Traders from '../js/engine/tradersBarbarians/traders.js';
 import * as EvCards from '../js/engine/eventCards.js';
+import * as Two from '../js/engine/catanForTwo.js';
 import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
@@ -1826,6 +1827,44 @@ t('Catan para dos: dos neutrales, doble tirada distinta, pieza neutral gratis', 
   eq(s2.roads[spot.at], spot.nid, 'es del neutral');
   eq(s2.phase, 'main', 'sigue el turno');
   ok(s2.players.every(p => p.neutral || G.victoryPoints(s2, p.id) >= 0), 'los neutrales no juegan');
+});
+
+t('Catan para dos: fichas de comercio (ganar, intercambio forzado, ladrón al desierto, caballero)', () => {
+  const c = defaultConfig(); c.players = c.players.slice(0, 2); c.rules.catanForTwo = true;
+  const s = G.createGame(c);
+  ok(s.players[0].tokens === 5 && s.players[1].tokens === 5 && s.two.supply === 10, '5 cada uno, 10 en la reserva');
+  eq(s.players[2].tokens, undefined, 'los neutrales no tienen');
+  s.phase = 'main'; s.current = 0; s.turn = 5;
+  for (const p of s.players) for (const r of Object.keys(p.res)) p.res[r] = 0;
+  s.players[1].res.ore = 3;
+  s.players[0].res.sheep = 2;
+  // forced trade: take 2 random, give 2 chosen; costs 1 when not leading
+  ok(act(s, { type: 'twoAction', pid: 0, kind: 'forcedTrade' }).ok, 'intercambio forzado');
+  eq(s.players[0].tokens, 4, 'cuesta 1');
+  eq(s.players[0].res.ore, 2, 'tomó 2 minerales');
+  eq(s.phase, 'twoGive', 'ahora devuelve');
+  ok(!act(s, { type: 'twoGive', pid: 0, res: ['sheep'] }).ok, 'tienen que ser 2');
+  ok(act(s, { type: 'twoGive', pid: 0, res: ['sheep', 'sheep'] }).ok, 'devuelve 2');
+  eq(s.players[1].res.sheep, 2, 'el rival recibe');
+  eq(s.phase, 'main', 'sigue');
+  ok(!act(s, { type: 'twoAction', pid: 0, kind: 'robber' }).ok, 'una acción por turno');
+  // robber to the desert
+  s.turn = 6;
+  const land = s.board.tiles.find(t => t.res !== 'desert');
+  s.board.robber = land.id;
+  ok(act(s, { type: 'twoAction', pid: 0, kind: 'robber' }).ok, 'ladrón al desierto');
+  const desert = s.board.tiles.find(t => t.res === 'desert');
+  eq(s.board.robber, desert ? desert.id : -1, 'en el desierto');
+  // knight swap: 2 tokens, may lose the Largest Army
+  s.players[0].knights = 3; s.largestArmy = { owner: 0, count: 3 };
+  const tk0 = s.players[0].tokens;
+  ok(act(s, { type: 'twoKnight', pid: 0 }).ok, 'cambia un caballero');
+  eq(s.players[0].tokens, tk0 + 2, '+2 fichas');
+  eq(s.largestArmy.owner, -1, 'pierde el mayor ejército');
+  ok(!act(s, { type: 'twoKnight', pid: 0 }).ok, 'una vez por turno');
+  // earning: a settlement on the coast gives 1 (next to the desert 2 more)
+  const coast = s.board.vertices.find(v => v.hexes.length < 3 && v.hexes.length > 0 && !v.hexes.some(h => s.board.tiles[h].res === 'desert'));
+  eq(Two.settlementTokens(s.board, coast.id), 1, 'costa: 1');
 });
 
 // ---------- Cities & Knights: commodities and event die ----------

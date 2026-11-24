@@ -28,7 +28,7 @@ const PHASE_TEXT = {
   setup: tk('Colocación inicial'), roll: tk('Tirar dados'), main: tk('Construir y comerciar'), discard: tk('Descartar'),
   robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), harbor: tk('Puerto comercial'), wedding: tk('Boda'), deserter: tk('Desertor'), deserterPlace: tk('Desertor'), displace: tk('Recolocar caballero'),
   // Traders & Barbarians scenarios and variants
-  caravanVote: tk('Votación de camellos'), caravanPick: tk('Elegir el camello'), baSteal: tk('Robar una carta'), baCard: tk('Carta de los bárbaros'), tbBarbarian: tk('Mover un bárbaro'), evChoice: tk('Carta de evento'), neutralBuild: tk('Pieza neutral'),
+  caravanVote: tk('Votación de camellos'), caravanPick: tk('Elegir el camello'), baSteal: tk('Robar una carta'), baCard: tk('Carta de los bárbaros'), tbBarbarian: tk('Mover un bárbaro'), evChoice: tk('Carta de evento'), neutralBuild: tk('Pieza neutral'), twoGive: tk('Intercambio forzado'),
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -857,6 +857,7 @@ function renderPlayers(st, v) {
         ...Car.caravanStats(st, p, { h }), // Traders & Barbarians: points from camels
         ...BaUI.baStats(st, p, { h }), // Barbarian Attack: gold, knights, prisoners
         ...TrUI.tradersStats(st, p, { h }), // Traders & Barbarians: wagon, cargo, deliveries
+        ...EvUI.tokenStats(st, p, { h }), // Catan for Two: trade tokens
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
         st.harbormaster ? h('span', { class: st.harbormaster.owner === p.id ? 'award' : '', title: t('Puntos de puerto: poblado junto a un puerto 1, ciudad 2. Capitán del puerto (al menos 3): +2') }, `⚓${G.harborPoints(st, p.id)}`) : null, // Harbormaster variant
         st.largestArmy.owner === p.id ? h('span', { class: 'award', title: t('Ejército más grande (+2)') }, t('🏅Ejército')) : null,
@@ -1028,6 +1029,7 @@ function fillActions(bar, st, v, locked) {
     ...BaUI.baKnightButtons(st, v, ui, { h, rerender: () => render(App.state) }), // Barbarian Attack: move a knight
     ...BaUI.baGoldButton(st, v, { h, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Barbarian Attack: gold
     ...EvUI.repairButtons(st, v, { h, dispatch: a => App.dispatch(a) }), // Event Cards: repair a damaged road
+    ...EvUI.tokenButtons(st, v, { h, dispatch: a => App.dispatch(a) }), // Catan for Two: trade tokens
     ...TrUI.tradersButtons(st, v, { h, dispatch: a => App.dispatch(a), costIcons, ui, rerender: () => render(App.state), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Traders & Barbarians: wagon
     h('button', { class: 'btn', disabled: !!st.trade, onclick: () => openTrade(v) }, t('🤝 Comerciar')),
     h('button', { class: 'btn sm ghost', title: t('Pista'), onclick: () => showHint(st, v) }, '💡'),
@@ -1353,6 +1355,8 @@ function modalContent(st, v) {
     return { kind: 'ppick' + v, body: CK.progressPickModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
   if (st.phase === 'progressDiscard' && st.progressDiscard && st.progressDiscard[v] && localHumans(st).includes(v))
     return { kind: 'pdrop' + v + '-' + st.players[v].progress.length, body: CK.progressDiscardModal(st, v, { h, dispatch: a => App.dispatch(a) }) };
+  // Catan for Two: give back 2 cards after a forced trade
+  if (st.phase === 'twoGive' && localHumans(st).includes(v)) { const m = EvUI.twoGiveModal(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); if (m) return m; }
   // Event Cards: take / give a resource, or rob a player
   if (st.phase === 'evChoice' && localHumans(st).includes(v)) { const m = EvUI.evChoiceModal(st, v, ui, { h, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); if (m) return m; }
   // Barbarian Attack: a 7 without a robber — pick who to steal from

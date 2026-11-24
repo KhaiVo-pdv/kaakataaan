@@ -5,7 +5,7 @@ import {
   canAfford, handSize, victoryPoints, tradeRatio, playableDev, pendingActors,
   legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities,
   legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets, playableProgress,
-  fishPerkReason, bootReceivers, legalBridges, damagedRoadsOf, REPAIR_COST, neutralSpots,
+  fishPerkReason, bootReceivers, legalBridges, damagedRoadsOf, REPAIR_COST, neutralSpots, tokenCost, tokenActionUsed,
 } from './game.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
 import * as Caravans from './tradersBarbarians/caravans.js';
@@ -523,6 +523,8 @@ function mainAction(s, pid) {
   const knight = s.barbAttack && baKnightMove(s, pid); // Barbarian Attack: knights march on the barbarians
   if (knight) return knight;
   if (s.damagedRoads && damagedRoadsOf(s, pid).length && canAfford(s.players[pid].res, REPAIR_COST)) return { type: 'evRepair', pid }; // Event Cards earthquake
+  const two = s.two && twoTokenAction(REAL && REAL.two ? REAL : s, pid); // Catan for Two: trade tokens
+  if (two) return two;
   const wagon = s.traders && tbWagonAction(s, pid); // Traders & Barbarians: upgrade, boost and drive the wagon
   if (wagon) return wagon;
   if ((s.barbAttack || s.traders) && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
@@ -700,6 +702,7 @@ export function botAct(real, pid) {
   if (s.phase === 'baCard') return baCardChoice(s, pid); // Barbarian Attack
   if (s.phase === 'evChoice') return evChoiceAction(s, pid); // Event Cards
   if (s.phase === 'neutralBuild') return neutralBuildAction(s, pid); // Catan for Two
+  if (s.phase === 'twoGive') return twoGiveAction(s, pid);
   if (s.phase === 'tbBarbarian') return tbBarbarianChoice(real && real.traders ? real : s, pid); // Traders & Barbarians
   if (s.phase === 'caravanPick') return { type: 'caravanPick', pid, spot: best(s.caravans.vote.tied, e => camelSpotValue(s, pid, e)) };
   if (s.phase === 'displace') {
@@ -989,4 +992,28 @@ export function neutralBuildAction(view, pid) {
   const near = e => { const m = mid(e); return theirs.length ? -Math.min(...theirs.map(v => Math.hypot(s.board.vertices[v].x - m.x, s.board.vertices[v].y - m.y))) : 0; };
   const sp = best(spots, x => near(x.at) + noise(s, x.at) * 0.05);
   return { type: 'neutralBuild', pid, at: sp.at, nid: sp.nid };
+}
+
+// ---------------- Catan for Two: trade tokens ----------------
+function twoTokenAction(s, pid) {
+  const p = s.players[pid];
+  if (p.knights > 0 && s.largestArmy.owner !== pid && p.tokens < 2 && !(s.two.swapped && s.two.swapped.turn === s.turn) && s.two.supply > 0) return { type: 'twoKnight', pid };
+  if (tokenActionUsed(s) || p.tokens < tokenCost(s, pid)) return null;
+  const rob = s.board.robber;
+  if (!s.config.rules.noRobber && rob >= 0 && s.board.tiles[rob].res !== 'desert' && s.board.tiles[rob].verts.some(v => s.buildings[v] && s.buildings[v].owner === pid)) return { type: 'twoAction', pid, kind: 'robber' };
+  const opp = s.players.find(o => o.id !== pid && !o.neutral);
+  const tgt = chooseTarget(s, pid);
+  if (opp && handSize(opp.res) >= 3 && tgt && missing(p.res, tgt.cost).n >= 1 && handSize(p.res) >= 1 && noise(s, 17) < 0.5) return { type: 'twoAction', pid, kind: 'forcedTrade' };
+  return null;
+}
+function twoGiveAction(s, pid) {
+  const G2 = s.two.give, p = s.players[pid];
+  const tgt = chooseTarget(s, pid), keep = tgt ? tgt.cost : {};
+  const hand = { ...p.res }, res = [];
+  for (let i = 0; i < G2.n; i++) {
+    const r = best(Object.keys(hand).filter(k => hand[k] > 0), k => hand[k] - (keep[k] || 0) * 3);
+    res.push(r);
+    hand[r]--;
+  }
+  return { type: 'twoGive', pid, res };
 }

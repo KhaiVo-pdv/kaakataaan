@@ -87,3 +87,42 @@ export function neutralBanner(st, v) {
   if (st.neutralBuild.pid !== v) return t('⚪ {name} coloca una pieza neutral...', { name: st.players[st.neutralBuild.pid].name });
   return st.neutralBuild.what === 'road' ? t('⚪ Pon un camino neutral: toca un camino resaltado') : t('⚪ Pon un poblado neutral: toca un cruce resaltado');
 }
+
+// ---------------- Catan for Two: trade tokens ----------------
+import { tokenCost, tokenActionUsed } from '../engine/game.js';
+export function tokenStats(st, p, { h }) {
+  if (!st.two || p.neutral) return [];
+  return [h('span', { title: t('Fichas de comercio') }, `🎟️ ${p.tokens}`)];
+}
+export function tokenButtons(st, v, { h, dispatch }) {
+  if (!st.two || st.players[v].neutral) return [];
+  const p = st.players[v], mine = st.current === v && (st.phase === 'main' || st.phase === 'roll');
+  const cost = tokenCost(st, v), can = mine && !tokenActionUsed(st) && p.tokens >= cost;
+  const opp = st.players.find(o => o.id !== v && !o.neutral);
+  const out = [
+    h('button', { class: 'btn', 'data-testid': 'two-forced', disabled: !can || handSize(opp.res) < 1, title: t('Tomas 2 cartas al azar de tu rival y le devuelves 2 a tu elección'),
+      onclick: () => dispatch({ type: 'twoAction', pid: v, kind: 'forcedTrade' }) }, h('span', { class: 'bicon' }, '🤝'), h('span', null, t('Forzar'), h('span', { class: 'cost' }, '🎟️' + cost))),
+  ];
+  if (!st.config.rules.noRobber) out.push(h('button', { class: 'btn', 'data-testid': 'two-robber', disabled: !can, title: t('El ladrón vuelve al desierto (sin robar)'),
+    onclick: () => dispatch({ type: 'twoAction', pid: v, kind: 'robber' }) }, h('span', { class: 'bicon' }, '🏜️'), h('span', null, t('Ladrón'), h('span', { class: 'cost' }, '🎟️' + cost))));
+  if (p.knights > 0) out.push(h('button', { class: 'btn', 'data-testid': 'two-knight', disabled: !(st.current === v && st.phase === 'main') || (st.two.swapped && st.two.swapped.turn === st.turn), title: t('Devuelve un caballero jugado y ganas 2 fichas (puedes perder el mayor ejército)'),
+    onclick: () => dispatch({ type: 'twoKnight', pid: v }) }, h('span', { class: 'bicon' }, '⚔️'), h('span', null, '→🎟️2')));
+  return out;
+}
+// forced panel: choose the cards you give back after a forced trade
+export function twoGiveModal(st, v, ui, { h, dispatch, rerender }) {
+  const G2 = st.two && st.two.give;
+  if (st.phase !== 'twoGive' || !G2 || G2.pid !== v) return null;
+  if (!ui.twoGive || ui.twoGive.key !== st.turn + ':' + st.log.length) ui.twoGive = { key: st.turn + ':' + st.log.length, res: [] };
+  const sel = ui.twoGive.res, p = st.players[v];
+  const left = r => p.res[r] - sel.filter(x => x === r).length;
+  return { kind: 'twogive' + v + '-' + st.turn, body: h('div', { 'data-testid': 'two-give' },
+    h('h2', null, t('🤝 Devuelve {n} cartas', { n: G2.n })),
+    h('p', null, t('Tomaste: {cards}. Elige las que le das a {name}.', { cards: G2.took.map(r => TILE_INFO[r].icon).join(' '), name: st.players[G2.to].name })),
+    h('div', { class: 'respick' }, cardsOf(st).filter(r => p.res[r] > 0).map(r => h('button', { class: 'btn', 'data-testid': 'two-give-' + r, disabled: left(r) <= 0 || sel.length >= G2.n, onclick: () => { sel.push(r); rerender(); } },
+      TILE_INFO[r].icon, h('small', null, `${t(TILE_INFO[r].name)} (${left(r)})`)))),
+    h('p', null, sel.length ? sel.map(r => TILE_INFO[r].icon).join(' ') : '—'),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn ghost', onclick: () => { ui.twoGive.res = []; rerender(); } }, t('↩️ Deshacer')),
+      h('button', { class: 'btn green', 'data-testid': 'two-give-ok', disabled: sel.length !== G2.n, onclick: () => dispatch({ type: 'twoGive', pid: v, res: [...sel] }) }, t('Dar')))) };
+}

@@ -47,5 +47,21 @@ export function initCatanForTwo(s, colors, R) {
       s.players[id].settlementsLeft--;
     }
   }
-  s.two = { roll: null }; // { turn, n } — the second production roll of a turn
+  s.two = { roll: null, supply: TOKENS_SUPPLY, used: null, swapped: null, give: null }; // roll: the second production roll of a turn
+  for (const p of s.players) if (!p.neutral) p.tokens = TOKENS_START;
 }
+
+// ---------------- trade tokens ----------------
+export const TOKENS_START = 5;
+export const TOKENS_SUPPLY = 10;
+export const KNIGHT_SWAP_TOKENS = 2;
+export const FORCED_TAKE = 2;
+// tokens for a new settlement: 2 next to a desert, 1 on the coast (a corner touching the sea)
+export function settlementTokens(board, v) {
+  const V = board.vertices[v];
+  let n = 0;
+  if (V.hexes.some(h => board.tiles[h].res === 'desert')) n += 2;
+  if (V.hexes.length < 3) n += 1;
+  return n;
+}
+export const opponentOf = (s, pid) => s.players.find(o => o.id !== pid && !o.neutral).id;

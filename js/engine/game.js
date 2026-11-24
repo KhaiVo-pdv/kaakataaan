@@ -447,6 +447,7 @@ export function pendingActors(s) {
   if (s.phase === 'tbBarbarian') return [s.current]; // Traders & Barbarians: move a barbarian
   if (s.phase === 'evChoice') return Object.keys(s.evChoice.pending).map(Number); // Event Cards: choices
   if (s.phase === 'neutralBuild') return [s.neutralBuild.pid]; // Catan for Two: place the neutral piece
+  if (s.phase === 'twoGive') return [s.two.give.pid]; // Catan for Two: give back after a forced trade
   const out = [s.current];
   if (s.trade) for (const pid of s.trade.to) if (s.trade.responses[pid] == null && !s.players[pid].retired) out.push(pid);
   return out;
@@ -989,6 +990,7 @@ H.placeSettlement = (s, a) => {
     }
     log(s, isCity ? msg('🏠 @{p} coloca una ciudad.', { p: a.pid }) : msg('🏠 @{p} coloca un poblado.', { p: a.pid }), a.pid);
   }
+  if (s.two) earnTokens(s, a.pid, a.vid); // Catan for Two: desert / coast settlements earn trade tokens
   s.fx.push({ kind: 'build', what: type, pid: a.pid, at: a.vid, hidden: st.blindActive });
 };
 
@@ -2429,6 +2431,7 @@ H.build = (s, a) => {
   } else fail('Construcción desconocida.');
   s.fx.push({ kind: 'build', what: a.what, pid: a.pid, at: a.at });
   if (a.what !== 'city') updateLongestRoad(s);
+  if (s.two && a.what === 'settlement') earnTokens(s, a.pid, a.at); // Catan for Two: trade tokens
   if (s.two && (a.what === 'road' || a.what === 'settlement')) startNeutralBuild(s, a.pid, a.what); // Catan for Two
 };
 
@@ -2450,6 +2453,83 @@ function startNeutralBuild(s, pid, what) {
   s.neutralBuild = { pid, what: kind, back: s.phase };
   s.phase = 'neutralBuild';
 }
+// ---- Catan for Two: trade tokens ----
+function earnTokens(s, pid, v) {
+  const n = Math.min(Two.settlementTokens(s.board, v), s.two.supply);
+  if (!n) return;
+  s.two.supply -= n;
+  s.players[pid].tokens += n;
+  log(s, msg('🎟️ @{p} gana {n} ficha(s) de comercio.', { p: pid, n }), pid);
+}
+// what a token action costs: 1 if you don't lead on (visible) points, else 2
+export const tokenCost = (s, pid) => (victoryPoints(s, pid, false) <= victoryPoints(s, Two.opponentOf(s, pid), false) ? 1 : 2);
+export const tokenActionUsed = (s) => !!(s.two.used && s.two.used.turn === s.turn);
+// a.kind: 'robber' (to the desert, no stealing) | 'forcedTrade' (take 2 random cards, then give 2)
+H.twoAction = (s, a) => {
+  if (!s.two) fail('Solo en Catan para dos.');
+  if (a.pid !== s.current || (s.phase !== 'main' && s.phase !== 'roll')) fail('No es tu turno.');
+  if (tokenActionUsed(s)) fail('Solo una acción con fichas por turno.');
+  const p = s.players[a.pid], cost = tokenCost(s, a.pid), opp = Two.opponentOf(s, a.pid);
+  if (p.tokens < cost) fail('Te faltan fichas de comercio.');
+  if (a.kind === 'robber') {
+    if (s.config.rules.noRobber) fail('No hay ladrón en esta partida.');
+    const desert = s.board.tiles.find(t => t.res === 'desert');
+    const to = desert ? desert.id : -1;
+    if (s.board.robber === to) fail('El ladrón ya está en el desierto.');
+    s.board.robber = to;
+    s.fx.push({ kind: 'robber', tile: to });
+    log(s, msg('🏜️ @{p} manda el ladrón al desierto.', { p: a.pid }), a.pid);
+  } else if (a.kind === 'forcedTrade') {
+    if (handSize(s.players[opp].res) < 1) fail('Tu rival no tiene cartas.');
+    const took = [];
+    for (let i = 0; i < Two.FORCED_TAKE; i++) { const r = stealRandom(s, opp, a.pid); if (r) took.push(r); }
+    s.fx.push({ kind: 'steal', from: opp, to: a.pid, res: took[0] });
+    log(s, msg('🤝 @{p} fuerza un intercambio: toma {n} carta(s) de @{o}.', { p: a.pid, n: took.length, o: opp }), a.pid);
+    s.two.give = { pid: a.pid, to: opp, n: Math.min(Two.FORCED_TAKE, handSize(p.res)), back: s.phase, took };
+    s.phase = 'twoGive';
+  } else fail('Acción desconocida.');
+  p.tokens -= cost;
+  s.two.supply += cost;
+  s.two.used = { turn: s.turn };
+};
+// the forced trade's second half: give back 2 cards of your choice
+H.twoGive = (s, a) => {
+  if (s.phase !== 'twoGive' || !s.two.give) fail('No hay nada que devolver.');
+  const G2 = s.two.give;
+  if (a.pid !== G2.pid) fail('No es tu turno.');
+  const res = a.res || [];
+  if (res.length !== G2.n) fail(msg('Elige {n} cartas.', { n: G2.n }));
+  const need = {};
+  for (const r of res) need[r] = (need[r] || 0) + 1;
+  for (const r in need) if (!(s.players[a.pid].res[r] >= need[r])) fail('No tienes esas cartas.');
+  for (const r of res) { s.players[a.pid].res[r]--; s.players[G2.to].res[r]++; }
+  s.fx.push({ kind: 'steal', from: a.pid, to: G2.to, res: res[0] });
+  log(s, msg('🤝 @{p} devuelve {n} carta(s) a @{o}.', { p: a.pid, n: res.length, o: G2.to }), a.pid);
+  s.phase = G2.back;
+  s.two.give = null;
+};
+// once per turn: put a played knight back for 2 trade tokens (it may cost the Largest Army)
+H.twoKnight = (s, a) => {
+  if (!s.two) fail('Solo en Catan para dos.');
+  assertMain(s, a);
+  const p = s.players[a.pid];
+  if (s.two.swapped && s.two.swapped.turn === s.turn) fail('Solo una vez por turno.');
+  if (!(p.knights > 0)) fail('No tienes caballeros jugados.');
+  const n = Math.min(Two.KNIGHT_SWAP_TOKENS, s.two.supply);
+  if (!n) fail('No quedan fichas de comercio.');
+  p.knights--;
+  p.tokens += n;
+  s.two.supply -= n;
+  s.two.swapped = { turn: s.turn };
+  const la = s.largestArmy;
+  if (la.owner === a.pid) { // recount the Largest Army
+    const best = s.players.filter(q => !q.neutral && q.knights >= 3).sort((x, y) => y.knights - x.knights);
+    if (best.length && (best.length === 1 || best[0].knights > best[1].knights)) s.largestArmy = { owner: best[0].id, count: best[0].knights };
+    else s.largestArmy = { owner: -1, count: 0 };
+  }
+  log(s, msg('⚔️ @{p} cambia un caballero por {n} fichas de comercio.', { p: a.pid, n }), a.pid);
+};
+
 H.neutralBuild = (s, a) => {
   if (s.phase !== 'neutralBuild' || !s.neutralBuild) fail('Ahora no se construye para los neutrales.');
   const N = s.neutralBuild;
