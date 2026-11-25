@@ -2830,6 +2830,12 @@ t('E&P: bots terminan la colocación', () => {
   ok(s.phase !== 'setup', 'termina la colocación');
 });
 
+t('E&P: Catan para dos no se activa con Exploradores y Piratas', () => {
+  const s = G.createGame(epConfig(c => { c.players = c.players.slice(0, 2); c.rules.catanForTwo = true; }));
+  eq(s.two, undefined, 'sin variante para dos');
+  eq(s.players.length, 2, 'sin asientos neutrales');
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);

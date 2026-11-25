@@ -3,7 +3,7 @@
 import { RES, COSTS, DEV_DECKS, EVENTS, TILE_INFO, DEV_INFO } from './constants.js';
 import { rand, randInt, shuffle, pick } from './rng.js';
 import { generateBoard } from './board.js';
-import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, epScenarioOn } from './expansions.js';
+import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, epScenarioOn, explorersPiratesOn } from './expansions.js';
 import { EP_SCENARIOS } from './explorersPirates/scenarios.js';
 import * as Explore from './explorersPirates/explore.js';
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
@@ -125,7 +125,7 @@ export function createGame(configIn) {
   if (config.rules.harbormaster) s.harbormaster = { owner: -1, count: 0 }; // Harbormaster variant (base games never get this key)
   if (config.rules.diceMode === 'eventCards') s.eventDeck = EvCards.newEventDeck(rng); // Catan Event Cards variant: cards instead of dice
   // Catan for Two variant: two neutral seats (only in 2-player base games)
-  if (config.rules.catanForTwo && config.players.length === 2 && !seafarersOn(config) && !citiesKnightsOn(config) && !tradersBarbariansOn(config)) Two.initCatanForTwo(s, PLAYER_COLORS, R);
+  if (config.rules.catanForTwo && config.players.length === 2 && !seafarersOn(config) && !citiesKnightsOn(config) && !tradersBarbariansOn(config) && !explorersPiratesOn(config)) Two.initCatanForTwo(s, PLAYER_COLORS, R);
   if (seafarersOn(s)) {
     Ships.initShips(s);
     Islands.initIslands(s);
