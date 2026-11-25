@@ -36,6 +36,16 @@ export const EP_MAPS = {
         nums: [2, 4, 5, 6, 8, 9, 10, 12],
       },
     },
+    // fixed start positions (vertex coordinates in hex units): a settlement with its road
+    // (`road` = the far end) and a harbor settlement facing the unexplored areas.
+    // Picked by script: distance rule, >= 4 resources per seat, pips 16/15/16/16.
+    starts: [
+      { settlement: { x: -6.06, y: -2.5 }, road: { x: -5.2, y: -2 }, harbor: { x: -3.46, y: -4 } },
+      { settlement: { x: -7.79, y: -3.5 }, road: { x: -6.93, y: -4 }, harbor: { x: -2.6, y: -0.5 } },
+      { settlement: { x: -5.2, y: -4 }, road: { x: -5.2, y: -5 }, harbor: { x: 0, y: -2 } },
+      { settlement: { x: -1.73, y: -2 }, road: { x: -2.6, y: -2.5 }, harbor: { x: -4.33, y: 0.5 } },
+    ],
+    seatsFor: { 2: [0, 3], 3: [0, 2, 3], 4: [0, 1, 2, 3] },
   },
 };
 

@@ -6,6 +6,8 @@ import { generateBoard } from './board.js';
 import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, epScenarioOn, explorersPiratesOn } from './expansions.js';
 import { EP_SCENARIOS } from './explorersPirates/scenarios.js';
 import * as Explore from './explorersPirates/explore.js';
+import * as EpSetup from './explorersPirates/setup.js';
+import * as EpRules from './explorersPirates/rules.js';
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
@@ -196,6 +198,13 @@ export function createGame(configIn) {
     else log(s, '🏞️ Sin desierto en este mapa: no hay lago.');
     log(s, msg('🎣 {n} caladeros en la costa: {nums}.', { n: board.fishing.length, nums: board.fishing.map(f => f.num).sort((a, b) => a - b).join(', ') }));
   }
+  if (s.explorers) {
+    // Explorers & Pirates: fixed start positions instead of the placement rounds
+    EpSetup.placeStarts(s, (pid, r, k) => giveFromBank(s, pid, r, k));
+    s.setup = { queue: [], idx: 0, step: 'settlement', lastVid: null, blindActive: false, lastRound: 0, fixing: false };
+    log(s, '⚓ Cada jugador empieza con un poblado, un camino, un poblado portuario y un barco con un colono.');
+    beginTurns(s);
+  }
   return s;
 }
 
@@ -266,7 +275,7 @@ export function victoryPoints(s, pid, hidden = true) {
   let vp = 0;
   for (const k in s.buildings) {
     const b = s.buildings[k];
-    if (b.owner === pid && !(s.barbAttack && BarbAttack.buildingConquered(s, +k))) vp += b.type === 'city' ? 2 : 1; // Barbarian Attack: conquered buildings score nothing
+    if (b.owner === pid && !(s.barbAttack && BarbAttack.buildingConquered(s, +k))) vp += b.type === 'city' ? 2 : b.type === 'harbor' ? EpRules.HARBOR_VP : 1; // E&P harbor settlement: 2. Barbarian Attack: conquered buildings score nothing
   }
   if (s.longestRoad.owner === pid) vp += 2;
   if (s.largestArmy.owner === pid) vp += 2;

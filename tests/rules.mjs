@@ -2836,6 +2836,56 @@ t('E&P: Catan para dos no se activa con Exploradores y Piratas', () => {
   eq(s.players.length, 2, 'sin asientos neutrales');
 });
 
+const epBuildings = (s, pid, type) => Object.keys(s.buildings).filter(k => s.buildings[k].owner === pid && s.buildings[k].type === type).map(Number);
+t('E&P salida fija: cada jugador recibe sus piezas', () => {
+  const s = G.createGame(epConfig());
+  eq(s.phase, 'roll');
+  eq(s.epShips.length, 4);
+  for (const p of s.players) {
+    const set = epBuildings(s, p.id, 'settlement'), har = epBuildings(s, p.id, 'harbor');
+    eq([set.length, har.length, Object.values(s.roads).filter(x => x === p.id).length], [1, 1, 1], 'piezas ' + p.id);
+    const ship = s.epShips.find(x => x.owner === p.id);
+    eq(ship.cargo, ['settler']);
+    const E = s.board.edges[ship.edge];
+    ok(E.kind === 'coast' || E.kind === 'sea', 'el barco está en el agua');
+    ok(E.a === har[0] || E.b === har[0], 'junto a su puerto');
+    eq([p.settlementsLeft, p.roadsLeft, p.harborsLeft, p.shipsLeft, p.settlersLeft, p.citiesLeft], [4, 14, 3, 2, 1, 0]);
+    const hand = {};
+    for (const h of s.board.vertices[set[0]].hexes) { const r = s.board.tiles[h].res; if (r !== 'desert') hand[r] = (hand[r] || 0) + 1; }
+    for (const r of ['wood', 'brick', 'sheep', 'wheat', 'ore']) eq(p.res[r], hand[r] || 0, 'recursos ' + r);
+    eq(G.victoryPoints(s, p.id), 3);
+  }
+});
+
+t('E&P salida fija: siempre los mismos sitios', () => {
+  const a = G.createGame(epConfig(c => { c.seed = 1; })), b = G.createGame(epConfig(c => { c.seed = 2; }));
+  const at = s => Object.keys(s.buildings).map(k => `${s.board.vertices[k].x.toFixed(2)},${s.board.vertices[k].y.toFixed(2)}:${s.buildings[k].type}`).sort();
+  eq(at(a), at(b)); // vertex ids depend on the shuffled areas, positions don't
+});
+
+t('E&P salida fija: 2 y 3 jugadores', () => {
+  for (const n of [2, 3]) {
+    const s = G.createGame(epConfig(c => { c.players = c.players.slice(0, n); }));
+    eq(Object.keys(s.buildings).length, 2 * n);
+    const vs = Object.keys(s.buildings).map(Number);
+    for (const a of vs) for (const b of vs) ok(a === b || !s.board.vertices[a].adj.includes(b), 'regla de distancia');
+  }
+});
+
+t('E&P salida fija y modos de colocación', () => {
+  const base = G.createGame(epConfig());
+  for (const mut of [c => { c.modes.blindfold = true; }, c => { c.modes.flipped = true; }, c => { c.rules.setupCity = true; }, c => { c.rules.setupRounds = 3; }, c => { c.rules.startBonus = 1; }]) {
+    const s = G.createGame(epConfig(mut));
+    eq(s.phase, 'roll');
+    eq(JSON.stringify(s.buildings), JSON.stringify(base.buildings));
+    if (s.config.modes.flipped) {
+      ok(s.board.tiles.filter(x => x.area === 'start').every(x => x.revealed), 'isla de salida a la vista');
+      ok(s.board.tiles.filter(x => x.fog).every(x => !x.revealed), 'niebla sigue');
+    }
+    if (s.config.rules.startBonus) eq(s.players[0].res.wood, base.players[0].res.wood + 1);
+  }
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);
