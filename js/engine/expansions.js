@@ -4,6 +4,7 @@
 
 import { DEFAULT_SCENARIO, scenarioOf } from './seafarers/scenarios.js';
 import { DEFAULT_TB_SCENARIO, tbScenarioOf, tbScenarioId } from './tradersBarbarians/scenarios.js';
+import { DEFAULT_EP_SCENARIO, epScenarioOf, epScenarioId } from './explorersPirates/scenarios.js';
 
 // Only one expansion at a time for now: switching one on switches the others off.
 // Each also proposes its own victory points (all off: back to the classic 10).
@@ -19,7 +20,7 @@ export const EXPANSIONS = [
     set: (c, v) => {
       const ex = normalizeExpansions(c);
       ex.seafarers = v;
-      if (v) ex.citiesKnights = ex.tradersBarbarians = false;
+      if (v) ex.citiesKnights = ex.tradersBarbarians = ex.explorersPirates = false;
       c.rules.vpTarget = v ? scenarioOf(ex.scenario).vp : 10;
     },
   },
@@ -30,7 +31,7 @@ export const EXPANSIONS = [
     set: (c, v) => {
       const ex = normalizeExpansions(c);
       ex.citiesKnights = v;
-      if (v) ex.seafarers = ex.tradersBarbarians = false;
+      if (v) ex.seafarers = ex.tradersBarbarians = ex.explorersPirates = false;
       c.rules.vpTarget = v ? CK_VP : 10;
     },
   },
@@ -42,25 +43,40 @@ export const EXPANSIONS = [
     set: (c, v) => {
       const ex = normalizeExpansions(c);
       ex.tradersBarbarians = v;
-      if (v) ex.seafarers = ex.citiesKnights = false;
+      if (v) ex.seafarers = ex.citiesKnights = ex.explorersPirates = false;
       c.rules.vpTarget = v ? tbScenarioOf(ex.tbScenario).vp : 10;
+    },
+  },
+  {
+    id: 'explorersPirates', icon: '🧭', name: 'Exploradores y Piratas',
+    desc: 'Barcos que transportan colonos, tierras por descubrir, piratas y misiones. Cinco escenarios que se juegan uno a uno.',
+    get: c => !!(c.expansions && c.expansions.explorersPirates),
+    // switching it on also proposes the chosen scenario's victory points
+    set: (c, v) => {
+      const ex = normalizeExpansions(c);
+      ex.explorersPirates = v;
+      if (v) ex.seafarers = ex.citiesKnights = ex.tradersBarbarians = false;
+      c.rules.vpTarget = v ? epScenarioOf(ex.epScenario).vp : 10;
     },
   },
 ];
 
 // `scenario` is the Seafarers map (see seafarers/scenarios.js); it only matters when seafarers is on.
 // `tbScenario` is the Traders & Barbarians scenario (see tradersBarbarians/scenarios.js).
-export const defaultExpansions = () => ({ seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: DEFAULT_SCENARIO, tbScenario: DEFAULT_TB_SCENARIO });
+// `epScenario` is the Explorers & Pirates scenario (see explorersPirates/scenarios.js).
+export const defaultExpansions = () => ({ seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: DEFAULT_SCENARIO, tbScenario: DEFAULT_TB_SCENARIO, explorersPirates: false, epScenario: DEFAULT_EP_SCENARIO });
 
 // Fills in missing switches (old saves, old lobby configs, online hosts on an older version)
 // and returns config.expansions.
 export function normalizeExpansions(config) {
   config.expansions = { ...defaultExpansions(), ...(config.expansions || {}) };
   const ex = config.expansions;
-  // one expansion at a time: Seafarers wins, then Cities & Knights, then Traders & Barbarians
+  // one expansion at a time: Seafarers wins, then Cities & Knights, Traders & Barbarians, Explorers & Pirates
   if (ex.seafarers) ex.citiesKnights = ex.tradersBarbarians = false;
   else if (ex.citiesKnights) ex.tradersBarbarians = false;
+  if (ex.seafarers || ex.citiesKnights || ex.tradersBarbarians) ex.explorersPirates = false;
   ex.tbScenario = tbScenarioId(ex.tbScenario); // scenarios not playable yet fall back to the default
+  ex.epScenario = epScenarioId(ex.epScenario);
   return ex;
 }
 
@@ -71,3 +87,6 @@ export const citiesKnightsOn = x => !!(cfgOf(x).expansions && cfgOf(x).expansion
 export const tradersBarbariansOn = x => !!(cfgOf(x).expansions && cfgOf(x).expansions.tradersBarbarians);
 // the Traders & Barbarians scenario id being played ('' when the expansion is off)
 export const tbScenarioOn = x => (tradersBarbariansOn(x) ? tbScenarioId(cfgOf(x).expansions.tbScenario) : '');
+export const explorersPiratesOn = x => !!(cfgOf(x).expansions && cfgOf(x).expansions.explorersPirates);
+// the Explorers & Pirates scenario id being played ('' when the expansion is off)
+export const epScenarioOn = x => (explorersPiratesOn(x) ? epScenarioId(cfgOf(x).expansions.epScenario) : '');

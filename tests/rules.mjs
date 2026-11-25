@@ -2,7 +2,7 @@
 import * as G from '../js/engine/game.js';
 import { defaultConfig, MODES } from '../js/engine/config.js';
 import { botAct } from '../js/engine/bot.js';
-import { seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, EXPANSIONS } from '../js/engine/expansions.js';
+import { seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, EXPANSIONS, normalizeExpansions, explorersPiratesOn, epScenarioOn } from '../js/engine/expansions.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import * as Fish from '../js/engine/tradersBarbarians/fishermen.js';
 import * as Rivers from '../js/engine/tradersBarbarians/rivers.js';
@@ -443,7 +443,7 @@ function botGame(mut) {
 }
 
 t('expansiones: todas apagadas por defecto', () => {
-  eq(defaultConfig().expansions, { seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: 'newShores', tbScenario: 'fishermen' });
+  eq(defaultConfig().expansions, { seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: 'newShores', tbScenario: 'fishermen', explorersPirates: false, epScenario: 'landHo' });
   ok(!seafarersOn(G.createGame(defaultConfig())), 'Navegantes apagado');
 });
 
@@ -452,7 +452,7 @@ t('expansiones: config antigua (sin bloque) = expansiones apagadas, partida idé
   const off = botGame(c => (c.expansions = { seafarers: false }));
   eq(off, legacy, 'misma partida');
   const s = G.createGame((() => { const c = defaultConfig(); delete c.expansions; return c; })());
-  eq(s.config.expansions, { seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: 'newShores', tbScenario: 'fishermen' }, 'se rellena el bloque');
+  eq(s.config.expansions, { seafarers: false, citiesKnights: false, tradersBarbarians: false, scenario: 'newShores', tbScenario: 'fishermen', explorersPirates: false, epScenario: 'landHo' }, 'se rellena el bloque');
 });
 
 t('Navegantes: el interruptor llega al estado', () => {
@@ -2701,6 +2701,40 @@ t('Política: boda: cada rival con más puntos te regala 2 cartas a su elección
 
 
 
+
+// ---------- Explorers & Pirates ----------
+t('E&P: apagada por defecto y normaliza configs viejas', () => {
+  const c = defaultConfig();
+  eq(c.expansions.explorersPirates, false);
+  eq(c.expansions.epScenario, 'landHo');
+  const old = { expansions: { seafarers: false } };
+  const ex = normalizeExpansions(old);
+  eq([ex.explorersPirates, ex.epScenario], [false, 'landHo']);
+  eq(normalizeExpansions({ expansions: { explorersPirates: true, epScenario: 'fishForCatan' } }).epScenario, 'landHo', 'escenario no listo');
+});
+
+t('E&P: solo una expansión a la vez', () => {
+  const c = defaultConfig();
+  EXPANSIONS.find(e => e.id === 'seafarers').set(c, true);
+  EXPANSIONS.find(e => e.id === 'explorersPirates').set(c, true);
+  eq([c.expansions.seafarers, c.expansions.citiesKnights, c.expansions.tradersBarbarians, c.expansions.explorersPirates], [false, false, false, true]);
+  eq(c.rules.vpTarget, 8);
+  EXPANSIONS.find(e => e.id === 'seafarers').set(c, true);
+  eq(c.expansions.explorersPirates, false, 'Navegantes apaga E&P');
+  EXPANSIONS.find(e => e.id === 'explorersPirates').set(c, true);
+  EXPANSIONS.find(e => e.id === 'explorersPirates').set(c, false);
+  eq(c.rules.vpTarget, 10);
+  eq(normalizeExpansions({ expansions: { seafarers: true, explorersPirates: true } }).explorersPirates, false);
+  eq(normalizeExpansions({ expansions: { tradersBarbarians: true, explorersPirates: true } }).explorersPirates, false);
+});
+
+t('E&P: epScenarioOn', () => {
+  const c = defaultConfig();
+  eq(epScenarioOn(c), '');
+  eq(explorersPiratesOn(c), false);
+  c.expansions.explorersPirates = true;
+  eq(epScenarioOn(c), 'landHo');
+});
 
 
 console.log(`\n${pass} ok, ${failN} fallos`);
