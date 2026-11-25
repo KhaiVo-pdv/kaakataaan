@@ -12,6 +12,7 @@ import * as EvCards from '../js/engine/eventCards.js';
 import * as Two from '../js/engine/catanForTwo.js';
 import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
+import { EP_MAPS, buildEpMap } from '../js/engine/explorersPirates/maps.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -2734,6 +2735,41 @@ t('E&P: epScenarioOn', () => {
   eq(explorersPiratesOn(c), false);
   c.expansions.explorersPirates = true;
   eq(epScenarioOn(c), 'landHo');
+});
+
+t('E&P mapa Tierra a la vista: forma y montones', () => {
+  const m = buildEpMap('landHo', { s: 7 });
+  const start = m.land.filter(x => x.area === 'start');
+  eq(start.length, 14);
+  ok(start.every(x => !x.fog), 'la isla de salida está descubierta');
+  eq(start.filter(x => x.res === 'desert').length, 1);
+  eq(start.filter(x => x.res !== 'desert').map(x => x.num), EP_MAPS.landHo.startNums);
+  for (const area of ['north', 'south']) {
+    const land = m.land.filter(x => x.area === area), sea = m.sea.filter(x => x.area === area);
+    eq([land.length, sea.length], [8, 2], area);
+    ok([...land, ...sea].every(x => x.fog), area + ' boca abajo');
+    const st = EP_MAPS.landHo.areas[area];
+    eq(land.map(x => x.res).sort(), st.tiles.filter(r => r !== 'sea').sort(), area + ' recursos');
+    eq(land.map(x => x.num).sort((a, b) => a - b), [...st.nums].sort((a, b) => a - b), area + ' números');
+  }
+});
+
+t('E&P mapa: determinista por semilla', () => {
+  eq(buildEpMap('landHo', { s: 3 }), buildEpMap('landHo', { s: 3 }));
+  const orders = new Set();
+  for (let i = 1; i <= 20; i++) orders.add(JSON.stringify(buildEpMap('landHo', { s: i }).land.filter(x => x.area === 'north').map(x => x.res + x.num)));
+  ok(orders.size > 1, 'el montón se baraja');
+});
+
+t('E&P mapa: tierras nuevas separadas', () => {
+  const m = buildEpMap('landHo', { s: 5 });
+  const all = [...m.land, ...m.sea.filter(x => x.area)];
+  const D = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+  const nb = (a, b) => D.some(([dq, dr]) => a.q + dq === b.q && a.r + dr === b.r);
+  for (const a of all) for (const b of all) {
+    if (!nb(a, b) || a.area === b.area) continue;
+    throw new Error(`${a.area} toca ${b.area}`);
+  }
 });
 
 

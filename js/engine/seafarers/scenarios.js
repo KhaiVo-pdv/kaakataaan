@@ -86,14 +86,21 @@ export const scenarioOf = id => SCENARIOS[id] || SCENARIOS[DEFAULT_SCENARIO];
 
 const FIXED = { w: 'wood', b: 'brick', s: 'sheep', h: 'wheat', o: 'ore', d: 'desert', g: 'gold' };
 
+// Odd-r offset (row, col) of a hand-drawn layout -> axial { q, r }, centred on the map.
+// Also used by the Explorers & Pirates maps.
+export function layoutToAxial(rows) {
+  const r0 = Math.floor(rows.length / 2);
+  const q0 = Math.floor(Math.max(...rows.map(x => x.length)) / 2) - Math.floor(r0 / 2);
+  return (row, col) => ({ q: col - Math.floor(row / 2) - q0, r: row - r0 });
+}
+
 // Turns a scenario layout into tiles. Land comes in the same shape as a custom map
 // ({ q, r, res } with res 'random' for random land) plus `home` / `fog` flags;
 // sea hexes come apart. Uses the game RNG only to resolve fog hexes.
 export function buildScenario(id, rng) {
   const sc = scenarioOf(id);
   const rows = sc.layout;
-  const r0 = Math.floor(rows.length / 2);
-  const q0 = Math.floor(Math.max(...rows.map(x => x.length)) / 2) - Math.floor(r0 / 2);
+  const toAxial = layoutToAxial(rows);
   // fog stack: what each "?" turns out to be
   const fog = [];
   const pool = sc.fogPool || {};
@@ -103,7 +110,7 @@ export function buildScenario(id, rng) {
   rows.forEach((line, row) => {
     [...line].forEach((ch, col) => {
       if (ch === ' ') return;
-      const q = col - Math.floor(row / 2) - q0, r = row - r0; // odd-r offset -> axial, centred
+      const { q, r } = toAxial(row, col);
       if (ch === '.' || ch === 'P') return sea.push({ q, r, pirate: ch === 'P' });
       if (ch === '?') {
         const kind = fog.pop() || 'sea';
