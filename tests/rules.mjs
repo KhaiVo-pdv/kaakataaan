@@ -3016,6 +3016,24 @@ t('E&P: sin Gran Ruta', () => {
   eq(s.longestRoad.owner, -1);
 });
 
+t('E&P: bots juegan sin jugadas ilegales', () => {
+  let harbors = 0, gold = 0;
+  for (let seed = 1; seed <= 5; seed++) {
+    const s = G.createGame(epConfig(c => { c.seed = seed; }));
+    for (let i = 0; i < 400 && s.phase !== 'gameOver'; i++) {
+      const pid = G.pendingActors(s)[0];
+      const a = botAct(s, pid);
+      if (!a) break;
+      const r = G.applyAction(s, a);
+      ok(r.ok, `seed ${seed}: ${JSON.stringify(a)} en ${s.phase}: ${r.error}`);
+      if (a.type === 'build' && a.what === 'harbor') harbors++;
+      if (a.type === 'goldBuy' || a.type === 'goldSell') gold++;
+    }
+  }
+  ok(harbors > 0, 'algún bot construye un poblado portuario');
+  ok(gold > 0, 'algún bot usa el oro');
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);

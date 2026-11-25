@@ -147,7 +147,11 @@ export function createGame(configIn) {
   if (tbScenarioOn(s) === 'caravans') Caravans.initCaravans(s);
   if (tbScenarioOn(s) === 'barbarianAttack') BarbAttack.initBarbarianAttack(s);
   if (tbScenarioOn(s) === 'tradersBarbarians') Traders.initTraders(s);
-  if (s.board.explorers) Explore.initExplorers(s); // Explorers & Pirates: face-down unexplored areas
+  if (s.board.explorers) {
+    Explore.initExplorers(s); // Explorers & Pirates: face-down unexplored areas
+    s.devDeck = []; // no development cards
+    s.devTotal = 0;
+  }
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -394,6 +398,11 @@ export function legalRoads(s, pid) {
 }
 export function legalSettlements(s, pid) {
   return s.board.vertices.filter(v => canBuildSettlement(s, pid, v.id)).map(v => v.id);
+}
+// Explorers & Pirates: own coastal settlements that can become harbor settlements
+export function legalHarbors(s, pid) {
+  if (!s.explorers) return [];
+  return Object.keys(s.buildings).map(Number).filter(v => EpRules.canBuildHarbor(s, pid, v));
 }
 export function legalCities(s, pid) {
   return Object.keys(s.buildings).map(Number).filter(v => canBuildCity(s, pid, v));

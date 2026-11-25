@@ -3,7 +3,7 @@
 import { RES, COSTS, pips } from './constants.js';
 import {
   canAfford, handSize, victoryPoints, tradeRatio, playableDev, pendingActors,
-  legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities,
+  legalSetupSettlements, legalSetupRoads, legalRoads, legalSettlements, legalCities, legalHarbors,
   legalRobberTiles, stealTargets, zeroRes, viewFor, legalPirateTiles, pirateTargets, playableProgress,
   fishPerkReason, bootReceivers, legalBridges, damagedRoadsOf, REPAIR_COST, neutralSpots, tokenCost, tokenActionUsed,
 } from './game.js';
@@ -13,6 +13,7 @@ import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
 import * as Traders from './tradersBarbarians/traders.js';
 import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
+import { HARBOR_COST } from './explorersPirates/rules.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
 import { cardsOf } from './citiesKnights/commodities.js';
@@ -227,6 +228,7 @@ function chooseTarget(s, pid) {
   const hasSett = Object.values(s.buildings).some(b => b.owner === pid && b.type === 'settlement');
   const spots = p.settlementsLeft > 0 ? legalSettlements(s, pid) : [];
   if (p.citiesLeft > 0 && hasSett) opts.push({ what: 'city', cost: COSTS.city, w: 0.1 });
+  if (s.explorers && legalHarbors(s, pid).length) opts.push({ what: 'harbor', cost: HARBOR_COST, w: 0.1 }); // Explorers & Pirates
   if (spots.length) opts.push({ what: 'settlement', cost: COSTS.settlement, w: 0 });
   else if (seafarersOn(s) && p.shipsLeft > 0 && p.settlementsLeft > 0 && bestShip(s, pid) !== null) opts.push({ what: 'ship', cost: SHIP_COST, w: 0.25 });
   else if (p.roadsLeft > 0 && p.settlementsLeft > 0 && bestRoad(s, pid) !== null) opts.push({ what: 'road', cost: COSTS.road, w: 0.3 });
@@ -527,7 +529,7 @@ function mainAction(s, pid) {
   if (two) return two;
   const wagon = s.traders && tbWagonAction(s, pid); // Traders & Barbarians: upgrade, boost and drive the wagon
   if (wagon) return wagon;
-  if ((s.barbAttack || s.traders) && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
+  if ((s.barbAttack || s.traders || s.explorers) && s.players[pid].gold >= Rivers.GOLD_PER_RESOURCE && Rivers.goldBuysLeft(s) > 0) { // Barbarian Attack: gold for the missing card
     const t = chooseTarget(s, pid), need = t && missing(s.players[pid].res, t.cost);
     if (need && need.n === 1) {
       const r = Object.keys(need.m)[0];
@@ -535,6 +537,17 @@ function mainAction(s, pid) {
     }
   }
 
+  // Explorers & Pirates: a harbor settlement (2 VP) on the coast; cards about to be lost to a 7 become gold
+  if (s.explorers && canAfford(p.res, HARBOR_COST)) {
+    const prod = production(s, pid);
+    const hv = best(legalHarbors(s, pid), v => vertexScore(s, pid, v, prod));
+    if (hv !== null) return { type: 'build', pid, what: 'harbor', at: hv };
+  }
+  if (s.explorers && handSize(p.res) > s.config.rules.handLimit) {
+    const t = chooseTarget(s, pid);
+    const spare = RES.filter(r => p.res[r] - ((t && t.cost[r]) || 0) >= tradeRatio(s, pid, r));
+    if (spare.length) return { type: 'goldSell', pid, give: best(spare, r => p.res[r]) };
+  }
   if (p.citiesLeft > 0 && canAfford(p.res, COSTS.city)) {
     const prod = production(s, pid);
     const c = best(legalCities(s, pid), v => vertexScore(s, pid, v, prod));
