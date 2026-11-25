@@ -23,7 +23,7 @@ export function makeSea(tiles, scenarioSea) {
     const k = hk(h.q, h.r);
     if (taken.has(k)) continue;
     taken.add(k);
-    sea.push({ q: h.q, r: h.r, pirate: !!h.pirate, fog: !!h.fog });
+    sea.push({ q: h.q, r: h.r, pirate: !!h.pirate, fog: !!h.fog, ...(h.area !== undefined ? { area: h.area } : {}) }); // area: Explorers & Pirates only
   }
   const all = [...tiles.map(t => [t.q, t.r]), ...sea.map(t => [t.q, t.r])];
   for (const [q, r] of ringAround(all, taken)) sea.push({ q, r, pirate: false, fog: false });

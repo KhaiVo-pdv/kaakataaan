@@ -3,7 +3,9 @@
 import { RES, COSTS, DEV_DECKS, EVENTS, TILE_INFO, DEV_INFO } from './constants.js';
 import { rand, randInt, shuffle, pick } from './rng.js';
 import { generateBoard } from './board.js';
-import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn } from './expansions.js';
+import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, epScenarioOn } from './expansions.js';
+import { EP_SCENARIOS } from './explorersPirates/scenarios.js';
+import * as Explore from './explorersPirates/explore.js';
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
@@ -143,6 +145,7 @@ export function createGame(configIn) {
   if (tbScenarioOn(s) === 'caravans') Caravans.initCaravans(s);
   if (tbScenarioOn(s) === 'barbarianAttack') BarbAttack.initBarbarianAttack(s);
   if (tbScenarioOn(s) === 'tradersBarbarians') Traders.initTraders(s);
+  if (s.board.explorers) Explore.initExplorers(s); // Explorers & Pirates: face-down unexplored areas
 
   if (M.flipped) {
     // Volteado: every tile starts face down until the initial placement ends
@@ -174,6 +177,7 @@ export function createGame(configIn) {
   if (M.fog) log(s, '🌑 Niebla de guerra: solo ves lo que rodea a tus piezas.');
   if (seafarersOn(s)) log(s, '⛵ Expansión Navegantes activada.');
   if (citiesKnightsOn(s)) log(s, '🏰 Expansión Ciudades y Caballeros activada.');
+  if (s.explorers) log(s, msg('🧭 Expansión Exploradores y Piratas activada: {n}.', { n: EP_SCENARIOS[epScenarioOn(s)].name }));
   if (tradersBarbariansOn(s)) log(s, msg('🐟 Expansión Mercaderes y Bárbaros activada: {n}.', { n: TB_SCENARIOS[tbScenarioOn(s)].name }));
   if (s.barbAttack) {
     log(s, msg('🏰 Un castillo en la costa; {n} casillas costeras vigilan el mar. {k} bárbaros acechan.', { n: board.coast.length, k: BarbAttack.BARBARIANS }));

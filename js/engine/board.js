@@ -1,6 +1,6 @@
 import { RES } from './constants.js';
 import { rand, randInt, shuffle } from './rng.js';
-import { seafarersOn, tbScenarioOn } from './expansions.js';
+import { seafarersOn, tbScenarioOn, explorersPiratesOn, epScenarioOn } from './expansions.js';
 import { addFishermen } from './tradersBarbarians/fishermen.js';
 import { addRivers, MARSHES } from './tradersBarbarians/rivers.js';
 import { addCaravans } from './tradersBarbarians/caravans.js';
@@ -8,6 +8,7 @@ import { addBarbarianAttack, BA_DESERTS } from './tradersBarbarians/barbarianAtt
 import { addTraders, TRADE_HEXES, NO_2_12 } from './tradersBarbarians/traders.js';
 import { buildScenario } from './seafarers/scenarios.js';
 import { makeSea, addSeaGraph, findIslands } from './seafarers/board.js';
+import { buildEpMap } from './explorersPirates/maps.js';
 
 const SQ3 = Math.sqrt(3);
 export const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
@@ -238,8 +239,13 @@ export function generateBoard(config, rng) {
   let fixed = null;
   // Seafarers: the map comes from the chosen scenario (fixed layout, sea included)
   const sf = seafarersOn(config) ? buildScenario(config.expansions.scenario, rng) : null;
+  // Explorers & Pirates: the map comes from the chosen scenario too (Claude's maps, sea included)
+  const ep = !sf && explorersPiratesOn(config) ? buildEpMap(epScenarioOn(config), rng) : null;
   if (sf) {
     fixed = sf.land;
+    coords = fixed.map(t => [t.q, t.r]);
+  } else if (ep) {
+    fixed = ep.land;
     coords = fixed.map(t => [t.q, t.r]);
   } else if (m.shape === 'custom' && m.custom && m.custom.tiles && m.custom.tiles.length >= 3) {
     fixed = m.custom.tiles;
@@ -261,7 +267,7 @@ export function generateBoard(config, rng) {
   });
   let deserts = m.deserts === 'auto' || m.deserts == null ? Math.max(1, Math.round(N / 19)) : +m.deserts;
   let gold = +m.gold || 0;
-  if (sf) deserts = gold = 0; // scenarios draw their own deserts and gold
+  if (sf || ep) deserts = gold = 0; // scenarios draw their own deserts and gold
   if (tbScenarioOn(config) === 'rivers') deserts = Math.max(deserts, MARSHES); // Rivers: two marshes
   if (tbScenarioOn(config) === 'caravans') deserts = Math.max(deserts, 1); // Caravans: the oasis
   if (tbScenarioOn(config) === 'barbarianAttack') deserts = Math.max(deserts, BA_DESERTS); // Barbarian Attack: castle + desert
@@ -301,6 +307,11 @@ export function generateBoard(config, rng) {
       tiles[i].home = f.home;
       tiles[i].fog = f.fog;
     });
+  if (ep)
+    fixed.forEach((f, i) => {
+      tiles[i].area = f.area;
+      tiles[i].fog = f.fog;
+    });
 
   // sea ring (visual only; real sea tiles with Seafarers)
   const seaKeys = new Map();
@@ -309,7 +320,7 @@ export function generateBoard(config, rng) {
       const k = hk(...nb);
       if (!index.has(k) && !seaKeys.has(k)) seaKeys.set(k, nb);
     }
-  const sea = sf ? makeSea(tiles, sf.sea) : [...seaKeys.values()].map(([q, r]) => ({ q, r, ...hexCenter(q, r) }));
+  const sea = sf || ep ? makeSea(tiles, (sf || ep).sea) : [...seaKeys.values()].map(([q, r]) => ({ q, r, ...hexCenter(q, r) }));
 
   // vertices & edges
   const vmap = new Map();
@@ -362,6 +373,7 @@ export function generateBoard(config, rng) {
   let nPorts = Math.min(Math.round(coastal.length * portDensity), Math.floor(coastal.length / 2));
   // Seafarers: long island coasts would get far too many harbours; ~9 like the boxed game ('normal')
   if (sf) nPorts = Math.min(nPorts, Math.round(9 * portDensity * 3.3));
+  if (ep) nPorts = 0; // Explorers & Pirates has no harbours
   if (nPorts > 0) {
     const nSpecific = Math.round((nPorts * 5) / 9);
     const types = [];
@@ -402,6 +414,10 @@ export function generateBoard(config, rng) {
       islands: findIslands(tiles, adj, !!sf.sc.desertSplits),
       pirate: pirate ? pirate.id : -1,
     };
+  }
+  if (ep) {
+    addSeaGraph({ vertices, edges, vmap, emap, corner, pkey }, sea);
+    extra.explorers = { scenario: epScenarioOn(config) };
   }
   // Traders & Barbarians, Fishermen: lake + fishing grounds, drawn after the normal board
   if (tbScenarioOn(config) === 'fishermen') Object.assign(extra, addFishermen({ tiles, sea, vertices, edges, ports }, rng, { corner, pkey }));

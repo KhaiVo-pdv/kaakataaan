@@ -2772,6 +2772,64 @@ t('E&P mapa: tierras nuevas separadas', () => {
   }
 });
 
+const epConfig = (mut) => {
+  const c = defaultConfig();
+  c.seed = 99;
+  c.rules.randomStart = false;
+  c.players.forEach(p => (p.kind = 'bot'));
+  c.expansions = { explorersPirates: true, epScenario: 'landHo' };
+  c.rules.vpTarget = 8;
+  if (mut) mut(c);
+  return c;
+};
+
+t('E&P tablero: mar real, sin puertos, sin islas de Navegantes', () => {
+  const s = G.createGame(epConfig());
+  const bd = s.board;
+  eq(bd.ports.length, 0, 'sin puertos');
+  eq(bd.islands, undefined, 'no activa reglas de Navegantes');
+  eq(bd.explorers && bd.explorers.scenario, 'landHo');
+  ok(bd.edges.every(e => e.kind), 'todas las aristas tienen tipo');
+  eq(bd.tiles.filter(x => x.fog && !x.revealed && !x.numRevealed).length, 16);
+  eq(bd.sea.filter(x => x.fog && !x.revealed).length, 4);
+  eq(bd.tiles.filter(x => x.area === 'start' && (x.fog || !x.revealed)).length, 0);
+  eq(s.explorers && s.explorers.scenario, 'landHo');
+});
+
+t('E&P tablero: 2, 3 y 4 jugadores, 30 semillas', () => {
+  for (let n = 2; n <= 4; n++)
+    for (let seed = 1; seed <= 30; seed++) {
+      const s = G.createGame(epConfig(c => { c.seed = seed; c.players = c.players.slice(0, n); }));
+      eq([s.board.tiles.length, s.board.tiles.filter(x => x.fog).length, s.board.sea.filter(x => x.fog).length], [30, 16, 4], `n=${n} seed=${seed}`);
+    }
+});
+
+t('Base: sin claves de E&P', () => {
+  const s = fresh();
+  eq(s.explorers, undefined);
+  eq(s.board.explorers, undefined);
+});
+
+t('E&P + niebla de guerra', () => {
+  const s = G.createGame(epConfig(c => { c.modes.fog = true; }));
+  const v = G.viewFor(s, 0);
+  ok(v.board.tiles.filter(x => x.fog).every(x => !x.revealed && !x.numRevealed), 'las casillas boca abajo siguen ocultas');
+});
+
+t('E&P: bots terminan la colocación', () => {
+  const s = G.createGame(epConfig());
+  let n = 0;
+  while (s.phase === 'setup' && n < 200) {
+    const pid = G.pendingActors(s)[0];
+    const a = botAct(s, pid);
+    ok(a, 'el bot tiene jugada');
+    const r = G.applyAction(s, a);
+    ok(r.ok, `${JSON.stringify(a)}: ${r.error}`);
+    n++;
+  }
+  ok(s.phase !== 'setup', 'termina la colocación');
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);
