@@ -281,6 +281,7 @@ export class BoardView {
       g.append(S('path', { d: type === 'city' ? CITY : HOUSE, fill: color, stroke: shade(color, 0.45), 'stroke-width': 2.2, 'stroke-linejoin': 'round', filter: 'url(#shadow)' }));
       if (type === 'city') g.append(S('rect', { x: -4, y: 1, width: 7, height: 11, fill: shade(color, 0.5) }));
       else g.append(S('rect', { x: -3.5, y: 1, width: 7, height: 9, fill: shade(color, 0.5) }));
+      if (type === 'harbor') g.append(S('text', { x: 9, y: -6, class: 'ep-harbor', 'font-size': 11 }, '⚓')); // Explorers & Pirates: harbor settlement
       gB.append(g);
     };
     for (const k in st.buildings) drawBuilding(+k, st.buildings[k].owner, st.buildings[k].type);

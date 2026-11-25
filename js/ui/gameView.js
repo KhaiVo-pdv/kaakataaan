@@ -21,6 +21,7 @@ import * as BaUI from './barbarianAttackUI.js';
 import * as TrUI from './tradersUI.js';
 import { eventInfo } from '../engine/eventCards.js';
 import * as EvUI from './eventCardsUI.js';
+import * as EpUI from './explorersUI.js';
 
 let ui = null;
 
@@ -699,6 +700,8 @@ function interaction(real, v) {
   if (tb !== undefined) return tb;
   const ba = BaUI.baInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state), liveRes: () => App.state.players[v].res }); // Barbarian Attack
   if (ba !== undefined) return ba;
+  const ep = EpUI.epInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); // Explorers & Pirates: harbor settlements
+  if (ep !== undefined) return ep;
   const bridge = Riv.bridgeInteraction(st, v, ui, { mk, dispatch: a => App.dispatch(a), rerender: () => render(App.state) }); // Rivers
   if (bridge !== undefined) return bridge;
   if (st.phase === 'setup') {
@@ -856,6 +859,7 @@ function renderPlayers(st, v) {
         ...Riv.riverStats(st, p, { h }), // Traders & Barbarians: gold, bridges, Wealthiest / Poor
         ...Car.caravanStats(st, p, { h }), // Traders & Barbarians: points from camels
         ...BaUI.baStats(st, p, { h }), // Barbarian Attack: gold, knights, prisoners
+        ...EpUI.epStats(st, p, { h }), // Explorers & Pirates: gold, harbor settlements left
         ...TrUI.tradersStats(st, p, { h }), // Traders & Barbarians: wagon, cargo, deliveries
         ...EvUI.tokenStats(st, p, { h }), // Catan for Two: trade tokens
         st.longestRoad.owner === p.id ? h('span', { class: 'award', title: t('Camino más largo (+2)') }, t('🏅Camino')) : null,
@@ -1015,12 +1019,13 @@ function fillActions(bar, st, v, locked) {
   acts.append(
     buildBtn('road', t('Camino'), '🛤️', p.roadsLeft, () => G.legalRoads(st, v)),
     buildBtn('settlement', t('Poblado'), '🏠', p.settlementsLeft, () => G.legalSettlements(st, v)),
-    buildBtn('city', t('Ciudad'), '🏰', p.citiesLeft, () => G.legalCities(st, v)),
+    EpUI.hasEP(st) ? '' : buildBtn('city', t('Ciudad'), '🏰', p.citiesLeft, () => G.legalCities(st, v)), // Explorers & Pirates: no cities
+    ...EpUI.epButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Explorers & Pirates
     ...Sea.seaButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }),
     ...CK.ckButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openImprove: () => openImprove(v) }),
     ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a), costIcons }),
     ...CK.progressButtons(st, v, ui, { h, dispatch: a => App.dispatch(a) }),
-    CK.hasCK(st) ? '' : h('button', {
+    CK.hasCK(st) || EpUI.hasEP(st) ? '' : h('button', {
       class: 'btn', disabled: !(st.devDeck.length || st.barbAttack) || !G.canAfford(p.res, COSTS.dev), title: t('Carta de desarrollo — cuesta {cost}', { cost: costIcons(COSTS.dev) }),
       onclick: () => App.dispatch({ type: 'buyDev', pid: v }),
     }, h('span', { class: 'bicon' }, '🃏'), h('span', null, t('Carta'), h('span', { class: 'cost' }, costIcons(COSTS.dev)))),
@@ -1043,8 +1048,8 @@ function affordPreview(real, v) {
   const items = [
     ['road', '🛤️', t('Camino'), p.roadsLeft > 0 && G.legalRoads(st, v).length > 0],
     ['settlement', '🏠', t('Poblado'), p.settlementsLeft > 0 && G.legalSettlements(st, v).length > 0],
-    ['city', '🏰', t('Ciudad'), p.citiesLeft > 0 && G.legalCities(st, v).length > 0],
-    ...(CK.hasCK(st) ? [] : [['dev', '🃏', t('Carta'), st.devDeck.length > 0 || !!st.barbAttack]]),
+    ...(EpUI.hasEP(st) ? EpUI.epAfford(st, v) : [['city', '🏰', t('Ciudad'), p.citiesLeft > 0 && G.legalCities(st, v).length > 0]]), // Explorers & Pirates: harbor settlements instead
+    ...(CK.hasCK(st) || EpUI.hasEP(st) ? [] : [['dev', '🃏', t('Carta'), st.devDeck.length > 0 || !!st.barbAttack]]),
     ...Sea.seaAfford(st, v), // Seafarers: ships (their entry carries its own cost)
   ];
   return h('div', { class: 'afford' }, items.map(([what, icon, label, room, cost = COSTS[what]]) => {
@@ -1068,7 +1073,7 @@ function speedControl() {
 
 function describe(a, st) {
   if (!a) return t('Nada que hacer ahora.');
-  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a) || Fishr.fishDescribe(a) || Riv.riverDescribe(a) || Car.caravanDescribe(a, st) || BaUI.baDescribe(a, st) || TrUI.tradersDescribe(a); // expansion moves
+  const sea = Sea.seaDescribe(a) || CK.ckDescribe(a) || CK.knightDescribe(a) || CK.progressDescribe(a) || Fishr.fishDescribe(a) || Riv.riverDescribe(a) || Car.caravanDescribe(a, st) || BaUI.baDescribe(a, st) || TrUI.tradersDescribe(a) || EpUI.epDescribe(a); // expansion moves
   if (sea) return sea;
   switch (a.type) {
     case 'roll': return t('Tira los dados.');

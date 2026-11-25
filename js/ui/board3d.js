@@ -2404,6 +2404,14 @@ export class Board3D {
     };
     for (const k in st.buildings) building(+k, st.buildings[k].owner, st.buildings[k].type);
     for (const b of view.blindOwn || []) building(b.vid, b.pid, b.type, true);
+    // Explorers & Pirates: harbor settlements are houses with an anchor tag (final model in the 3D step)
+    for (const k in st.buildings) {
+      if (st.buildings[k].type !== 'harbor') continue;
+      const V = bd.vertices[k];
+      const tag = css2d('tok3d-at', '<div class="tok3d">⚓</div>');
+      tag.position.set(V.x, vy(+k) + 0.9, V.y);
+      this.dynGroup.add(tag);
+    }
     // Cities & Knights: knights on their corners
     for (const k in st.knights || {}) {
       const kn = st.knights[k], V = bd.vertices[k];
