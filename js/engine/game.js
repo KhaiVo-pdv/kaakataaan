@@ -294,7 +294,7 @@ export function victoryPoints(s, pid, hidden = true) {
 }
 
 export function tradeRatio(s, pid, res) {
-  let best = 4;
+  let best = s.explorers ? EpRules.EP_TRADE_RATIO : 4; // Explorers & Pirates: no harbours, always 3:1
   // Cities & Knights trading house (trade level 3): commodities 2:1
   if (COMMODITIES.includes(res) && Improve.commodityRatio(s, pid)) best = Improve.commodityRatio(s, pid);
   if (s.progress && TradeCards.cardRatio(s, pid, res)) best = Math.min(best, TradeCards.cardRatio(s, pid, res)); // merchant / merchant fleet
@@ -353,6 +353,7 @@ export function canSetupRoad(s, pid, e) {
 export function canBuildRoad(s, pid, e) {
   const E = s.board.edges[e];
   if (!E || s.roads[e] !== undefined || !landEdge(s, e) || hasShip(s, e)) return false;
+  if (s.explorers && EpRules.nearHidden(s, 'edge', e)) return false; // Explorers & Pirates: not along a face-down hex
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: only bridges cross the water
   if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
   if (s.traders && Traders.edgeBlocked(s, e)) return false; // Traders & Barbarians: closed sea side / barbarian
@@ -369,12 +370,14 @@ export function canBuildRoad(s, pid, e) {
 
 export function canBuildSettlement(s, pid, v) {
   if (!s.board.vertices[v] || !vertexOpen(s, v)) return false;
+  if (s.explorers && EpRules.nearHidden(s, 'vertex', v)) return false; // Explorers & Pirates: not next to a face-down hex
   if (s.damagedRoads && s.board.vertices[v].edges.some(e => s.damagedRoads[e])) return false; // Event Cards earthquake: not next to a damaged road
   // a road reaches it, or (Seafarers) a ship lands there
   return s.board.vertices[v].edges.some(e => s.roads[e] === pid || (!!s.ships && s.ships[e] === pid));
 }
 
 export const canBuildCity = (s, pid, v) => {
+  if (s.explorers) return false; // Explorers & Pirates: harbor settlements instead of cities
   const b = s.buildings[v];
   return !!b && b.owner === pid && b.type === 'settlement';
 };
@@ -546,6 +549,7 @@ function roadLength(s, pid) {
 }
 
 function updateLongestRoad(s) {
+  if (s.explorers) return; // Explorers & Pirates: no Longest Road
   if (s.traders) { for (const p of s.players) p.roadLen = p.retired ? 0 : roadLength(s, p.id); return; } // Traders & Barbarians: no Longest Road card
   const lens = s.players.map(p => (p.roadLen = p.retired && !p.neutral ? 0 : roadLength(s, p.id))); // Catan for Two: neutrals can hold it
   const cur = s.longestRoad.owner;
@@ -1261,6 +1265,7 @@ function afterRoll(s, sum) {
   if (sum !== 7) {
     const gains = produce(s, sum);
     if (s.fishermen) fishProduction(s, sum);
+    if (s.explorers) noHarvestGold(s, gains); // Explorers & Pirates: nothing from the roll -> 1 gold
     s.phase = 'main';
     // Cities & Knights Aqueduct: whoever got nothing picks a resource first
     if (s.pendingAqueduct && Improve.aqueductAfterRoll(s, gains)) s.phase = 'aqueduct';
@@ -1282,12 +1287,23 @@ function afterRoll(s, sum) {
   else s.phase = afterSeven(s);
 };
 
+// Explorers & Pirates: every player a roll gave nothing gets 1 gold
+function noHarvestGold(s, gains) {
+  const empty = s.players.filter(p => !p.retired && !Object.values(gains[p.id]).some(n => n > 0));
+  for (const p of empty) {
+    p.gold += EpRules.NO_PRODUCTION_GOLD;
+    s.fx.push({ kind: 'gold', pid: p.id, n: EpRules.NO_PRODUCTION_GOLD, what: 'noProduction' });
+  }
+  if (empty.length) log(s, msg('🪙 Sin cosecha: {names} reciben 1 de oro.', { names: empty.map(p => '@' + p.id).join(', ') }));
+}
+
 // where a 7 goes once discards are done: no robber (rule, or C&K before the first barbarian attack) -> main
 const afterSeven = s => {
   if (s.sabotage) { // C&K Saboteur: those discards were not a 7
     delete s.sabotage;
     return 'main';
   }
+  if (s.explorers) return 'main'; // Explorers & Pirates: no robber
   if (s.barbAttack) return BarbAttack.stealVictims(s, s.current).length ? 'baSteal' : 'main'; // Barbarian Attack: no robber, steal from anyone
   if (s.traders) { s.traders.relocate = { from: null, steal: true }; return 'tbBarbarian'; } // Traders & Barbarians: move a barbarian
   return s.config.rules.noRobber || Barb.robberAsleep(s) ? 'main' : 'robber';
@@ -2432,7 +2448,18 @@ H.build = (s, a) => {
     riverGold(s, a.pid, 'settlement', a.at);
     if (s.caravans) s.caravans.built = true; // Caravans: a camel vote at the end of this turn
     if (s.barbAttack) barbariansLand(s, a.pid); // Barbarian Attack: building draws barbarians to the coast
+  } else if (a.what === 'harbor') {
+    // Explorers & Pirates: a coastal settlement becomes a harbor settlement
+    if (!s.explorers) fail('Construcción desconocida.');
+    if (!EpRules.canBuildHarbor(s, a.pid, a.at)) fail('Solo puedes mejorar tus poblados de la costa.');
+    if (!canAfford(p.res, EpRules.HARBOR_COST)) fail('Te faltan recursos.');
+    pay(s, a.pid, EpRules.HARBOR_COST);
+    p.harborsLeft--;
+    p.settlementsLeft++;
+    s.buildings[a.at].type = 'harbor';
+    log(s, msg('⚓ @{p} construye un poblado portuario.', { p: a.pid }), a.pid);
   } else if (a.what === 'city') {
+    if (s.explorers) fail('En Exploradores y Piratas no hay ciudades.');
     if (p.citiesLeft <= 0) fail('No te quedan ciudades.');
     if (!canBuildCity(s, a.pid, a.at)) fail('Solo puedes mejorar tus poblados.');
     if (!canAfford(p.res, COSTS.city)) fail('Te faltan recursos.');
@@ -2445,7 +2472,7 @@ H.build = (s, a) => {
     if (s.barbAttack) barbariansLand(s, a.pid);
   } else fail('Construcción desconocida.');
   s.fx.push({ kind: 'build', what: a.what, pid: a.pid, at: a.at });
-  if (a.what !== 'city') updateLongestRoad(s);
+  if (a.what !== 'city' && a.what !== 'harbor') updateLongestRoad(s);
   if (s.two && a.what === 'settlement') earnTokens(s, a.pid, a.at); // Catan for Two: trade tokens
   if (s.two && (a.what === 'road' || a.what === 'settlement')) startNeutralBuild(s, a.pid, a.what); // Catan for Two
 };
@@ -2577,6 +2604,7 @@ H.endRoadBuilding = (s, a) => {
 
 H.buyDev = (s, a) => {
   assertMain(s, a);
+  if (s.explorers) fail('En Exploradores y Piratas no hay cartas de desarrollo.');
   if (s.progress) fail('En Ciudades y Caballeros no hay cartas de desarrollo.');
   if (s.barbAttack) return baBuyCard(s, a); // Barbarian Attack: the scenario's own deck
   const p = s.players[a.pid];

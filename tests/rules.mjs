@@ -2886,6 +2886,136 @@ t('E&P salida fija y modos de colocación', () => {
   }
 });
 
+const epMain = mut => {
+  const s = G.createGame(epConfig(mut));
+  s.phase = 'main';
+  s.current = 0;
+  for (const p of s.players) for (const r of ['wood', 'brick', 'sheep', 'wheat', 'ore']) { s.bank[r] += p.res[r]; p.res[r] = 0; }
+  return s;
+};
+
+t('E&P: sin ladrón', () => {
+  const s = epMain();
+  eq(s.board.robber, -1);
+  give(s, 1, { wood: 5, ore: 4 });
+  s.phase = 'roll';
+  s.config.rules.diceMode = 'balanced';
+  s.diceDeck = Array(7).fill([3, 4]);
+  ok(act(s, { type: 'roll', pid: 0 }).ok);
+  eq(s.phase, 'discard');
+  ok(act(s, { type: 'discard', pid: 1, res: { wood: 4 } }).ok);
+  eq(s.phase, 'main', 'sin fase de ladrón');
+});
+
+t('E&P: sin cartas de desarrollo ni ciudades', () => {
+  const s = epMain();
+  give(s, 0, { sheep: 2, wheat: 4, ore: 4 });
+  const r = act(s, { type: 'buyDev', pid: 0 });
+  ok(!r.ok && /no hay cartas de desarrollo/.test(r.error), r.error);
+  const v = +epBuildings(s, 0, 'settlement')[0];
+  const c = act(s, { type: 'build', pid: 0, what: 'city', at: v });
+  ok(!c.ok && /no hay ciudades/.test(c.error), c.error);
+  eq(G.legalCities(s, 0), []);
+});
+
+t('E&P: poblado portuario', () => {
+  const s = epMain();
+  const bd = s.board;
+  // a coastal settlement of player 0 (put one on a free start-island coast vertex)
+  const used = Object.keys(s.buildings).map(Number);
+  const free = bd.vertices.find(V => V.hexes.length && V.hexes.every(h => bd.tiles[h].area === 'start') && V.sea.length && !used.some(u => u === V.id || V.adj.includes(u)));
+  s.buildings[free.id] = { owner: 0, type: 'settlement' };
+  const inland = bd.vertices.find(V => V.hexes.length === 3 && !V.sea.length && !Object.keys(s.buildings).map(Number).some(u => u === V.id || V.adj.includes(u)));
+  s.buildings[inland.id] = { owner: 0, type: 'settlement' };
+  give(s, 0, { wheat: 4, ore: 4 });
+  ok(!act(s, { type: 'build', pid: 0, what: 'harbor', at: inland.id }).ok, 'no en el interior');
+  const rival = +epBuildings(s, 1, 'settlement')[0];
+  ok(!act(s, { type: 'build', pid: 0, what: 'harbor', at: rival }).ok, 'no la de otro');
+  const vp = G.victoryPoints(s, 0);
+  const left = [s.players[0].harborsLeft, s.players[0].settlementsLeft];
+  ok(act(s, { type: 'build', pid: 0, what: 'harbor', at: free.id }).ok);
+  eq(s.buildings[free.id].type, 'harbor');
+  eq(G.victoryPoints(s, 0), vp + 1);
+  eq([s.players[0].harborsLeft, s.players[0].settlementsLeft], [left[0] - 1, left[1] + 1]);
+  eq([s.players[0].res.wheat, s.players[0].res.ore], [2, 2]);
+  // a harbor produces 1
+  const tile = bd.tiles[bd.vertices[free.id].hexes.find(h => bd.tiles[h].num)];
+  for (const k of Object.keys(s.buildings)) if (+k !== free.id) delete s.buildings[k];
+  const before = s.players[0].res[tile.res];
+  s.phase = 'roll';
+  s.config.rules.diceMode = 'balanced';
+  const d1 = Math.min(6, tile.num - 1);
+  s.diceDeck = Array(7).fill([d1, tile.num - d1]);
+  act(s, { type: 'roll', pid: 0 });
+  eq(s.players[0].res[tile.res] - before, 1);
+});
+
+t('E&P: comercio 3:1 y oro', () => {
+  const s = epMain();
+  eq(G.tradeRatio(s, 0, 'wood'), 3);
+  give(s, 0, { wood: 9 });
+  ok(act(s, { type: 'goldSell', pid: 0, give: 'wood' }).ok);
+  eq([s.players[0].res.wood, s.players[0].gold], [6, 1]);
+  s.players[0].gold = 6;
+  ok(act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok);
+  ok(act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok);
+  ok(!act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'solo 2 por turno');
+  eq(s.players[0].gold, 2);
+  s.turn++;
+  s.bank.brick = 0;
+  ok(!act(s, { type: 'goldBuy', pid: 0, res: 'brick' }).ok, 'banco vacío');
+});
+
+t('E&P: oro por tirada sin cosecha', () => {
+  const s = epMain();
+  const bd = s.board;
+  const v = +epBuildings(s, 0, 'settlement')[0];
+  for (const k of Object.keys(s.buildings)) if (+k !== v) delete s.buildings[k];
+  const tile = bd.tiles[bd.vertices[v].hexes.find(h => bd.tiles[h].num)];
+  const gold = s.players.map(p => p.gold);
+  s.phase = 'roll';
+  s.config.rules.diceMode = 'balanced';
+  const d1 = Math.min(6, tile.num - 1);
+  s.diceDeck = Array(7).fill([d1, tile.num - d1]);
+  act(s, { type: 'roll', pid: 0 });
+  eq(s.players.map((p, i) => p.gold - gold[i]), [0, 1, 1, 1]);
+  s.phase = 'roll';
+  s.diceDeck = Array(7).fill([3, 4]);
+  act(s, { type: 'roll', pid: 0 });
+  eq(s.players.map((p, i) => p.gold - gold[i]), [0, 1, 1, 1], 'un 7 no da oro');
+});
+
+t('E&P: nada junto a casillas boca abajo', () => {
+  const s = epMain();
+  const bd = s.board;
+  const fogTile = bd.tiles.find(x => x.fog);
+  const v = fogTile.verts.find(x => !Object.keys(s.buildings).map(Number).some(u => u === x || bd.vertices[x].adj.includes(u)));
+  const e0 = bd.vertices[v].edges.find(e => bd.edges[e].hexes.length);
+  s.roads[e0] = 0;
+  ok(!G.legalSettlements(s, 0).includes(v), 'poblado no');
+  const other = bd.vertices[v].edges.find(e => e !== e0 && bd.edges[e].hexes.length && s.roads[e] === undefined);
+  ok(!G.legalRoads(s, 0).includes(other), 'camino no');
+  for (const h of bd.vertices[v].hexes) bd.tiles[h].revealed = true;
+  for (const t2 of bd.vertices[v].sea) bd.sea[t2].revealed = true;
+  const E = bd.edges[other];
+  for (const h of E.hexes) bd.tiles[h].revealed = true;
+  for (const t2 of E.sea) bd.sea[t2].revealed = true;
+  ok(G.legalSettlements(s, 0).includes(v), 'descubierta: poblado sí');
+  ok(G.legalRoads(s, 0).includes(other), 'descubierta: camino sí');
+});
+
+t('E&P: sin Gran Ruta', () => {
+  const s = epMain();
+  const bd = s.board;
+  give(s, 0, { wood: 10, brick: 10 });
+  for (let i = 0; i < 6; i++) {
+    const e = G.legalRoads(s, 0)[0];
+    ok(e !== undefined, 'hay sitio para un camino');
+    ok(act(s, { type: 'build', pid: 0, what: 'road', at: e }).ok);
+  }
+  eq(s.longestRoad.owner, -1);
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);

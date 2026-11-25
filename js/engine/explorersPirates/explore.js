@@ -3,7 +3,8 @@
 
 // Sets up s.explorers and hides every face-down hex (land and sea).
 export function initExplorers(s) {
-  s.explorers = { scenario: s.board.explorers.scenario };
+  s.explorers = { scenario: s.board.explorers.scenario, buys: null }; // buys: gold purchases this turn (Rivers.goldBox)
+  for (const p of s.players) p.gold = 0;
   for (const t of s.board.tiles) if (t.fog) t.revealed = t.numRevealed = false;
   for (const t of s.board.sea) if (t.fog) t.revealed = false;
 }

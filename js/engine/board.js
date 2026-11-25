@@ -434,5 +434,5 @@ export function generateBoard(config, rng) {
     maxY: Math.max(...all.map(t => t.y)) + 1.2,
   };
   const desert = tiles.find(t => t.res === 'desert');
-  return { tiles, sea, vertices, edges, ports, bounds, robber: desert ? desert.id : -1, ...extra };
+  return { tiles, sea, vertices, edges, ports, bounds, robber: desert && !ep ? desert.id : -1, ...extra }; // Explorers & Pirates: no robber
 }

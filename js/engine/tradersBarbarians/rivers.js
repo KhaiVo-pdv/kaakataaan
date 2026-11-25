@@ -183,7 +183,7 @@ export function wealthTitles(s) {
 
 // gold buys left this turn
 // (Barbarian Attack uses the same gold rules: the counter lives in s.barbAttack there)
-export const goldBox = s => s.rivers || s.barbAttack || s.traders; // the scenarios with gold
+export const goldBox = s => s.rivers || s.barbAttack || s.traders || s.explorers; // the games with gold (Explorers & Pirates too)
 export const goldBuysLeft = s => {
   const box = goldBox(s);
   return box.buys && box.buys.turn === s.turn ? GOLD_BUYS_PER_TURN - box.buys.n : GOLD_BUYS_PER_TURN;
