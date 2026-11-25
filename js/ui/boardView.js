@@ -203,7 +203,7 @@ export class BoardView {
     }
     if (bd.castle != null) svg.append(drawBarbarianAttack(S, U, st, hexPoints)); // Barbarian Attack: castle, barbarians, conquered hexes
     if (bd.trade) svg.append(drawTradeHexes(S, U, st, hexPoints)); // Traders & Barbarians: trade hexes, plazas, stacks
-    if (bd.islands) svg.append(drawSeaFog(S, U, bd, hexPoints)); // Seafarers: fog over the sea too
+    if (bd.islands || bd.explorers) svg.append(drawSeaFog(S, U, bd, hexPoints)); // Seafarers / Explorers & Pirates: fog over the sea too
 
     // ports
     const gPorts = S('g', { class: 'ports' });
