@@ -267,3 +267,43 @@ export function makeToonHouse(type, color, flag, env, banner) {
   }
   return g;
 }
+
+// ---------- toy versions of the other board pieces (toon mode) ----------
+function outlinedMesh(env, geo, color, x, y, z, extra) {
+  const m = new THREE.Mesh(geo, materials(env)(color, extra));
+  m.position.set(x, y, z);
+  m.castShadow = m.receiveShadow = true;
+  return outlined(m);
+}
+
+// a road: a plain bar in the player's colour along the edge (x axis), `len` = corner-to-corner length
+export function makeToonRoad(color, len, env) {
+  const g = new THREE.Group();
+  g.add(outlinedMesh(env, G.box(len * 0.86, 0.08, 0.1), color, 0, 0.04, 0));
+  return g;
+}
+
+// the robber: a dark pawn
+export function makeToonRobber(env) {
+  const g = new THREE.Group();
+  g.add(outlinedMesh(env, G.cyl(0.08, 0.13, 0.32, 16), '#2a2a33', 0, 0.16, 0));
+  g.add(outlinedMesh(env, G.ball(0.1, 16, 12), '#2a2a33', 0, 0.4, 0));
+  return g;
+}
+
+// a harbour boat: brown hull, mast and a white sail
+export function makeToonBoat(env) {
+  const g = new THREE.Group();
+  g.add(outlinedMesh(env, G.box(0.36, 0.08, 0.14), '#8a5a36', 0, 0.03, 0));
+  g.add(outlinedMesh(env, G.cyl(0.008, 0.008, 0.32, 6), C.pole, 0, 0.22, 0));
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 0);
+  sh.lineTo(0.15, 0);
+  sh.lineTo(0, 0.24);
+  sh.closePath();
+  const sail = new THREE.Mesh(new THREE.ShapeGeometry(sh), materials(env)('#f8f4ea', { side: THREE.DoubleSide }));
+  sail.position.set(0.01, 0.1, 0);
+  sail.castShadow = true;
+  g.add(sail);
+  return g;
+}
