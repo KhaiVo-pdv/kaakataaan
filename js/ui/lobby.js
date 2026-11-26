@@ -13,6 +13,7 @@ import { showRiversHelp } from './riversHelp.js';
 import { showCaravansHelp } from './caravansHelp.js';
 import { showBarbarianAttackHelp } from './barbarianAttackHelp.js';
 import { showTradersHelp } from './tradersHelp.js';
+import { showExplorersHelp } from './explorersHelp.js';
 import { showHelp } from './help.js';
 import { SHAPES, generateBoard } from '../engine/board.js';
 import { DEV_DECKS, TILE_INFO } from '../engine/constants.js';
@@ -413,7 +414,8 @@ export function lobbyScreen(root, opts = {}) {
         ),
         h('p', { style: { color: 'var(--muted)', fontSize: '12px', margin: '6px 0 0' } },
           t('Para {a}-{b} jugadores · {vp} puntos para ganar', { a: sc.players[0], b: sc.players[1], vp: sc.vp }),
-          cfg.players.length > sc.players[1] ? h('b', { style: { color: 'var(--warn, #ef7d57)' } }, ' · ' + t('⚠️ Demasiados jugadores para este escenario')) : null));
+          cfg.players.length > sc.players[1] ? h('b', { style: { color: 'var(--warn, #ef7d57)' } }, ' · ' + t('⚠️ Demasiados jugadores para este escenario')) : null),
+        h('button', { class: 'btn sm', 'data-testid': 'ep-rules', style: { marginTop: '6px' }, onclick: () => showExplorersHelp() }, t('📖 Reglas de Exploradores y piratas')));
     }
 
     // rules

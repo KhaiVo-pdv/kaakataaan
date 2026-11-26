@@ -44,7 +44,7 @@ function shipAt(g, edge, color, extra = {}) {
   return { x, y };
 }
 
-function diagram({ hexes, roads = [], ships = [], houses = [], pirate = null, blocked = [], spots = [], marks = [], arrows = [], width = 260 }) {
+export function diagram({ hexes, roads = [], ships = [], houses = [], pirate = null, blocked = [], spots = [], marks = [], arrows = [], width = 260 }) {
   const cs = hexes.map(([q, r]) => hexCenter(q, r));
   const minX = Math.min(...cs.map(c => c.x)) * U - U - 8, maxX = Math.max(...cs.map(c => c.x)) * U + U + 8;
   const minY = Math.min(...cs.map(c => c.y)) * U - U - 14, maxY = Math.max(...cs.map(c => c.y)) * U + U + 8;
@@ -90,7 +90,7 @@ function diagram({ hexes, roads = [], ships = [], houses = [], pirate = null, bl
   }
   return svg;
 }
-const mid = e => {
+export const mid = e => {
   const [a, b] = edgePts(e);
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 };
@@ -121,7 +121,7 @@ function section(title, text, art) {
     h('div', { class: 'sf-row' }, h('div', { class: 'sf-art' }, ...[].concat(art)), h('div', { class: 'sf-text' }, ...[].concat(text))));
 }
 const li = (...xs) => h('ul', null, xs.map(x => h('li', null, x)));
-const panel = (art, caption, ok) => h('figure', { class: 'sf-panel' }, art, h('figcaption', { class: ok === false ? 'bad' : ok ? 'good' : '' }, caption));
+export const panel = (art, caption, ok) => h('figure', { class: 'sf-panel' }, art, h('figcaption', { class: ok === false ? 'bad' : ok ? 'good' : '' }, caption));
 
 export function showSeafarersHelp() {
   const close = () => ov.remove();
