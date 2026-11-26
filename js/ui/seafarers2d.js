@@ -5,7 +5,7 @@ import { shipPose } from './seafarersPose.js';
 const HULL = 'M-17,2 L17,2 L11,9 L-12,9 Z';
 const SAIL = 'M-1,-17 L-1,0 L12,0 Z';
 
-function shipShape(S, color, stroke) {
+export function shipShape(S, color, stroke) {
   const g = S('g', null);
   g.append(S('path', { d: HULL, fill: '#7a4a26', stroke, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
   g.append(S('line', { x1: -2, y1: 2, x2: -2, y2: -19, stroke: '#5a3519', 'stroke-width': 2.5 }));

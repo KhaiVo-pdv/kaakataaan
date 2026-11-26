@@ -3,6 +3,7 @@
 import { TILE_INFO, probLook } from '../engine/constants.js';
 import { s as S, clear } from './dom.js';
 import { drawShips, drawPirate, drawSeaHotspots, drawSeaFog } from './seafarers2d.js';
+import { drawEpShips } from './explorers2d.js';
 import { drawKnights, drawWallsAndMetros, drawMerchant, drawBarbarians } from './citiesKnights2d.js';
 import { drawFishermen } from './fishermen2d.js';
 import { drawRivers, drawBridge } from './rivers2d.js';
@@ -260,6 +261,12 @@ export class BoardView {
     if (st.traders) svg.append(drawTradersPieces(S, U, st, wagonAt)); // Traders & Barbarians: barbarians and wagons
     if (st.damagedRoads) svg.append(drawDamagedRoads(S, U, st)); // Event Cards earthquake: cracked roads
 
+    // Explorers & Pirates: ships
+    if (st.epShips) {
+      const sh = drawEpShips(S, U, st, this.prevPieces);
+      sh.keys.forEach(k => pieces.add(k));
+      svg.append(sh.g);
+    }
     // Seafarers: ships and the pirate
     if (st.ships) {
       const sh = drawShips(S, U, st, this.prevPieces);

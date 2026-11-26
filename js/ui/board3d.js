@@ -24,6 +24,7 @@ import { pxIcon } from './pixel.js';
 import { flagCanvas } from './flag.js';
 import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
+import { epShipSpot } from './explorers2d.js';
 import { makeStyledBuilding, makeStyledMetro, makeStyledWall } from './pieceStyles3d.js';
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 import { makeFishingGround } from './fishermen3d.js';
@@ -2493,6 +2494,19 @@ export class Board3D {
         float(o, shipPose(bd, +k), +k * 1.7);
         add(o, 's' + k, color);
       }
+    // Explorers & Pirates: ships (a 👤 tag while carrying a settler)
+    for (const ship of st.epShips || []) {
+      const color = st.players[ship.owner].color;
+      const o = makeShip(color);
+      const p = epShipSpot(bd, st.epShips, ship);
+      float(o, { ...shipPose(bd, ship.edge), x: p.x, z: p.z }, ship.id * 1.7);
+      add(o, 'eps' + ship.id + ':' + ship.edge, color);
+      if (ship.cargo.includes('settler')) {
+        const tag = css2d('tok3d-at', '<div class="tok3d">👤</div>');
+        tag.position.set(p.x, 0.9, p.z);
+        this.dynGroup.add(tag);
+      }
+    }
     for (const k of fogKeys) {
       const t = k[0] === 'L' ? bd.tiles[+k.slice(1)] : bd.sea[+k.slice(1)];
       const o = makeCloud(t.q * 131 + t.r * 71);

@@ -30,6 +30,7 @@ const PHASE_TEXT = {
   robber: tk('Mover el ladrón'), roadBuilding: tk('Caminos gratis'), gameOver: tk('Fin de la partida'), aqueduct: tk('Acueducto'), pillage: tk('Saqueo bárbaro'), progressPick: tk('Carta de progreso'), progressDiscard: tk('Descartar progreso'), harbor: tk('Puerto comercial'), wedding: tk('Boda'), deserter: tk('Desertor'), deserterPlace: tk('Desertor'), displace: tk('Recolocar caballero'),
   // Traders & Barbarians scenarios and variants
   caravanVote: tk('Votación de camellos'), caravanPick: tk('Elegir el camello'), baSteal: tk('Robar una carta'), baCard: tk('Carta de los bárbaros'), tbBarbarian: tk('Mover un bárbaro'), evChoice: tk('Carta de evento'), neutralBuild: tk('Pieza neutral'), twoGive: tk('Intercambio forzado'),
+  epMove: tk('Mover barcos'), // Explorers & Pirates
 };
 // a translated sentence whose {slots} are filled with elements (word order differs between languages)
 const slots = (s, parts) => s.split(/\{(\w+)\}/).map((x, i) => (i % 2 ? parts[x] : x)).filter(x => x !== '');
@@ -267,6 +268,9 @@ function handleFx(st) {
         break;
       case 'gold':
         Riv.riverFx(st, f, v, { toast }); // Traders & Barbarians: Rivers
+        break;
+      case 'epDiscover': // Explorers & Pirates
+        EpUI.epFx(st, f, v, { toast });
         break;
       case 'eventCard': { // Catan Event Cards
         if (!f.event) break;
@@ -759,6 +763,8 @@ function bannerText(st, v, inter) {
     if (inter && inter.kind === 'ship') return `${blind}${Sea.seaBanner(st, v, ui, inter)}`; // Seafarers
     return `${blind}${st.setup.step === 'settlement' ? (st.config.rules.setupCity && st.setup.queue[st.setup.idx].round === st.setup.lastRound ? t('Coloca tu ciudad') : t('Coloca tu poblado')) : t('Coloca tu camino')}`;
   }
+  const ep = EpUI.epBanner(st, v); // Explorers & Pirates: the ship phase
+  if (ep) return ep;
   if (st.phase === 'aqueduct') return st.pendingAqueduct[v] ? t('🟩 Acueducto: elige 1 recurso') : t('🟩 Esperando el acueducto...');
   if (st.phase === 'displace') return t('🐎 {name} recoloca su caballero...', { name: st.players[st.displaced.pid].name });
   if (st.phase === 'pillage') return (inter && CK.ckBanner(st, ui, inter)) || t('🔥 Los bárbaros saquean: esperando a los perdedores...');
@@ -1007,6 +1013,10 @@ function fillActions(bar, st, v, locked) {
     acts.append(h('button', { class: 'btn', onclick: () => App.dispatch({ type: 'endRoadBuilding', pid: v }) }, t('Terminar caminos')));
     return;
   }
+  if (st.phase === 'epMove') { // Explorers & Pirates: the ship phase
+    for (const el of EpUI.epMoveBar(st, v, ui, { h, dispatch: a => App.dispatch(a), canAfford: G.canAfford })) acts.append(el);
+    return;
+  }
   if (st.phase !== 'main') return;
   const buildBtn = (what, label, icon, left, legalFn) => {
     const ok = left > 0 && G.canAfford(p.res, COSTS[what]) && legalFn().length > 0;
@@ -1020,7 +1030,7 @@ function fillActions(bar, st, v, locked) {
     buildBtn('road', t('Camino'), '🛤️', p.roadsLeft, () => G.legalRoads(st, v)),
     buildBtn('settlement', t('Poblado'), '🏠', p.settlementsLeft, () => G.legalSettlements(st, v)),
     EpUI.hasEP(st) ? '' : buildBtn('city', t('Ciudad'), '🏰', p.citiesLeft, () => G.legalCities(st, v)), // Explorers & Pirates: no cities
-    ...EpUI.epButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Explorers & Pirates
+    ...EpUI.epButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, dispatch: a => App.dispatch(a), openGold: () => openModal(() => Riv.goldModal(App.state, v, { h, dispatch: a => App.dispatch(a), close: closeModal })) }), // Explorers & Pirates
     ...Sea.seaButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford }),
     ...CK.ckButtons(st, v, ui, { h, rerender: () => render(App.state), costIcons, canAfford: G.canAfford, openImprove: () => openImprove(v) }),
     ...CK.knightButtons(st, v, ui, { h, openKnights: () => openKnights(v), dispatch: a => App.dispatch(a), costIcons }),

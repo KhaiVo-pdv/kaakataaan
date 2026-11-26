@@ -82,7 +82,7 @@ export function riverStats(st, p, { h }) {
 export function riverFx(st, f, v, { toast }) {
   if (f.kind !== 'gold') return false;
   if (f.pid === v) {
-    const why = { settlement: t('poblado junto al río'), road: t('camino junto al río'), bridge: t('puente'), trade: t('cambio'), noProduction: t('sin cosecha') }[f.what] || '';
+    const why = { settlement: t('poblado junto al río'), road: t('camino junto al río'), bridge: t('puente'), trade: t('cambio'), noProduction: t('sin cosecha'), discover: t('mar descubierto') }[f.what] || '';
     toast(t('🪙 +{n} de oro ({why})', { n: f.n, why }), 'good');
   }
   return true;
