@@ -1014,7 +1014,7 @@ function fillActions(bar, st, v, locked) {
     return;
   }
   if (st.phase === 'epMove') { // Explorers & Pirates: the ship phase
-    for (const el of EpUI.epMoveBar(st, v, ui, { h, dispatch: a => App.dispatch(a), canAfford: G.canAfford })) acts.append(el);
+    for (const el of EpUI.epMoveBar(st, v, ui, { h, dispatch: a => App.dispatch(a), canAfford: G.canAfford, rerender: () => render(App.state) })) acts.append(el);
     return;
   }
   if (st.phase !== 'main') return;

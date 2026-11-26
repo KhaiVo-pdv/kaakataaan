@@ -2146,7 +2146,7 @@ export class Board3D {
     this.robberTile = robberOn && bd.tiles[bd.robber].res !== 'desert' ? bd.tiles[bd.robber] : null;
     // Seafarers fog: face-down fog tiles (land 'L<id>', sea 'S<id>') get a cloud
     const fogKeys = bd.islands || bd.explorers ? [...bd.tiles.filter(t => t.fog && !t.revealed).map(t => 'L' + t.id), ...bd.sea.filter(t => t.fog && !t.revealed).map(t => 'S' + t.id)] : [];
-    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, st.epShips ? st.epShips.map(x => x.id + ':' + x.edge + ':' + x.cargo.length) : null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, st.barbAttack ? [st.barbAttack.on, st.barbAttack.knights, st.barbAttack.conquered] : null, st.damagedRoads ? Object.keys(st.damagedRoads) : null, st.traders ? [st.traders.barbarians, st.traders.wagons, Object.values(st.traders.stacks).map(x => x.length), st.players.map(p => tbWagonAt(st, p.id))] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
+    const key = JSON.stringify([st.roads, st.buildings, robberOn && bd.robber, st.ships || null, st.epShips ? [st.epShips.map(x => x.id + ':' + x.edge + ':' + x.cargo.length), st.explorers.waiting] : null, bd.pirate ?? null, fogKeys, st.knights || null, st.merchant || null, st.walls || null, st.metropolis || null, st.barbarians ? st.barbarians.pos : null, st.caravans ? [st.caravans.camels, st.caravans.vote && (st.phase === 'caravanPick' ? st.caravans.vote.tied : st.caravans.vote.options)] : null, st.barbAttack ? [st.barbAttack.on, st.barbAttack.knights, st.barbAttack.conquered] : null, st.damagedRoads ? Object.keys(st.damagedRoads) : null, st.traders ? [st.traders.barbarians, st.traders.wagons, Object.values(st.traders.stacks).map(x => x.length), st.players.map(p => tbWagonAt(st, p.id))] : null, view.blindOwn || [], st.players.map(p => p.color + (p.flag || '').length + '|' + this.goldLevel(p) + '|' + (p.style || '')),
       inter && [inter.kind, inter.color, [...inter.legal].sort((a, b) => a - b), inter.labels || null], this.staticKey]);
     if (key === this.dynKey) return;
     this.dynKey = key;
@@ -2506,6 +2506,12 @@ export class Board3D {
         tag.position.set(p.x, 0.9, p.z);
         this.dynGroup.add(tag);
       }
+    }
+    for (const v in (st.explorers && st.explorers.waiting) || {}) { // E&P: settlers waiting on a harbor
+      const V = bd.vertices[v];
+      const tag = css2d('tok3d-at', '<div class="tok3d">👤</div>');
+      tag.position.set(V.x - 0.25, vy(+v) + 0.9, V.y);
+      this.dynGroup.add(tag);
     }
     for (const k of fogKeys) {
       const t = k[0] === 'L' ? bd.tiles[+k.slice(1)] : bd.sea[+k.slice(1)];

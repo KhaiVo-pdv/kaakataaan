@@ -1,7 +1,8 @@
 // Explorers & Pirates: action bar buttons, board picks and player stats (called from gameView.js).
 import * as G from '../engine/game.js';
-import { HARBOR_COST, SHIP_COST, BOOST_COST, BOOST_MP } from '../engine/explorersPirates/rules.js';
+import { HARBOR_COST, SHIP_COST, BOOST_COST, BOOST_MP, SETTLER_COST } from '../engine/explorersPirates/rules.js';
 import * as Ships from '../engine/explorersPirates/ships.js';
+import * as Settlers from '../engine/explorersPirates/settlers.js';
 import { t } from '../i18n.js';
 
 export const hasEP = st => !!st.explorers;
@@ -24,6 +25,12 @@ export function epButtons(st, v, ui, { h, rerender, costIcons, canAfford, openGo
       onclick: e => { e.stopPropagation(); ui.pick = ui.pick === 'epShip' ? null : 'epShip'; rerender(); },
     }, h('span', { class: 'bicon' }, '⛵'), h('span', null, t('Barco'), h('span', { class: 'cost' }, costIcons(SHIP_COST)))),
     h('button', {
+      class: 'btn', 'data-testid': 'ep-settler',
+      disabled: !(p.settlersLeft > 0 && p.settlementsLeft > 0 && canAfford(p.res, SETTLER_COST) && Settlers.settlerHome(st, v)),
+      title: t('{label} — cuesta {cost} (quedan {left})', { label: t('Colono'), cost: costIcons(SETTLER_COST), left: p.settlersLeft }) + ' · ' + t('Sube a tu barco junto al poblado portuario, o espera en el puerto.'),
+      onclick: () => dispatch({ type: 'build', pid: v, what: 'epSettler' }),
+    }, h('span', { class: 'bicon' }, '👤'), h('span', null, t('Colono'), h('span', { class: 'cost' }, costIcons(SETTLER_COST)))),
+    h('button', {
       class: 'btn', 'data-testid': 'ep-sail', disabled: !st.epShips.some(x => x.owner === v),
       title: t('Pasa a mover tus barcos (después ya no puedes construir ni comerciar)'),
       onclick: () => { ui.pick = null; ui.epShip = null; dispatch({ type: 'epSail', pid: v }); },
@@ -44,9 +51,13 @@ export function epAfford(st, v) {
 export function epInteraction(st, v, ui, { mk, dispatch, rerender }) {
   if (!hasEP(st) || st.current !== v) return undefined;
   if (st.phase === 'epMove') {
-    // tap one of your ships, then a highlighted edge
-    const mine = st.epShips.filter(x => x.owner === v && Ships.shipMp(st, x) > 0);
+    // tap one of your ships, then a highlighted edge (or, founding, a highlighted corner)
+    const mine = st.epShips.filter(x => x.owner === v && (Ships.shipMp(st, x) > 0 || Settlers.foundSpots(st, x).length || Settlers.loadable(st, x) !== null));
     const sel = mine.find(x => x.id === ui.epShip);
+    if (sel && ui.epFound) return mk('settlement', Settlers.foundSpots(st, sel), at => {
+      ui.epFound = false;
+      dispatch({ type: 'epFound', pid: v, ship: sel.id, at });
+    });
     if (!sel) return mk('road', mine.map(x => x.edge), e => { ui.epShip = (mine.find(x => x.edge === e) || {}).id; rerender(); });
     const R = Ships.reachable(st, sel);
     const others = mine.filter(x => x !== sel).map(x => x.edge);
@@ -80,17 +91,25 @@ export function epDescribe(a) {
   if (a.type === 'build' && a.what === 'epShip') return t('⛵ Construye un barco junto a tu poblado portuario.');
   if (a.type === 'epSail') return t('🧭 Pasa a mover tus barcos.');
   if (a.type === 'epMove') return t('⛵ Navega hacia las casillas boca abajo.');
+  if (a.type === 'build' && a.what === 'epSettler') return t('👤 Prepara un colono.');
+  if (a.type === 'epLoad') return t('👤 Recoge el colono que espera en tu puerto.');
+  if (a.type === 'epFound') return t('🏠 Funda un poblado con el colono.');
   if (a.type === 'epBoost') return t('🐑 Paga 1 lana: el barco navega 2 aristas más.');
   return null;
 }
 
 // the action bar while sailing: pick a ship, +2 for a wool, finish the turn
-export function epMoveBar(st, v, ui, { h, dispatch, canAfford }) {
+export function epMoveBar(st, v, ui, { h, dispatch, canAfford, rerender }) {
   const mine = st.epShips.filter(x => x.owner === v);
-  const sel = mine.find(x => x.id === ui.epShip && Ships.shipMp(st, x) > 0);
+  const sel = mine.find(x => x.id === ui.epShip);
   const out = [h('div', { class: 'waiting' }, sel
-    ? t('⛵ Barco: {n} pasos. Toca una arista resaltada.', { n: Ships.shipMp(st, sel) })
+    ? (ui.epFound ? t('👤 Toca la esquina donde fundar el poblado') : t('⛵ Barco: {n} pasos. Toca una arista resaltada.', { n: Ships.shipMp(st, sel) }))
     : t('⛵ Toca uno de tus barcos'))];
+  if (sel && Settlers.loadable(st, sel) !== null) out.push(h('button', { class: 'btn', 'data-testid': 'ep-load', onclick: () => dispatch({ type: 'epLoad', pid: v, ship: sel.id }) }, t('👤 Recoger colono')));
+  if (sel && Settlers.foundSpots(st, sel).length) out.push(h('button', {
+    class: 'btn' + (ui.epFound ? ' active' : ''), 'data-testid': 'ep-found',
+    onclick: () => { ui.epFound = !ui.epFound; rerender(); },
+  }, t('🏠 Fundar poblado')));
   if (sel) out.push(h('button', {
     class: 'btn', 'data-testid': 'ep-boost', disabled: sel.boosted || sel.stopped || !canAfford(st.players[v].res, BOOST_COST),
     title: t('🐑 Paga 1 lana: el barco navega 2 aristas más.'),

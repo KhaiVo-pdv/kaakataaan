@@ -31,5 +31,10 @@ export function drawEpShips(S, U, st, prevPieces) {
     g.append(sh);
     if (ship.cargo.includes('settler')) g.append(S('text', { x: p.x * U + 10, y: p.z * U - 8, 'font-size': 11, class: 'ep-cargo' }, '👤'));
   }
+  // settlers waiting on a harbor settlement
+  for (const v in (st.explorers && st.explorers.waiting) || {}) {
+    const V = st.board.vertices[v];
+    g.append(S('text', { x: V.x * U - 18, y: V.y * U - 8, 'font-size': 12, class: 'ep-waiting' }, '👤'));
+  }
   return { g, keys };
 }
