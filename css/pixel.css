@@ -177,6 +177,14 @@ input[type=range] { accent-color: var(--sand); }
 .tok3d.wide { width: auto; height: 28px; padding: 2px 6px 0; font-size: 12px; letter-spacing: -1px; }
 /* winning number: soft green blink for ~2.6s. Only background/box-shadow/translate are animated:
    `transform` belongs to CSS2DRenderer (animating it made the tokens jump around the screen). */
+/* toon map style (needs !important to beat the pixel UI's square corners): round cream discs with dots, pill-shaped port signs (like the preview) */
+.labels-3d.toon .tok3d { border-radius: 50% !important; background: #f5e8c8; font-family: "Nunito", system-ui, sans-serif; font-weight: 900; font-size: 17px; -webkit-font-smoothing: auto; gap: 2px; padding-top: 3px; box-shadow: 0 0 0 3px #2a2440, 2px 4px 0 rgba(0,0,0,.25); }
+.labels-3d.toon .tok3d.red span { color: #c8352a; }
+.labels-3d.toon .tok3d .pbar b { width: 4px; height: 4px !important; border-radius: 50% !important; background: #2a2440 !important; box-shadow: none; }
+.labels-3d.toon .tok3d.red .pbar b { background: #c8352a !important; }
+.labels-3d.toon .tok3d.wide { border-radius: 14px !important; }
+.labels-3d.toon .tok3d.fish3d { box-shadow: 0 0 0 3px #1c5d8c, 2px 4px 0 rgba(0,0,0,.25); }
+.labels-3d.toon .port3d { border-radius: 999px !important; padding: 2px 9px; font-family: "Nunito", system-ui, sans-serif; font-weight: 900; box-shadow: 0 0 0 3px #2a2440, 2px 4px 0 rgba(0,0,0,.25); }
 .tok3d.rolled { animation: tokWin .65s ease-in-out 4; }
 @keyframes tokWin { 50% { background: #7ee2a0; translate: 0 -3px; box-shadow: 0 0 0 3px var(--ink), 0 0 0 6px var(--green), inset -3px -3px 0 #3fae68, 4px 5px 0 1px rgba(0,0,0,.35); } }
 .port3d { font-family: var(--num); background: var(--white); color: var(--ink); padding: 2px 6px; font-size: 14px; font-weight: 700; box-shadow: 0 0 0 3px var(--ink), 3px 4px 0 1px rgba(0,0,0,.35); display: flex; gap: 3px; align-items: center; }

@@ -26,7 +26,7 @@ import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
 import { epShipSpot } from './explorers2d.js';
 import { makeStyledBuilding, makeStyledMetro, makeStyledWall } from './pieceStyles3d.js';
-import { buildToonIsland, toonField, makeToonHouse, TOON_HOUSE_SCALE } from './toonBoard3d.js';
+import { buildToonIsland, toonField, makeToonHouse, makeToonRoad, makeToonRobber, makeToonBoat, TOON_HOUSE_SCALE } from './toonBoard3d.js';
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 import { makeFishingGround } from './fishermen3d.js';
 import { makeBridge, makeBridgeSpot } from './rivers3d.js';
@@ -774,7 +774,8 @@ function tuftGeometry(blades, height, width, base, tip) {
 
 // ---------- toon map style (optional, see SETTINGS.mapStyle) ----------
 // fixed summer daylight; colours tuned to read well under ACES tone mapping
-const TOON = { skyTop: '#5fb8f0', skyBottom: '#d8f1ff', fog: '#cfeefc', hemiSky: '#ffffff', hemiGround: '#9cb07a', hemiI: 1.15, sun: '#fffaf0', sunI: 2.6 };
+// same light as the approved preview (noon): no tone mapping, no vignette, 3-step ramp 90/170/255
+const TOON = { skyTop: '#6cc4f5', skyBottom: '#bfe8ff', fog: '#bfe8ff', hemiSky: '#e9f4ff', hemiGround: '#6b5a40', hemiI: 1.15, sun: '#fff6e0', sunI: 2.8 };
 // vertical gradient used as the screen background (top of the screen = deeper blue)
 function toonSkyTexture() {
   const c = document.createElement('canvas');
@@ -793,7 +794,7 @@ function toonSkyTexture() {
 
 // 3-step light ramp of the toon shading (dark side, mid, lit)
 const TOON_RAMP = (() => {
-  const t = new THREE.DataTexture(new Uint8Array([150, 210, 255]), 3, 1, THREE.RedFormat);
+  const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat);
   t.minFilter = t.magFilter = THREE.NearestFilter;
   t.needsUpdate = true;
   return t;
@@ -1020,10 +1021,13 @@ export class Board3D {
       this.outlinePass.uniforms.tAll.value = this.maskAll.texture;
       c.addPass(this.outlinePass);
     }
-    const vig = new ShaderPass(VignetteShader);
-    vig.uniforms.offset.value = 0.95;
-    vig.uniforms.darkness.value = 1.05;
-    c.addPass(vig);
+    if (SETTINGS.mapStyle !== 'toon') {
+      // the toon style keeps its corners bright (like the preview)
+      const vig = new ShaderPass(VignetteShader);
+      vig.uniforms.offset.value = 0.95;
+      vig.uniforms.darkness.value = 1.05;
+      c.addPass(vig);
+    }
     this.resize();
   }
 
@@ -1060,6 +1064,7 @@ export class Board3D {
       this.hemi.intensity = TOON.hemiI;
       this.sun.color.set(TOON.sun);
       this.sun.intensity = TOON.sunI;
+      this.renderer.toneMapping = THREE.NoToneMapping; // flat, vivid colours like the preview
       this.renderer.toneMappingExposure = 1.0;
     } else {
       scene.background = null;
@@ -1072,8 +1077,11 @@ export class Board3D {
       this.hemi.intensity = 0.35;
       this.sun.color.set('#fff0d8');
       this.sun.intensity = 3.4;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 0.92;
     }
+    // round cream number discs and pill-shaped port signs (css/pixel.css)
+    this.labels.domElement.classList.toggle('toon', toon);
   }
 
   resize() {
@@ -1898,7 +1906,7 @@ export class Board3D {
         for (const m of [walk, post, tip]) m.castShadow = m.receiveShadow = true;
         this.staticGroup.add(walk, post, tip);
       }
-      const boat = this.kit.boat.clone();
+      const boat = SETTINGS.mapStyle === 'toon' ? makeToonBoat({ patch, ramp: TOON_RAMP }) : this.kit.boat.clone();
       boat.position.set(port.x + port.ny * 0.3, 0.0, port.y - port.nx * 0.3);
       boat.rotation.y = -Math.atan2(port.ny, port.nx) + Math.PI / 2;
       boat.scale.setScalar(1.35);
@@ -2342,10 +2350,19 @@ export class Board3D {
     const colors = c => ({ Player: c, Banner: c, PlayerWood: c });
     const road = (eid, color, ghost) => {
       const E = bd.edges[eid], a = bd.vertices[E.a], b = bd.vertices[E.b];
-      const lv = ghost ? 0 : this.goldLevel(st.players[st.roads[eid]]);
-      const o = gild(tinted(kit.road, colors(color)), lv >= 2 ? ['Wood'] : [], lv >= 5);
       const ya = vy(E.a), yb = vy(E.b);
       const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (SETTINGS.mapStyle === 'toon') {
+        // toon style: a plain outlined bar in the player's colour
+        const o = makeToonRoad(color, len, { patch, ramp: TOON_RAMP });
+        o.position.set((a.x + b.x) / 2, (ya + yb) / 2 - 0.01, (a.y + b.y) / 2);
+        o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+        if (ghost) ghostify(o);
+        add(o, 'r' + eid + (ghost ? 'g' : ''), color);
+        return;
+      }
+      const lv = ghost ? 0 : this.goldLevel(st.players[st.roads[eid]]);
+      const o = gild(tinted(kit.road, colors(color)), lv >= 2 ? ['Wood'] : [], lv >= 5);
       o.position.set((a.x + b.x) / 2, (ya + yb) / 2 + 0.01, (a.y + b.y) / 2);
       o.rotation.order = 'YZX';
       o.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
@@ -2498,6 +2515,7 @@ export class Board3D {
       }
     }
     for (const [key, others] of ends) {
+      if (SETTINGS.mapStyle === 'toon') break; // toon roads are plain bars: no plank joints
       const [vid, owner] = key.split(':').map(Number);
       const color = st.players[owner].color;
       const lv = this.goldLevel(st.players[owner]);
@@ -2590,10 +2608,11 @@ export class Board3D {
 
     if (robberOn) {
       const t = bd.tiles[bd.robber];
-      const o = kit.robber.clone();
+      const toonR = SETTINGS.mapStyle === 'toon';
+      const o = toonR ? makeToonRobber({ patch, ramp: TOON_RAMP }) : kit.robber.clone();
       const x = t.x - 0.3, z = t.y + 0.22;
       o.position.set(x, Math.max(this.heightAt(x, z), 0.1), z);
-      o.scale.setScalar(1.8);
+      o.scale.setScalar(toonR ? 1 : 1.8);
       add(o, 'robber' + t.id);
       // a pulsing red ring at the robber's feet so it is easy to spot (shared geometry/material)
       this.robberHaloKit ||= {
