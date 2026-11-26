@@ -3360,7 +3360,7 @@ t('E&P colonos: fundar respeta las reglas', () => {
   const { ship, v } = epFoundSetup(s);
   act(s, { type: 'epSail', pid: 0 });
   const bd = s.board;
-  const far = bd.vertices.find(V => V.hexes.length && !bd.edges[ship.edge].a !== V.id && V.id !== bd.edges[ship.edge].a && V.id !== bd.edges[ship.edge].b);
+  const far = bd.vertices.find(V => V.hexes.length && V.id !== bd.edges[ship.edge].a && V.id !== bd.edges[ship.edge].b);
   ok(!act(s, { type: 'epFound', pid: 0, ship: ship.id, at: far.id }).ok, 'solo en la arista del barco');
   s.players[0].settlementsLeft = 0;
   ok(!act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok, 'sin poblados');
@@ -3404,6 +3404,31 @@ t('E&P: los bots llevan colonos a las tierras nuevas', () => {
   }
   ok(founded >= 6, `poblados fundados por colonos: ${founded}`);
   ok(newLand >= 6, `edificios en tierras nuevas: ${newLand}`);
+});
+
+t('E&P colonos: sin poblados no se prepara un colono', () => {
+  const s = epMain();
+  myShip(s).cargo = [];
+  s.players[0].settlementsLeft = 0;
+  give(s, 0, { wood: 1, brick: 1, sheep: 1, wheat: 1 });
+  ok(!act(s, { type: 'build', pid: 0, what: 'epSettler' }).ok);
+  eq(s.players[0].res.wood, 1, 'no paga');
+});
+
+t('E&P + niebla: fundar junto a alguien oculto choca sin perder el colono', () => {
+  const s = epMain(c => { c.modes.fog = true; });
+  const { ship, v } = epFoundSetup(s);
+  const bd = s.board;
+  // a rival settlement next to v that player 0 can't see
+  const nb = bd.vertices[v].adj.find(w => bd.vertices[w].hexes.length && !s.buildings[w]);
+  s.buildings[nb] = { owner: 1, type: 'settlement' };
+  const view = G.viewFor(s, 0);
+  if (view.buildings[nb]) return; // visible after all: nothing to test on this seed
+  act(s, { type: 'epSail', pid: 0 });
+  const r = act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v });
+  ok(r.ok && r.blocked, JSON.stringify(r));
+  eq(s.buildings[v], undefined);
+  eq(ship.cargo, ['settler'], 'el colono sigue en el barco');
 });
 
 

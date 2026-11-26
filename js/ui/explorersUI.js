@@ -54,7 +54,7 @@ export function epInteraction(st, v, ui, { mk, dispatch, rerender }) {
     // tap one of your ships, then a highlighted edge (or, founding, a highlighted corner)
     const mine = st.epShips.filter(x => x.owner === v && (Ships.shipMp(st, x) > 0 || Settlers.foundSpots(st, x).length || Settlers.loadable(st, x) !== null));
     const sel = mine.find(x => x.id === ui.epShip);
-    if (sel && ui.epFound) return mk('settlement', Settlers.foundSpots(st, sel), at => {
+    if (sel && ui.epFound && Settlers.foundSpots(st, sel).length) return mk('settlement', Settlers.foundSpots(st, sel), at => {
       ui.epFound = false;
       dispatch({ type: 'epFound', pid: v, ship: sel.id, at });
     });
@@ -103,7 +103,7 @@ export function epMoveBar(st, v, ui, { h, dispatch, canAfford, rerender }) {
   const mine = st.epShips.filter(x => x.owner === v);
   const sel = mine.find(x => x.id === ui.epShip);
   const out = [h('div', { class: 'waiting' }, sel
-    ? (ui.epFound ? t('👤 Toca la esquina donde fundar el poblado') : t('⛵ Barco: {n} pasos. Toca una arista resaltada.', { n: Ships.shipMp(st, sel) }))
+    ? (ui.epFound && Settlers.foundSpots(st, sel).length ? t('👤 Toca la esquina donde fundar el poblado') : t('⛵ Barco: {n} pasos. Toca una arista resaltada.', { n: Ships.shipMp(st, sel) }))
     : t('⛵ Toca uno de tus barcos'))];
   if (sel && Settlers.loadable(st, sel) !== null) out.push(h('button', { class: 'btn', 'data-testid': 'ep-load', onclick: () => dispatch({ type: 'epLoad', pid: v, ship: sel.id }) }, t('👤 Recoger colono')));
   if (sel && Settlers.foundSpots(st, sel).length) out.push(h('button', {
@@ -115,7 +115,7 @@ export function epMoveBar(st, v, ui, { h, dispatch, canAfford, rerender }) {
     title: t('🐑 Paga 1 lana: el barco navega 2 aristas más.'),
     onclick: () => dispatch({ type: 'epBoost', pid: v, ship: sel.id }),
   }, `🐑 +${BOOST_MP}`));
-  out.push(h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => { ui.epShip = null; dispatch({ type: 'endTurn', pid: v }); } }, t('✅ Terminar')));
+  out.push(h('button', { class: 'btn green', 'data-testid': 'end-turn', onclick: () => { ui.epShip = null; ui.epFound = false; dispatch({ type: 'endTurn', pid: v }); } }, t('✅ Terminar')));
   return out;
 }
 

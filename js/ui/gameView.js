@@ -93,6 +93,7 @@ export function gameScreen(root) {
     if (e.key === 'Escape') {
       if (ui.emoteBox) return toggleEmotes(null, false);
       ui.pick = null;
+      ui.epFound = false;
       closeModal();
       render(App.state);
     }
@@ -368,6 +369,8 @@ function handleFx(st) {
     ui.pick = null;
     ui.seaMode = false; // Seafarers road/ship switch starts on "road" every turn
     ui.pirateMode = false; // and the robber/pirate switch on "robber"
+    ui.epFound = false; // Explorers & Pirates: the found-a-settlement mode
+    ui.epShip = null;
     if (st.phase !== 'setup' && localHumans(st).includes(st.current)) play.turn();
   }
 }

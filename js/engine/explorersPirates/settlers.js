@@ -1,8 +1,7 @@
 // Explorers & Pirates: settlers. A settler boards one of your ships lying next to one of your
 // harbor settlements (or waits on that harbor, 1 per harbor), and founds a free settlement at
 // either end of the coast edge its ship is on.
-import { SHIP_CAPACITY } from './rules.js';
-import { nearHidden } from './rules.js';
+import { SHIP_CAPACITY, nearHidden } from './rules.js';
 
 const harborsOf = (s, pid) => Object.keys(s.buildings).map(Number).filter(v => s.buildings[v].owner === pid && s.buildings[v].type === 'harbor');
 const touches = (s, ship, v) => s.board.edges[ship.edge].a === v || s.board.edges[ship.edge].b === v;

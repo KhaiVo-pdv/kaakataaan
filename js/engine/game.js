@@ -2475,6 +2475,7 @@ H.build = (s, a) => {
     // Explorers & Pirates: a settler boards a ship at your harbor, or waits on the harbor
     if (!s.explorers) fail('Construcción desconocida.');
     if (p.settlersLeft <= 0) fail('No te quedan colonos.');
+    if (p.settlementsLeft <= 0) fail('No te quedan poblados.');
     const home = EpSettlers.settlerHome(s, a.pid);
     if (!home) fail('No hay sitio: hace falta un barco junto a tu poblado portuario o un puerto libre.');
     if (!canAfford(p.res, EpRules.SETTLER_COST)) fail('Te faltan recursos.');
@@ -2870,7 +2871,17 @@ H.epLoad = (s, a) => {
 };
 H.epFound = (s, a) => {
   const ship = epShipOf(s, a);
-  if (!EpSettlers.foundSpots(s, ship).includes(a.at)) fail('El colono no puede fundar un poblado ahí.');
+  if (!EpSettlers.foundSpots(s, ship).includes(a.at)) {
+    // fog of war: legal in what you see, but someone hidden is next to it — you bump into them
+    const view = s.config.modes.fog ? viewFor(s, a.pid) : null;
+    if (view && EpSettlers.foundSpots(view, view.epShips.find(x => x.id === ship.id)).includes(a.at)) {
+      discover(s, a.pid, 'vertex', a.at);
+      s.fx.push({ kind: 'blocked', pid: a.pid, what: 'vertex', at: a.at });
+      log(s, msg('🌑 @{p} tropezó con alguien en la niebla y no pudo construir.', { p: a.pid }), a.pid);
+      throw new Blocked();
+    }
+    fail('El colono no puede fundar un poblado ahí.');
+  }
   const p = s.players[a.pid];
   ship.cargo.splice(ship.cargo.indexOf('settler'), 1);
   p.settlersLeft++; // the settler piece goes back to the supply
