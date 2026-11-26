@@ -105,3 +105,7 @@ export function findIslands(tiles, adj, desertSplits) {
   }
   return islands;
 }
+
+// Online play: board.sea travels once, so sea reveals are sent as a short key ('1' = face up)
+export const seaRevealKey = sea => sea.map(t => (t.revealed === false ? '0' : '1')).join('');
+export const applySeaReveal = (sea, key) => sea.map((t, i) => (key[i] === undefined ? t : { ...t, revealed: key[i] === '1' }));

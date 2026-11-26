@@ -14,6 +14,8 @@ import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import { EP_MAPS, buildEpMap } from '../js/engine/explorersPirates/maps.js';
 import { epPlayersOk } from '../js/engine/expansions.js';
+import * as EpShips from '../js/engine/explorersPirates/ships.js';
+import { seaRevealKey, applySeaReveal } from '../js/engine/seafarers/board.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -30,7 +32,7 @@ const t = (name, fn) => {
     pass++;
   } catch (e) {
     failN++;
-    console.log('❌', name, '\n   ', e.message);
+    console.log('❌', name, '\n   ', e.message, process.env.STACK ? e.stack : '');
   }
 };
 const eq = (a, b, m = '') => {
@@ -3076,6 +3078,143 @@ t('E&P: como mucho 4 jugadores', () => {
   ok(epPlayersOk(epConfig()), '4 vale');
   ok(!epPlayersOk(epConfig(c => { c.players.push({ ...c.players[0], name: 'X' }); })), '5 no');
   ok(epPlayersOk(defaultConfig()), 'sin la expansión da igual');
+});
+
+// ---- E&P 2b: ships and discovery ----
+const myShip = (s, pid = 0) => s.epShips.find(x => x.owner === pid);
+const sailTo = (s, ship, to) => act(s, { type: 'epMove', pid: ship.owner, ship: ship.id, to });
+
+t('E&P barcos: construir junto a tu puerto', () => {
+  const s = epMain();
+  const edges = EpShips.shipBuildEdges(s, 0);
+  ok(edges.length > 0, 'hay sitio');
+  const harbor = +epBuildings(s, 0, 'harbor')[0];
+  ok(edges.every(e => { const E = s.board.edges[e]; return (E.a === harbor || E.b === harbor) && EpShips.sailable(s.board, e); }), 'junto al puerto y en el agua');
+  ok(!act(s, { type: 'build', pid: 0, what: 'epShip', at: edges[0] }).ok, 'sin recursos');
+  give(s, 0, { wood: 3, sheep: 3 });
+  ok(act(s, { type: 'build', pid: 0, what: 'epShip', at: edges[0] }).ok);
+  eq([s.players[0].shipsLeft, s.players[0].res.wood, s.players[0].res.sheep], [1, 2, 2]);
+  // an edge with 2 ships is full
+  const full = edges[0];
+  s.epShips.push({ id: 99, owner: 1, edge: full, cargo: [] });
+  ok(!EpShips.shipBuildEdges(s, 0).includes(full), 'arista llena');
+  ok(act(s, { type: 'build', pid: 0, what: 'epShip', at: EpShips.shipBuildEdges(s, 0)[0] }).ok, 'tercer barco');
+  ok(!act(s, { type: 'build', pid: 0, what: 'epShip', at: EpShips.shipBuildEdges(s, 0)[0] }).ok, 'no quedan barcos');
+});
+
+t('E&P barcos: navegar 4 pasos, +2 con lana una vez', () => {
+  const s = epMain();
+  const ship = myShip(s);
+  ok(!sailTo(s, ship, ship.edge).ok, 'hay que pasar a la fase de barcos');
+  ok(act(s, { type: 'epSail', pid: 0 }).ok);
+  eq(s.phase, 'epMove');
+  const R = EpShips.reachable(s, ship);
+  ok([...R.values()].every(c => c >= 1 && c <= 4), 'coste 1..4');
+  ok([...R.keys()].every(e => EpShips.sailable(s.board, e)), 'solo agua');
+  const far = [...R.entries()].find(([e, c]) => c === 2 && !EpShips.discoveryEdge(s, e));
+  ok(far, 'hay un destino a 2');
+  ok(sailTo(s, ship, far[0]).ok);
+  eq([ship.edge, EpShips.shipMp(s, ship)], [far[0], 2]);
+  ok(!act(s, { type: 'epBoost', pid: 0, ship: ship.id }).ok, 'sin lana');
+  give(s, 0, { sheep: 2 });
+  ok(act(s, { type: 'epBoost', pid: 0, ship: ship.id }).ok);
+  eq(EpShips.shipMp(s, ship), 4);
+  ok(!act(s, { type: 'epBoost', pid: 0, ship: ship.id }).ok, 'una vez por turno');
+  const land = s.board.edges.find(E => E.kind === 'land');
+  ok(!sailTo(s, ship, land.id).ok, 'no por tierra');
+  // next turn the movement points come back
+  s.turn++;
+  eq(EpShips.shipMp(s, ship), 4);
+});
+
+t('E&P barcos: se cruza una arista llena pero no se para en ella', () => {
+  const s = epMain();
+  const ship = myShip(s);
+  act(s, { type: 'epSail', pid: 0 });
+  const R = EpShips.reachable(s, ship);
+  const one = [...R.entries()].find(([e, c]) => c === 1 && !EpShips.discoveryEdge(s, e))[0];
+  s.epShips.push({ id: 90, owner: 1, edge: one, cargo: [] }, { id: 91, owner: 2, edge: one, cargo: [] });
+  const R2 = EpShips.reachable(s, ship);
+  ok(!R2.has(one), 'no se para');
+  const beyond = s.board.vertices[s.board.edges[one].a].edges.concat(s.board.vertices[s.board.edges[one].b].edges)
+    .find(e => e !== one && e !== ship.edge && EpShips.sailable(s.board, e) && R.get(e) === 2);
+  if (beyond !== undefined) ok(R2.has(beyond), 'sí pasa por ella');
+});
+
+t('E&P barcos: mover otro barco termina el primero', () => {
+  const s = epMain();
+  give(s, 0, { wood: 1, sheep: 1 });
+  const e2 = EpShips.shipBuildEdges(s, 0)[0];
+  act(s, { type: 'build', pid: 0, what: 'epShip', at: e2 });
+  act(s, { type: 'epSail', pid: 0 });
+  const [a, b] = s.epShips.filter(x => x.owner === 0);
+  const to = [...EpShips.reachable(s, a).entries()].find(([e, c]) => c === 1 && !EpShips.discoveryEdge(s, e))[0];
+  ok(sailTo(s, a, to).ok);
+  const to2 = [...EpShips.reachable(s, b).entries()].find(([e, c]) => c === 1 && !EpShips.discoveryEdge(s, e))[0];
+  ok(sailTo(s, b, to2).ok);
+  eq(EpShips.shipMp(s, a), 0, 'el primero ya no se mueve');
+  ok(!sailTo(s, a, [...EpShips.reachable(s, a).keys()][0] ?? a.edge).ok);
+});
+
+t('E&P barcos: descubrir da recursos u oro y detiene el barco', () => {
+  const s = epMain();
+  const bd = s.board;
+  const ship = myShip(s);
+  // put the ship next to a discovery edge: any sailable edge touching a face-down hex, then step back
+  const back = E => bd.vertices[E.a].edges.concat(bd.vertices[E.b].edges).find(e => e !== E.id && EpShips.sailable(bd, e) && !EpShips.discoveryEdge(s, e));
+  const target = bd.edges.find(E => EpShips.sailable(bd, E.id) && EpShips.discoveryEdge(s, E.id) && E.hexes.length && back(E) !== undefined);
+  ship.edge = back(target);
+  act(s, { type: 'epSail', pid: 0 });
+  const tile = bd.tiles[target.hexes[0]];
+  const before = s.players[0].res[tile.res];
+  const gold = s.players[0].gold;
+  const hidden = [...target.hexes.map(h => bd.tiles[h]), ...target.sea.map(t2 => bd.sea[t2])].filter(x => x.fog && !x.revealed);
+  ok(sailTo(s, ship, target.id).ok);
+  ok(hidden.every(x => x.revealed), 'todas las de la arista se dan la vuelta');
+  ok(tile.numRevealed, 'número visible');
+  const lands = hidden.filter(x => x.res).length, seas = hidden.length - lands;
+  eq(s.players[0].res[tile.res] - before >= 1, true, 'recurso');
+  eq(s.players[0].gold - gold, 2 * seas, 'oro por mar');
+  eq(EpShips.shipMp(s, ship), 0, 'se detiene');
+});
+
+t('E&P barcos: descubrir con el banco vacío no da nada', () => {
+  const s = epMain();
+  const bd = s.board;
+  const ship = myShip(s);
+  const target = bd.edges.find(E => EpShips.sailable(bd, E.id) && E.hexes.length === 1 && E.sea.length === 1 && bd.tiles[E.hexes[0]].fog && !(bd.sea[E.sea[0]].fog));
+  if (!target) return;
+  const prev = bd.vertices[target.a].edges.concat(bd.vertices[target.b].edges).find(e => e !== target.id && EpShips.sailable(bd, e) && !EpShips.discoveryEdge(s, e));
+  ship.edge = prev;
+  const tile = bd.tiles[target.hexes[0]];
+  s.bank[tile.res] = 0;
+  act(s, { type: 'epSail', pid: 0 });
+  ok(sailTo(s, ship, target.id).ok);
+  eq(s.players[0].res[tile.res], 0);
+  ok(tile.revealed);
+});
+
+t('E&P barcos: en la fase de barcos no se construye ni se comercia', () => {
+  const s = epMain();
+  give(s, 0, { wood: 4, brick: 4, sheep: 4, wheat: 4 });
+  s.players[0].gold = 4;
+  act(s, { type: 'epSail', pid: 0 });
+  ok(!act(s, { type: 'build', pid: 0, what: 'road', at: G.legalRoads(s, 0)[0] ?? 0 }).ok, 'construir');
+  ok(!act(s, { type: 'bankTrade', pid: 0, give: 'wood', get: 'ore' }).ok, 'banco');
+  ok(!act(s, { type: 'goldBuy', pid: 0, res: 'ore' }).ok, 'oro');
+  ok(act(s, { type: 'endTurn', pid: 0 }).ok, 'terminar');
+  eq(s.current, 1);
+});
+
+t('Navegantes/E&P: el mar descubierto llega a los invitados', () => {
+  const s = G.createGame(epConfig());
+  const copy = JSON.parse(JSON.stringify(s.board.sea));
+  const fog = s.board.sea.find(x => x.fog);
+  fog.revealed = true;
+  const key = seaRevealKey(s.board.sea);
+  const out = applySeaReveal(copy, key);
+  eq(out.find(x => x.id === fog.id).revealed, true);
+  eq(out.filter(x => x.revealed === false).length, s.board.sea.filter(x => x.revealed === false).length);
 });
 
 

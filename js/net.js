@@ -9,6 +9,7 @@
 //  - the host autosaves the session and can reopen the room with the same code.
 import { App } from './app.js';
 import { applyAction, createGame } from './engine/game.js';
+import { seaRevealKey, applySeaReveal } from './engine/seafarers/board.js';
 import { toast, storage } from './ui/dom.js';
 import { t, tk, tx } from './i18n.js';
 import { validStyle, giveBotsStyles } from './ui/pieceStyles.js';
@@ -179,6 +180,7 @@ const STATIC_KEYS = ['vertices', 'edges', 'sea', 'ports', 'bounds'];
 function slim(st) {
   const board = {};
   for (const k in st.board) if (!STATIC_KEYS.includes(k)) board[k] = st.board[k];
+  if (st.board.sea && st.board.sea.some(t => t.fog)) board.seaReveal = seaRevealKey(st.board.sea); // Seafarers / E&P: sea hexes turned over
   // painted flags are images: they travel once in 'init', not with every move
   return { ...st, board, log: st.log.slice(-40), players: st.players.map(({ flag, ...p }) => (void flag, p)) };
 }
@@ -817,6 +819,7 @@ export class Net {
       st.config = this.config;
       st.players.forEach((p, i) => (p.flag = (this.flags || [])[i] || null));
       st.board = { ...this.static, ...st.board };
+      if (st.board.seaReveal) st.board.sea = applySeaReveal(this.static.sea, st.board.seaReveal);
       this.meta = msg.meta || this.meta;
       App.mySeat = msg.seat;
       App.state = st;

@@ -8,6 +8,7 @@ import { EP_SCENARIOS } from './explorersPirates/scenarios.js';
 import * as Explore from './explorersPirates/explore.js';
 import * as EpSetup from './explorersPirates/setup.js';
 import * as EpRules from './explorersPirates/rules.js';
+import * as EpShips from './explorersPirates/ships.js';
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
@@ -2458,6 +2459,16 @@ H.build = (s, a) => {
     riverGold(s, a.pid, 'settlement', a.at);
     if (s.caravans) s.caravans.built = true; // Caravans: a camel vote at the end of this turn
     if (s.barbAttack) barbariansLand(s, a.pid); // Barbarian Attack: building draws barbarians to the coast
+  } else if (a.what === 'epShip') {
+    // Explorers & Pirates: a ship on the water next to one of your harbor settlements
+    if (!s.explorers) fail('Construcción desconocida.');
+    if (p.shipsLeft <= 0) fail('No te quedan barcos.');
+    if (!EpShips.shipBuildEdges(s, a.pid).includes(a.at)) fail('Los barcos se construyen en el agua junto a tus poblados portuarios.');
+    if (!canAfford(p.res, EpRules.SHIP_COST)) fail('Te faltan recursos.');
+    pay(s, a.pid, EpRules.SHIP_COST);
+    p.shipsLeft--;
+    s.epShips.push({ id: Math.max(-1, ...s.epShips.map(x => x.id)) + 1, owner: a.pid, edge: a.at, cargo: [] });
+    log(s, msg('⛵ @{p} construye un barco.', { p: a.pid }), a.pid);
   } else if (a.what === 'harbor') {
     // Explorers & Pirates: a coastal settlement becomes a harbor settlement
     if (!s.explorers) fail('Construcción desconocida.');
@@ -2482,7 +2493,7 @@ H.build = (s, a) => {
     if (s.barbAttack) barbariansLand(s, a.pid);
   } else fail('Construcción desconocida.');
   s.fx.push({ kind: 'build', what: a.what, pid: a.pid, at: a.at });
-  if (a.what !== 'city' && a.what !== 'harbor') updateLongestRoad(s);
+  if (a.what !== 'city' && a.what !== 'harbor' && a.what !== 'epShip') updateLongestRoad(s);
   if (s.two && a.what === 'settlement') earnTokens(s, a.pid, a.at); // Catan for Two: trade tokens
   if (s.two && (a.what === 'road' || a.what === 'settlement')) startNeutralBuild(s, a.pid, a.what); // Catan for Two
 };
@@ -2789,10 +2800,62 @@ function advanceTurn(s) {
 }
 
 H.endTurn = (s, a) => {
+  if (s.explorers && s.phase === 'epMove' && a.pid === s.current) s.phase = 'main'; // Explorers & Pirates: the turn ends after sailing
   assertMain(s, a);
   if (s.caravans && startCamelVote(s)) return; // Caravans: the vote comes first, then the next turn
   if (s.barbAttack) { baBattles(s); checkWin(s); if (s.phase === 'gameOver') return; } // Barbarian Attack: knights expel barbarians
   advanceTurn(s);
+};
+
+// ---- Explorers & Pirates: the ship phase (third part of the turn) ----
+function epShipOf(s, a) {
+  if (!s.explorers || s.phase !== 'epMove') fail('Primero pasa a mover los barcos.');
+  if (a.pid !== s.current) fail('No es tu turno.');
+  const ship = s.epShips.find(x => x.id === a.ship);
+  if (!ship || ship.owner !== a.pid) fail('Ese barco no es tuyo.');
+  return ship;
+}
+H.epSail = (s, a) => {
+  if (!s.explorers) fail('Acción desconocida.');
+  assertMain(s, a);
+  s.phase = 'epMove';
+  s.explorers.activeShip = null;
+};
+H.epMove = (s, a) => {
+  const ship = epShipOf(s, a);
+  const mp = EpShips.shipMp(s, ship);
+  const cost = EpShips.reachable(s, ship).get(a.to);
+  if (cost === undefined) fail('El barco no llega ahí.');
+  // one ship at a time: moving another one ends the previous ship's movement
+  const prev = s.epShips.find(x => x.id === s.explorers.activeShip);
+  if (prev && prev !== ship) { EpShips.shipMp(s, prev); prev.mpLeft = 0; }
+  s.explorers.activeShip = ship.id;
+  const from = ship.edge;
+  ship.edge = a.to;
+  ship.mpLeft = mp - cost;
+  s.fx.push({ kind: 'epShip', pid: a.pid, ship: ship.id, from, to: a.to });
+  if (EpShips.discoveryEdge(s, a.to)) {
+    const found = Explore.discover(s, a.pid, a.to, (pid, r, k) => giveFromBank(s, pid, r, k));
+    ship.mpLeft = 0; // discovering ends the move
+    for (const f of found) {
+      s.fx.push({ kind: 'epDiscover', pid: a.pid, ...f });
+      if (f.gold) s.fx.push({ kind: 'gold', pid: a.pid, n: f.gold, what: 'discover' });
+    }
+    const what = found.map(f => (f.sea !== undefined ? '🌊' : (TILE_INFO[f.res] || {}).icon || f.res)).join(' ');
+    log(s, msg('🧭 @{p} descubre: {what}.', { p: a.pid, what }), a.pid);
+  }
+};
+H.epBoost = (s, a) => {
+  const ship = epShipOf(s, a);
+  EpShips.shipMp(s, ship);
+  if (ship.boosted) fail('Este barco ya ha usado la lana este turno.');
+  if (!canAfford(s.players[a.pid].res, EpRules.BOOST_COST)) fail('Te falta lana.');
+  const prev = s.epShips.find(x => x.id === s.explorers.activeShip);
+  if (prev && prev !== ship) { EpShips.shipMp(s, prev); prev.mpLeft = 0; }
+  s.explorers.activeShip = ship.id;
+  pay(s, a.pid, EpRules.BOOST_COST);
+  ship.boosted = true;
+  ship.mpLeft += EpRules.BOOST_MP;
 };
 
 // ---- seat management (host only: disconnections, votes) ----

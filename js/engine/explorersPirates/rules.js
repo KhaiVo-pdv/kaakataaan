@@ -6,6 +6,11 @@ export const HARBOR_VP = 2;
 export const SHIP_COST = { wood: 1, sheep: 1 };
 export const SETTLER_COST = { wood: 1, brick: 1, sheep: 1, wheat: 1 }; // same as a settlement
 export const PIECES = { settlements: 5, roads: 15, harbors: 4, ships: 3, settlers: 2 };
+export const SHIP_MP = 4; // edges a ship sails per turn
+export const BOOST_MP = 2; // +2 for 1 wool, once per ship per turn
+export const BOOST_COST = { sheep: 1 };
+export const MAX_SHIPS_PER_EDGE = 2;
+export const DISCOVER_SEA_GOLD = 2; // turning over a sea hex
 export const NO_PRODUCTION_GOLD = 1; // a roll (not a 7) that gives you nothing
 export const EP_TRADE_RATIO = 3; // no harbours: every bank trade is 3:1
 
