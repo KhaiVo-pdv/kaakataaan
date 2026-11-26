@@ -20,7 +20,7 @@ const C = {
   field: '#e8bf3f', crop: '#f4d25a', clay: '#d4643e', clayDark: '#a8492f', chimney: '#5a3a2e', rock: '#949aa2',
   snow: '#f6f9fc', sand: '#f3d48c', cactus: '#3f8f3e', side: '#86563a', wool: '#fbfbf6', sheepHead: '#2a2a33',
   fence: '#8a6a4a', millWall: '#f0e6d0', millRoof: '#b4533c', gold: '#ffcf3a', back: '#8a6443', unknown: '#9aa39c',
-  lake: '#4fb3d9', sea: '#2e9cc4', shallow: '#5fd0d6', foam: '#f4fbff', ink: '#1b1830', roofDark: '#4a3428', pole: '#3a2a1a',
+  marsh: '#7f9a4c', reed: '#5d7a32', lake: '#4fb3d9', sea: '#2e9cc4', shallow: '#5fd0d6', foam: '#f4fbff', ink: '#1b1830', roofDark: '#4a3428', pole: '#3a2a1a',
 };
 const TOP_OF = { wood: C.forest, sheep: C.meadow, wheat: C.field, brick: C.clay, ore: C.rock, desert: C.sand, gold: C.rock };
 
@@ -101,11 +101,11 @@ const G = {
 };
 
 // props of one tile, around (cx, cz); `away` keeps them off the corners where houses stand
-function tileProps(P, t, kind, cx, cz) {
+function tileProps(P, t, kind, cx, cz, blocked = () => false) {
   const R = prng(t.id * 977 + t.q * 31 + t.r * 17 + 5);
   const y0 = TOON_TOP;
   const corners = [0, 1, 2, 3, 4, 5].map(k => [Math.sin((k * Math.PI) / 3), Math.cos((k * Math.PI) / 3)]);
-  const away = (x, z, d = 0.42) => corners.every(([vx, vz]) => (vx - x) ** 2 + (vz - z) ** 2 > d * d);
+  const away = (x, z, d = 0.42) => corners.every(([vx, vz]) => (vx - x) ** 2 + (vz - z) ** 2 > d * d) && !blocked(cx + x, cz + z);
   const ring = (n, r0, r1, f) => {
     for (let i = 0, tries = 0; i < n && tries < n * 6; tries++) {
       const a = (i / n) * Math.PI * 2 + R() * 0.9, r = r0 + R() * (r1 - r0);
@@ -167,6 +167,17 @@ function tileProps(P, t, kind, cx, cz) {
       if (kind === 'gold') ring(5, 0.25, 0.6, (x, z) => put(new THREE.IcosahedronGeometry(0.06, 0), C.gold, x, y0 + 0.04, z, R() * 3));
       break;
     }
+    case 'marsh':
+      // Rivers: the marsh at a river's source, with puddles and reeds
+      ring(4, 0.2, 0.6, (x, z) => put(G.cyl(0.13, 0.13, 0.02, 12), C.lake, x, y0 + 0.005, z, 0, [1.3, 1, 0.9]));
+      ring(8, 0.25, 0.68, (x, z) => put(G.cyl(0.012, 0.016, 0.16, 5), C.reed, x, y0 + 0.08, z));
+      break;
+    case 'oasis':
+      // Caravans: a pond in the middle (the board adds the palms around it)
+      put(G.cyl(0.3, 0.3, 0.02, 20), C.lake, 0, y0 + 0.005, 0, 0, [1.2, 1, 0.9]);
+      break;
+    case 'plain':
+      break; // a trade hex or a castle hex: the board puts its building there
     case 'desert':
       ring(3, 0.3, 0.55, (x, z) => put(G.dome(0.28, 10), C.sand, x, y0, z, R() * 3, [1.4, 0.35, 0.8]));
       ring(2, 0.4, 0.55, (x, z) => {
@@ -200,15 +211,39 @@ export function buildToonIsland(st, env, faceDown) {
   const group = new THREE.Group();
   const tiles = collector(), props = collector(), water = collector();
   const lake = bd.lake >= 0 ? bd.lake : -1;
+  // tiles that get a building from the board (Traders & Barbarians trade hexes, Barbarian Attack castle): no props
+  const builtOn = new Set([...(bd.trade || []).map(T => T.hex), ...(bd.castle != null ? [bd.castle] : [])]);
+  // Rivers of Catan: straight courses through the hex centres to the middle of the mouth edge
+  const segs = [];
+  for (const rv of bd.rivers || []) {
+    const pts = rv.hexes.map(id => [bd.tiles[id].x, bd.tiles[id].y]);
+    const mouth = bd.edges[rv.mouth];
+    if (mouth) {
+      const va = bd.vertices[mouth.a], vb = bd.vertices[mouth.b];
+      pts.push([(va.x + vb.x) / 2, (va.y + vb.y) / 2]);
+    }
+    for (let i = 0; i + 1 < pts.length; i++) segs.push([...pts[i], ...pts[i + 1]]);
+  }
+  const nearRiver = (x, z) => segs.some(([ax, az, bx, bz]) => {
+    const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
+    const u = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / l2));
+    return Math.hypot(x - ax - vx * u, z - az - vz * u) < 0.24;
+  });
   for (const t of bd.tiles) {
-    const kind = !t.revealed ? (faceDown ? 'back' : 'unknown') : t.id === lake ? 'lake' : t.res;
-    const top = kind === 'back' ? C.back : kind === 'unknown' ? C.unknown : kind === 'lake' ? C.lake : TOP_OF[kind] || C.grass;
+    const kind = !t.revealed ? (faceDown ? 'back' : 'unknown') : t.id === lake || t.lake ? 'lake' : t.marsh ? 'marsh' : t.oasis ? 'oasis' : builtOn.has(t.id) ? 'plain' : t.res;
+    const top = kind === 'back' ? C.back : kind === 'unknown' ? C.unknown : kind === 'lake' ? C.lake : kind === 'marsh' ? C.marsh : kind === 'oasis' || kind === 'plain' ? TOP_OF[t.res] || C.sand : TOP_OF[kind] || C.grass;
     const slabH = TOON_TOP - 0.06 - SLAB_BOTTOM;
     tiles.put(G.hex(TILE_R, slabH), C.side, t.x, SLAB_BOTTOM + slabH / 2, t.y);
     tiles.put(G.hex(TILE_R - 0.02, 0.12), top, t.x, TOON_TOP - 0.06, t.y);
-    if (t.revealed && t.id !== lake) tileProps(props, t, t.res, t.x, t.y);
+    if (t.revealed && kind !== 'lake') tileProps(props, t, kind, t.x, t.y, nearRiver);
     water.put(G.hex(1.5, 0.02), C.shallow, t.x, -0.004, t.y);
     water.put(G.hex(1.1, 0.02), C.foam, t.x, 0.004, t.y);
+  }
+  // the rivers: a blue channel on the tile tops, with round bends at the hex centres
+  for (const [ax, az, bx, bz] of segs) {
+    const len = Math.hypot(bx - ax, bz - az);
+    water.put(G.box(len, 0.02, 0.2), C.lake, (ax + bx) / 2, TOON_TOP + 0.006, (az + bz) / 2, -Math.atan2(bz - az, bx - ax));
+    water.put(G.cyl(0.1, 0.1, 0.02, 16), C.lake, ax, TOON_TOP + 0.006, az);
   }
   tiles.build(group, mat);
   props.build(group, mat);
