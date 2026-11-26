@@ -2889,6 +2889,15 @@ t('E&P salida fija y modos de colocación', () => {
   }
 });
 
+
+// one bot step: the first pending actor with something to do (trade answers included)
+const botStep = s => {
+  for (const pid of G.pendingActors(s)) {
+    const a = botAct(s, pid);
+    if (a) return a;
+  }
+  return null;
+};
 const epMain = mut => {
   const s = G.createGame(epConfig(mut));
   s.phase = 'main';
@@ -3024,8 +3033,7 @@ t('E&P: bots juegan sin jugadas ilegales', () => {
   for (let seed = 1; seed <= 5; seed++) {
     const s = G.createGame(epConfig(c => { c.seed = seed; }));
     for (let i = 0; i < 400 && s.phase !== 'gameOver'; i++) {
-      const pid = G.pendingActors(s)[0];
-      const a = botAct(s, pid);
+      const a = botStep(s);
       if (!a) break;
       const r = G.applyAction(s, a);
       ok(r.ok, `seed ${seed}: ${JSON.stringify(a)} en ${s.phase}: ${r.error}`);
@@ -3050,7 +3058,7 @@ t('E&P: los modos de eventos no traen el ladrón', () => {
     for (let seed = 1; seed <= 4; seed++) {
       const s = G.createGame(epConfig(c => { c.seed = seed; mut(c); }));
       for (let i = 0; i < 600 && s.phase !== 'gameOver'; i++) {
-        const a = botAct(s, G.pendingActors(s)[0]);
+        const a = botStep(s);
         if (!a) break;
         ok(G.applyAction(s, a).ok);
         eq(s.board.robber, -1, `seed ${seed} jugada ${i}`);
@@ -3215,6 +3223,24 @@ t('Navegantes/E&P: el mar descubierto llega a los invitados', () => {
   const out = applySeaReveal(copy, key);
   eq(out.find(x => x.id === fog.id).revealed, true);
   eq(out.filter(x => x.revealed === false).length, s.board.sea.filter(x => x.revealed === false).length);
+});
+
+t('E&P: los bots exploran', () => {
+  let flipped = 0;
+  for (let seed = 1; seed <= 4; seed++) {
+    const s = G.createGame(epConfig(c => { c.seed = seed; c.rules.vpTarget = 30; }));
+    for (let i = 0; i < 600 && s.phase !== 'gameOver'; i++) {
+      const a = botStep(s);
+      if (!a) break;
+      const r = G.applyAction(s, a);
+      ok(r.ok, `seed ${seed}: ${JSON.stringify(a)} en ${s.phase}: ${r.error}`);
+      const per = {};
+      for (const x of s.epShips) per[x.edge] = (per[x.edge] || 0) + 1;
+      ok(Object.values(per).every(n => n <= 2), 'máximo 2 barcos por arista');
+    }
+    flipped += s.board.tiles.filter(x => x.fog && x.revealed).length + s.board.sea.filter(x => x.fog && x.revealed).length;
+  }
+  ok(flipped / 4 >= 6, `media de casillas descubiertas ${flipped / 4}`);
 });
 
 

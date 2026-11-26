@@ -13,7 +13,8 @@ import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
 import * as Traders from './tradersBarbarians/traders.js';
 import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
-import { HARBOR_COST } from './explorersPirates/rules.js';
+import { HARBOR_COST, SHIP_COST as EP_SHIP_COST, BOOST_COST, BOOST_MP } from './explorersPirates/rules.js';
+import * as EpShips from './explorersPirates/ships.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
 import { cardsOf } from './citiesKnights/commodities.js';
@@ -229,6 +230,7 @@ function chooseTarget(s, pid) {
   const spots = p.settlementsLeft > 0 ? legalSettlements(s, pid) : [];
   if (p.citiesLeft > 0 && hasSett) opts.push({ what: 'city', cost: COSTS.city, w: 0.1 });
   if (s.explorers && legalHarbors(s, pid).length) opts.push({ what: 'harbor', cost: HARBOR_COST, w: 0.1 }); // Explorers & Pirates
+  if (epWantsShip(s, pid)) opts.push({ what: 'epShip', cost: EP_SHIP_COST, w: 0.2 }); // Explorers & Pirates: a ship to explore with
   if (spots.length) opts.push({ what: 'settlement', cost: COSTS.settlement, w: 0 });
   else if (seafarersOn(s) && p.shipsLeft > 0 && p.settlementsLeft > 0 && bestShip(s, pid) !== null) opts.push({ what: 'ship', cost: SHIP_COST, w: 0.25 });
   else if (p.roadsLeft > 0 && p.settlementsLeft > 0 && bestRoad(s, pid) !== null) opts.push({ what: 'road', cost: COSTS.road, w: 0.3 });
@@ -543,6 +545,10 @@ function mainAction(s, pid) {
     const hv = best(legalHarbors(s, pid), v => vertexScore(s, pid, v, prod));
     if (hv !== null) return { type: 'build', pid, what: 'harbor', at: hv };
   }
+  if (epWantsShip(s, pid) && canAfford(p.res, EP_SHIP_COST)) {
+    const at = epShipSpot(s, pid);
+    if (at !== null) return { type: 'build', pid, what: 'epShip', at };
+  }
   if (s.explorers && handSize(p.res) > s.config.rules.handLimit) {
     const t = chooseTarget(s, pid);
     const spare = RES.filter(r => p.res[r] - ((t && t.cost[r]) || 0) >= tradeRatio(s, pid, r));
@@ -626,6 +632,50 @@ function mainAction(s, pid) {
       }
     }
   }
+  // Explorers & Pirates: after building comes the ship phase, when a ship has somewhere to go
+  if (s.explorers && s.epShips.some(x => x.owner === pid && EpShips.shipMp(s, x) > 0 && epTarget(s, x) !== null)) return { type: 'epSail', pid };
+  return { type: 'endTurn', pid };
+}
+
+// ---- Explorers & Pirates: ships ----
+const epHiddenLeft = s => s.board.tiles.some(t => t.fog && !t.revealed) || s.board.sea.some(t => t.fog && !t.revealed);
+function epWantsShip(s, pid) {
+  if (!s.explorers || s.players[pid].shipsLeft <= 0 || !epHiddenLeft(s)) return false;
+  return s.epShips.filter(x => x.owner === pid).length < 2 && EpShips.shipBuildEdges(s, pid).length > 0;
+}
+// the nearest discovery edge from where a ship is (null when nothing is left to find)
+function epTarget(s, ship) {
+  let bestE = null, bestD = Infinity;
+  for (const [e, d] of EpShips.distances(s, ship.edge)) {
+    if (d > 0 && d < bestD && EpShips.discoveryEdge(s, e) && s.epShips.filter(x => x.edge === e && x !== ship).length < 2) { bestD = d; bestE = e; }
+  }
+  return bestE === null ? null : { edge: bestE, dist: bestD };
+}
+function epShipSpot(s, pid) {
+  const edges = EpShips.shipBuildEdges(s, pid);
+  return best(edges, e => {
+    const t = epTarget(s, { edge: e, owner: pid });
+    return t ? -t.dist : -99;
+  });
+}
+function epMoveAction(s, pid) {
+  const p = s.players[pid];
+  const mine = s.epShips.filter(x => x.owner === pid);
+  // keep sailing the ship already under way first (moving another one ends it)
+  const order = mine.sort((a, b) => (b.id === s.explorers.activeShip) - (a.id === s.explorers.activeShip));
+  for (const ship of order) {
+    const mp = EpShips.shipMp(s, ship);
+    const tgt = epTarget(s, ship);
+    if (!tgt) continue;
+    const R = EpShips.reachable(s, ship);
+    if (R.has(tgt.edge)) return { type: 'epMove', pid, ship: ship.id, to: tgt.edge };
+    if (!ship.boosted && canAfford(p.res, BOOST_COST) && tgt.dist <= mp + BOOST_MP && p.res.sheep > 1) return { type: 'epBoost', pid, ship: ship.id };
+    if (mp <= 0) continue;
+    // otherwise get as close as possible
+    const dist = EpShips.distances(s, tgt.edge);
+    const step = best([...R.keys()].filter(e => !EpShips.discoveryEdge(s, e) || e === tgt.edge), e => -(dist.get(e) ?? 99));
+    if (step !== null && (dist.get(step) ?? 99) < (dist.get(ship.edge) ?? 99)) return { type: 'epMove', pid, ship: ship.id, to: step };
+  }
   return { type: 'endTurn', pid };
 }
 
@@ -707,6 +757,7 @@ export function botAct(real, pid) {
   const s = viewFor(real, pid); // in fog mode bots only know what they can see
   if (!pendingActors(s).includes(pid)) return null;
   if (s.phase === 'discard') return s.pendingDiscards[pid] ? discard(s, pid) : null;
+  if (s.phase === 'epMove') return s.current === pid ? epMoveAction(s, pid) : null; // Explorers & Pirates: sail
   if (s.phase === 'caravanVote') return camelBid(s, pid); // Caravans
   if (s.phase === 'baSteal') { // Barbarian Attack 7: rob the leader who has cards
     const vs = BarbAttack.stealVictims(s, pid);
