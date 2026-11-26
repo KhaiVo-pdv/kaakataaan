@@ -18,6 +18,16 @@ const scenarios = Object.keys(SCENARIOS);
 const CK_GAMES = Math.ceil(GAMES / 5);
 // and one Traders & Barbarians (Fishermen) game per 5 base games, on the normal maps
 const TB_GAMES = Math.ceil(GAMES / 5);
+// and one Explorers & Pirates (Land Ho!) game per 5 base games, 2-4 players
+const EP_GAMES = Math.ceil(GAMES / 5);
+function makeExplorersConfig(i) {
+  const c = makeConfig(i);
+  c.players = c.players.slice(0, 2 + (i % 3));
+  c.expansions = { explorersPirates: true, epScenario: 'landHo' };
+  c.rules.vpTarget = 8;
+  c.map.shape = 'ep:landHo'; // only a label for the summary: the scenario draws the map
+  return c;
+}
 function makeFishermenConfig(i) {
   const c = makeConfig(i);
   c.players = c.players.slice(0, 3 + (i % 2));
@@ -88,7 +98,11 @@ function check(s, where) {
     const blindC = s.blind.filter(b => b.pid === p.id && b.type === 'city').length;
     const blindR = s.blind.filter(b => b.pid === p.id && b.eid != null).length;
     if (setts + blindS + p.settlementsLeft !== R.maxSettlements) errs.push(`poblados ${p.id}: ${setts}+${blindS}+${p.settlementsLeft}`);
-    if (cities + blindC + p.citiesLeft !== R.maxCities) errs.push(`ciudades ${p.id}`);
+    if (s.explorers) {
+      // Explorers & Pirates: settlements + harbor settlements (a harbor gives its settlement back), no cities
+      const harbors = Object.values(s.buildings).filter(b => b.owner === p.id && b.type === 'harbor').length;
+      if (harbors + p.harborsLeft !== 4 || p.citiesLeft !== 0 || cities) errs.push(`puertos ${p.id}: ${harbors}+${p.harborsLeft}`);
+    } else if (cities + blindC + p.citiesLeft !== R.maxCities) errs.push(`ciudades ${p.id}`);
     if (roads + blindR + p.roadsLeft !== R.maxRoads) errs.push(`caminos ${p.id}: ${roads}+${blindR}+${p.roadsLeft}`);
   }
   // buildings and roads only on land (Seafarers boards also have open-sea vertices and edges)
@@ -208,14 +222,29 @@ function check(s, where) {
   // dev cards conservation
   const devHeld = s.players.reduce((a, p) => a + p.dev.length, 0);
   if (devHeld + s.devDeck.length > s.devTotal) errs.push('cartas de desarrollo duplicadas');
+  if (s.explorers) {
+    // Explorers & Pirates: ships and settlers
+    const per = {};
+    for (const x of s.epShips) per[x.edge] = (per[x.edge] || 0) + 1;
+    if (Object.values(per).some(n => n > 2)) errs.push('más de 2 barcos en una arista');
+    for (const x of s.epShips) if (x.cargo.length > 2) errs.push(`barco ${x.id} sobrecargado`);
+    for (const p of s.players) {
+      const ships = s.epShips.filter(x => x.owner === p.id).length;
+      if (ships + p.shipsLeft !== 3) errs.push(`barcos ${p.id}: ${ships}+${p.shipsLeft}`);
+      const onShips = s.epShips.filter(x => x.owner === p.id).reduce((n, x) => n + x.cargo.filter(c => c === 'settler').length, 0);
+      const waiting = Object.values(s.explorers.waiting).filter(w => w === p.id).length;
+      if (onShips + waiting + p.settlersLeft !== 2) errs.push(`colonos ${p.id}: ${onShips}+${waiting}+${p.settlersLeft}`);
+    }
+    if (s.board.robber !== -1) errs.push('ladrón en Exploradores y Piratas');
+  }
   if (s.phase !== 'gameOver' && s.phase !== 'setup' && victoryPoints(s, s.current) >= R.vpTarget + (s.fishermen && s.fishermen.boot === s.current ? 1 : 0)) errs.push('ganador no detectado');
   if (s.phase === 'discard' && !Object.keys(s.pendingDiscards).length) errs.push('fase descarte vacía');
   if (errs.length) throw new Error(`[${where}] ` + errs.join('; '));
 }
 
 const summary = { games: 0, finished: 0, turns: 0, byShape: {}, winnerVP: [], errors: 0 };
-for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES; i++) {
-  const cfg = i < GAMES ? makeConfig(i) : i < GAMES + SF_GAMES ? makeSeafarersConfig(i) : i < GAMES + SF_GAMES + CK_GAMES ? makeCitiesKnightsConfig(i) : makeFishermenConfig(i);
+for (let i = 0; i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES + EP_GAMES; i++) {
+  const cfg = i < GAMES ? makeConfig(i) : i < GAMES + SF_GAMES ? makeSeafarersConfig(i) : i < GAMES + SF_GAMES + CK_GAMES ? makeCitiesKnightsConfig(i) : i < GAMES + SF_GAMES + CK_GAMES + TB_GAMES ? makeFishermenConfig(i) : makeExplorersConfig(i);
   const label = cfg.map.shape;
   if (label.startsWith('ck:') || label.startsWith('tb:')) cfg.map.shape = label.slice(3);
   let s;

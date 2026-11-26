@@ -3388,6 +3388,24 @@ t('E&P colonos: un barco detenido puede fundar donde está', () => {
   ok(act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok);
 });
 
+t('E&P: los bots llevan colonos a las tierras nuevas', () => {
+  let founded = 0, newLand = 0;
+  for (let seed = 1; seed <= 6; seed++) {
+    const s = G.createGame(epConfig(c => { c.seed = seed; c.rules.vpTarget = 12; }));
+    for (let i = 0; i < 3000 && s.phase !== 'gameOver'; i++) {
+      const a = botStep(s);
+      if (!a) break;
+      const r = G.applyAction(s, a);
+      ok(r.ok, `seed ${seed}: ${JSON.stringify(a)} en ${s.phase}: ${r.error}`);
+      if (a.type === 'epFound') founded++;
+      ok(s.epShips.every(x => x.cargo.length <= 2), 'capacidad');
+    }
+    newLand += Object.keys(s.buildings).filter(k => s.board.vertices[k].hexes.some(h => s.board.tiles[h].area !== 'start')).length;
+  }
+  ok(founded >= 6, `poblados fundados por colonos: ${founded}`);
+  ok(newLand >= 6, `edificios en tierras nuevas: ${newLand}`);
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);

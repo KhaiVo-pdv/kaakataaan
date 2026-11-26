@@ -13,7 +13,8 @@ import * as BarbAttack from './tradersBarbarians/barbarianAttack.js';
 import * as Traders from './tradersBarbarians/traders.js';
 import { fishCount, FISH_PERKS } from './tradersBarbarians/fishermen.js';
 import { seafarersOn } from './expansions.js';
-import { HARBOR_COST, SHIP_COST as EP_SHIP_COST, BOOST_COST, BOOST_MP } from './explorersPirates/rules.js';
+import { HARBOR_COST, SHIP_COST as EP_SHIP_COST, BOOST_COST, BOOST_MP, SETTLER_COST } from './explorersPirates/rules.js';
+import * as EpSettlers from './explorersPirates/settlers.js';
 import * as EpShips from './explorersPirates/ships.js';
 import { SHIP_COST, legalShips, legalSetupShips } from './seafarers/ships.js';
 import { seaTileEdges } from './seafarers/pirate.js';
@@ -231,6 +232,7 @@ function chooseTarget(s, pid) {
   if (p.citiesLeft > 0 && hasSett) opts.push({ what: 'city', cost: COSTS.city, w: 0.1 });
   if (s.explorers && legalHarbors(s, pid).length) opts.push({ what: 'harbor', cost: HARBOR_COST, w: 0.1 }); // Explorers & Pirates
   if (epWantsShip(s, pid)) opts.push({ what: 'epShip', cost: EP_SHIP_COST, w: 0.2 }); // Explorers & Pirates: a ship to explore with
+  if (epWantsSettler(s, pid)) opts.push({ what: 'epSettler', cost: SETTLER_COST, w: 0.05 }); // Explorers & Pirates: a settler for new land
   if (spots.length) opts.push({ what: 'settlement', cost: COSTS.settlement, w: 0 });
   else if (seafarersOn(s) && p.shipsLeft > 0 && p.settlementsLeft > 0 && bestShip(s, pid) !== null) opts.push({ what: 'ship', cost: SHIP_COST, w: 0.25 });
   else if (p.roadsLeft > 0 && p.settlementsLeft > 0 && bestRoad(s, pid) !== null) opts.push({ what: 'road', cost: COSTS.road, w: 0.3 });
@@ -545,6 +547,7 @@ function mainAction(s, pid) {
     const hv = best(legalHarbors(s, pid), v => vertexScore(s, pid, v, prod));
     if (hv !== null) return { type: 'build', pid, what: 'harbor', at: hv };
   }
+  if (epWantsSettler(s, pid) && canAfford(p.res, SETTLER_COST)) return { type: 'build', pid, what: 'epSettler' };
   if (epWantsShip(s, pid) && canAfford(p.res, EP_SHIP_COST)) {
     const at = epShipSpot(s, pid);
     if (at !== null) return { type: 'build', pid, what: 'epShip', at };
@@ -633,7 +636,7 @@ function mainAction(s, pid) {
     }
   }
   // Explorers & Pirates: after building comes the ship phase, when a ship has somewhere to go
-  if (s.explorers && s.epShips.some(x => x.owner === pid && EpShips.shipMp(s, x) > 0 && epTarget(s, x) !== null)) return { type: 'epSail', pid };
+  if (s.explorers && s.epShips.some(x => x.owner === pid && (EpShips.shipMp(s, x) > 0 && epShipGoal(s, x) !== null || EpSettlers.foundSpots(s, x).length || EpSettlers.loadable(s, x) !== null))) return { type: 'epSail', pid };
   return { type: 'endTurn', pid };
 }
 
@@ -658,16 +661,72 @@ function epShipSpot(s, pid) {
     return t ? -t.dist : -99;
   });
 }
+// good free coast corners for a settler (score > 0), best first
+function epFoundTargets(s, pid) {
+  const prod = production(s, pid);
+  const out = [];
+  for (const V of s.board.vertices) {
+    if (!V.sea.length || !EpSettlers.canFound(s, pid, V.id)) continue;
+    if (!V.edges.some(e => s.board.edges[e].kind === 'coast')) continue;
+    const sc = vertexScore(s, pid, V.id, prod);
+    if (sc > 0) out.push({ v: V.id, sc });
+  }
+  return out.sort((a, b) => b.sc - a.sc);
+}
+function epWantsSettler(s, pid) {
+  if (!s.explorers || s.players[pid].settlersLeft <= 0 || s.players[pid].settlementsLeft <= 0) return false;
+  const inTransit = s.epShips.some(x => x.owner === pid && x.cargo.includes('settler')) || Object.values(s.explorers.waiting).includes(pid);
+  if (inTransit || !EpSettlers.settlerHome(s, pid)) return false;
+  // worth it when the best corner off the starting island beats what roads can still reach
+  return epFoundTargets(s, pid).some(t => s.board.vertices[t.v].hexes.some(h => s.board.tiles[h].area !== 'start'));
+}
+// where a ship should go: carry a settler to land, fetch a waiting one, or explore
+function epShipGoal(s, ship) {
+  const dist = EpShips.distances(s, ship.edge);
+  const nearestEdge = edges => {
+    let bestE = null, bestD = Infinity;
+    for (const e of edges) {
+      const d = dist.get(e);
+      if (d !== undefined && d < bestD && (e === ship.edge || s.epShips.filter(x => x.edge === e && x !== ship).length < 2)) { bestD = d; bestE = e; }
+    }
+    return bestE === null ? null : { edge: bestE, dist: bestD };
+  };
+  if (ship.cargo.includes('settler')) {
+    const targets = epFoundTargets(s, ship.owner).slice(0, 6);
+    for (const t of targets) {
+      const g = nearestEdge(s.board.vertices[t.v].edges.filter(e => s.board.edges[e].kind === 'coast'));
+      if (g) return { ...g, found: t.v };
+    }
+  }
+  const waiting = Object.keys(s.explorers.waiting).map(Number).filter(v => s.explorers.waiting[v] === ship.owner);
+  if (waiting.length && ship.cargo.length < 2) {
+    const g = nearestEdge(waiting.flatMap(v => s.board.vertices[v].edges.filter(e => EpShips.sailable(s.board, e))));
+    if (g) return { ...g, load: true };
+  }
+  return epTarget(s, ship);
+}
 function epMoveAction(s, pid) {
   const p = s.players[pid];
   const mine = s.epShips.filter(x => x.owner === pid);
+  // found / load first: they cost no movement
+  for (const ship of mine) {
+    const spots = EpSettlers.foundSpots(s, ship);
+    if (spots.length) {
+      const prod = production(s, pid);
+      const v = best(spots, x => vertexScore(s, pid, x, prod));
+      const goal = epShipGoal(s, ship);
+      // found here unless a clearly better corner is close by
+      if (!goal || goal.found === undefined || goal.found === v || goal.dist > 4 || !EpShips.shipMp(s, ship)) return { type: 'epFound', pid, ship: ship.id, at: v };
+    }
+    if (EpSettlers.loadable(s, ship) !== null) return { type: 'epLoad', pid, ship: ship.id };
+  }
   // keep sailing the ship already under way first (moving another one ends it)
   const order = mine.sort((a, b) => (b.id === s.explorers.activeShip) - (a.id === s.explorers.activeShip));
   for (const ship of order) {
     const mp = EpShips.shipMp(s, ship);
     if (ship.stopped) continue; // done for this turn (discovered, or another ship moved)
-    const tgt = epTarget(s, ship);
-    if (!tgt) continue;
+    const tgt = epShipGoal(s, ship);
+    if (!tgt || tgt.dist === 0) continue;
     const R = EpShips.reachable(s, ship);
     if (R.has(tgt.edge)) return { type: 'epMove', pid, ship: ship.id, to: tgt.edge };
     if (!ship.boosted && canAfford(p.res, BOOST_COST) && tgt.dist <= mp + BOOST_MP && p.res.sheep > 1) return { type: 'epBoost', pid, ship: ship.id };
@@ -758,7 +817,7 @@ export function botAct(real, pid) {
   const s = viewFor(real, pid); // in fog mode bots only know what they can see
   if (!pendingActors(s).includes(pid)) return null;
   if (s.phase === 'discard') return s.pendingDiscards[pid] ? discard(s, pid) : null;
-  if (s.phase === 'epMove') return s.current === pid ? epMoveAction(s, pid) : null; // Explorers & Pirates: sail
+  if (s.phase === 'epMove') return s.current === pid ? epMoveAction(REAL && REAL.explorers ? REAL : s, pid) : null; // Explorers & Pirates: sail (the real board: where settlers may found)
   if (s.phase === 'caravanVote') return camelBid(s, pid); // Caravans
   if (s.phase === 'baSteal') { // Barbarian Attack 7: rob the leader who has cards
     const vs = BarbAttack.stealVictims(s, pid);
