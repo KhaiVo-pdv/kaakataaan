@@ -17,6 +17,7 @@ import { epPlayersOk } from '../js/engine/expansions.js';
 import * as EpShips from '../js/engine/explorersPirates/ships.js';
 import { seaRevealKey, applySeaReveal } from '../js/engine/seafarers/board.js';
 import { fallbackAction } from '../js/app.js';
+import * as Settlers from '../js/engine/explorersPirates/settlers.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -3285,6 +3286,106 @@ t('E&P: el bot de emergencia sabe terminar la fase de barcos', () => {
   act(s, { type: 'epSail', pid: 0 });
   const a = fallbackAction(s, 0);
   ok(a && G.applyAction(s, a).ok, JSON.stringify(a));
+});
+
+// ---- E&P 2c: settlers ----
+// put a player-0 ship on a coast edge whose land end is a free, legal spot on discovered land
+const epFoundSetup = (s, area = 'north') => {
+  const bd = s.board;
+  for (const x of bd.tiles) if (x.area === area) x.revealed = x.numRevealed = true;
+  for (const x of bd.sea) if (x.area === area) x.revealed = true;
+  const ship = myShip(s);
+  const E = bd.edges.find(E => E.kind === 'coast' && E.hexes.some(h => bd.tiles[h].area === area) && !s.epShips.some(x => x.edge === E.id)
+    && [E.a, E.b].some(v => Settlers.canFound(s, 0, v)));
+  ship.edge = E.id;
+  return { ship, E, v: [E.a, E.b].find(v => Settlers.canFound(s, 0, v)) };
+};
+
+t('E&P colonos: construir sube al barco junto al puerto o espera en el puerto', () => {
+  const s = epMain();
+  const ship = myShip(s);
+  eq(ship.cargo, ['settler']);
+  give(s, 0, { wood: 2, brick: 2, sheep: 2, wheat: 2 });
+  ok(act(s, { type: 'build', pid: 0, what: 'epSettler' }).ok);
+  eq(ship.cargo, ['settler', 'settler'], 'el barco junto al puerto lo recoge');
+  eq(s.players[0].settlersLeft, 0);
+  ok(!act(s, { type: 'build', pid: 0, what: 'epSettler' }).ok, 'no quedan colonos');
+  // a settler with no ship next to the harbor waits there (1 per harbor)
+  const s2 = epMain();
+  const sh2 = myShip(s2);
+  sh2.edge = s2.board.edges.find(E => EpShips.sailable(s2.board, E.id) && !EpShips.shipBuildEdges(s2, 0).includes(E.id) && !s2.epShips.some(x => x.edge === E.id)).id;
+  give(s2, 0, { wood: 1, brick: 1, sheep: 1, wheat: 1 });
+  ok(act(s2, { type: 'build', pid: 0, what: 'epSettler' }).ok);
+  const harbor = +epBuildings(s2, 0, 'harbor')[0];
+  eq(s2.explorers.waiting[harbor], 0, 'espera en el puerto');
+});
+
+t('E&P colonos: sin sitio no se construye ni se paga', () => {
+  const s = epMain();
+  myShip(s).cargo = ['settler', 'settler'];
+  s.players[0].settlersLeft = 1;
+  const harbor = +epBuildings(s, 0, 'harbor')[0];
+  s.explorers.waiting[harbor] = 0;
+  give(s, 0, { wood: 1, brick: 1, sheep: 1, wheat: 1 });
+  ok(!act(s, { type: 'build', pid: 0, what: 'epSettler' }).ok);
+  eq(s.players[0].res.wood, 1, 'no paga');
+});
+
+t('E&P colonos: cargar en la fase de barcos no gasta pasos', () => {
+  const s = epMain();
+  const ship = myShip(s);
+  ship.cargo = [];
+  const harbor = +epBuildings(s, 0, 'harbor')[0];
+  s.explorers.waiting[harbor] = 0;
+  act(s, { type: 'epSail', pid: 0 });
+  ok(act(s, { type: 'epLoad', pid: 0, ship: ship.id }).ok);
+  eq([ship.cargo, s.explorers.waiting[harbor], EpShips.shipMp(s, ship)], [['settler'], undefined, 4]);
+  ok(!act(s, { type: 'epLoad', pid: 0, ship: ship.id }).ok, 'nada que cargar');
+});
+
+t('E&P colonos: fundar un poblado desde el barco', () => {
+  const s = epMain();
+  const { ship, v } = epFoundSetup(s);
+  act(s, { type: 'epSail', pid: 0 });
+  const vp = G.victoryPoints(s, 0), left = s.players[0].settlementsLeft;
+  ok(act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok);
+  eq(s.buildings[v], { owner: 0, type: 'settlement' });
+  eq([G.victoryPoints(s, 0), s.players[0].settlementsLeft, s.players[0].settlersLeft, ship.cargo.length], [vp + 1, left - 1, 2, 0]);
+  eq(EpShips.shipMp(s, ship), 0, 'el barco se detiene');
+  ok(!act(s, { type: 'epBoost', pid: 0, ship: ship.id }).ok);
+});
+
+t('E&P colonos: fundar respeta las reglas', () => {
+  const s = epMain();
+  const { ship, v } = epFoundSetup(s);
+  act(s, { type: 'epSail', pid: 0 });
+  const bd = s.board;
+  const far = bd.vertices.find(V => V.hexes.length && !bd.edges[ship.edge].a !== V.id && V.id !== bd.edges[ship.edge].a && V.id !== bd.edges[ship.edge].b);
+  ok(!act(s, { type: 'epFound', pid: 0, ship: ship.id, at: far.id }).ok, 'solo en la arista del barco');
+  s.players[0].settlementsLeft = 0;
+  ok(!act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok, 'sin poblados');
+  s.players[0].settlementsLeft = 3;
+  // a neighbour building breaks the distance rule
+  const nb = bd.vertices[v].adj[0];
+  s.buildings[nb] = { owner: 1, type: 'settlement' };
+  ok(!act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok, 'regla de distancia');
+  delete s.buildings[nb];
+  // a face-down neighbour hex blocks it
+  const h = bd.vertices[v].hexes[0];
+  bd.tiles[h].fog = true; bd.tiles[h].revealed = false;
+  ok(!act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok, 'junto a casilla boca abajo');
+  bd.tiles[h].revealed = true;
+  ship.cargo = [];
+  ok(!act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok, 'sin colono');
+});
+
+t('E&P colonos: un barco detenido puede fundar donde está', () => {
+  const s = epMain();
+  const { ship, v } = epFoundSetup(s);
+  act(s, { type: 'epSail', pid: 0 });
+  EpShips.shipMp(s, ship);
+  ship.stopped = true;
+  ok(act(s, { type: 'epFound', pid: 0, ship: ship.id, at: v }).ok);
 });
 
 

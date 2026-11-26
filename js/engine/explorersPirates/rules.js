@@ -10,6 +10,7 @@ export const SHIP_MP = 4; // edges a ship sails per turn
 export const BOOST_MP = 2; // +2 for 1 wool, once per ship per turn
 export const BOOST_COST = { sheep: 1 };
 export const MAX_SHIPS_PER_EDGE = 2;
+export const SHIP_CAPACITY = 2; // settlers a ship can carry
 export const DISCOVER_SEA_GOLD = 2; // turning over a sea hex
 export const NO_PRODUCTION_GOLD = 1; // a roll (not a 7) that gives you nothing
 export const EP_TRADE_RATIO = 3; // no harbours: every bank trade is 3:1

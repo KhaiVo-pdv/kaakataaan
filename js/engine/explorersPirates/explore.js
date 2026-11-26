@@ -5,7 +5,7 @@ import { DISCOVER_SEA_GOLD } from './rules.js';
 
 // Sets up s.explorers and hides every face-down hex (land and sea).
 export function initExplorers(s) {
-  s.explorers = { scenario: s.board.explorers.scenario, buys: null }; // buys: gold purchases this turn (Rivers.goldBox)
+  s.explorers = { scenario: s.board.explorers.scenario, buys: null, waiting: {} }; // buys: gold purchases this turn (Rivers.goldBox); waiting: harbor vertex -> pid of a settler waiting there
   for (const p of s.players) p.gold = 0;
   for (const t of s.board.tiles) if (t.fog) t.revealed = t.numRevealed = false;
   for (const t of s.board.sea) if (t.fog) t.revealed = false;
