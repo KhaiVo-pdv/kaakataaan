@@ -205,6 +205,7 @@ export function createGame(configIn) {
   if (s.explorers) {
     // Explorers & Pirates: fixed start positions instead of the placement rounds
     EpSetup.placeStarts(s, (pid, r, k) => giveFromBank(s, pid, r, k));
+    for (const v in s.buildings) revealAround(s, +v); // hidden numbers: you see the hexes around your start pieces
     s.setup = { queue: [], idx: 0, step: 'settlement', lastVid: null, blindActive: false, lastRound: 0, fixing: false };
     log(s, '⚓ Cada jugador empieza con un poblado, un camino, un poblado portuario y un barco con un colono.');
     beginTurns(s);
@@ -357,7 +358,7 @@ export function canSetupRoad(s, pid, e) {
 export function canBuildRoad(s, pid, e) {
   const E = s.board.edges[e];
   if (!E || s.roads[e] !== undefined || !landEdge(s, e) || hasShip(s, e)) return false;
-  if (s.explorers && EpRules.nearHidden(s, 'edge', e)) return false; // Explorers & Pirates: not along a face-down hex
+  if (s.explorers && (EpRules.nearHidden(s, 'edge', e) || s.epShips.some(x => x.edge === e))) return false; // Explorers & Pirates: not along a face-down hex, not under a ship
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: only bridges cross the water
   if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
   if (s.traders && Traders.edgeBlocked(s, e)) return false; // Traders & Barbarians: closed sea side / barbarian
@@ -763,7 +764,7 @@ function startRound(s) {
       break;
     }
     case 'storm':
-      if (!s.config.rules.noRobber) {
+      if (!s.config.rules.noRobber && !s.explorers) { // Explorers & Pirates: no robber
         s.board.robberFrom = s.board.robber;
         s.board.robber = randomLandTile(s, s.board.robber);
         E.tile = s.board.robber;
@@ -1164,7 +1165,7 @@ function eventCardEffect(s) {
   const card = s.eventCard;
   if (!card || !card.event) return;
   if (card.event === 'robberFlees') {
-    if (s.barbAttack || s.traders || s.config.rules.noRobber) return; // no robber in these games
+    if (s.barbAttack || s.traders || s.explorers || s.config.rules.noRobber) return; // no robber in these games
     const desert = s.board.tiles.find(t => t.res === 'desert' && t.revealed !== false && t.id !== s.board.robber && !(s.caravans && t.oasis)); // never the Caravans oasis
     s.board.robber = desert ? desert.id : -1;
     s.fx.push({ kind: 'robber', tile: s.board.robber });
@@ -1281,7 +1282,7 @@ function afterRoll(s, sum) {
     return;
   }
   const R = s.config.rules;
-  if (s.round <= R.robberGrace) {
+  if (s.round <= R.robberGrace && !s.explorers) { // Explorers & Pirates: no robber to sleep, the discards still happen
     log(s, '😴 El ladrón duerme durante las primeras rondas.');
     s.phase = 'main';
     return;

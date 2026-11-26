@@ -1711,4 +1711,5 @@ export default {
   "⚓ Cada jugador empieza con un poblado, un camino, un poblado portuario y un barco con un colono.": "⚓ Mỗi người bắt đầu với một nhà, một đường, một nhà cảng và một tàu chở người khai hoang.",
   "⚓ Mejora un poblado de la costa a poblado portuario.": "⚓ Nâng một nhà ven biển thành nhà cảng.",
   "🪙 Sin cosecha: {names} reciben 1 de oro.": "🪙 Không thu hoạch: {names} nhận 1 vàng.",
+  "Exploradores y Piratas es para 2-4 jugadores.": "Thám hiểm & Cướp biển dành cho 2-4 người chơi.",
 };

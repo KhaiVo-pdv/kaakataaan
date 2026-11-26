@@ -1712,4 +1712,5 @@ export default {
   "⚓ Cada jugador empieza con un poblado, un camino, un poblado portuario y un barco con un colono.": "⚓ Each player starts with a settlement, a road, a harbor settlement and a ship carrying a settler.",
   "⚓ Mejora un poblado de la costa a poblado portuario.": "⚓ Upgrade a coastal settlement to a harbor settlement.",
   "🪙 Sin cosecha: {names} reciben 1 de oro.": "🪙 No harvest: {names} get 1 gold.",
+  "Exploradores y Piratas es para 2-4 jugadores.": "Explorers & Pirates is for 2-4 players.",
 };

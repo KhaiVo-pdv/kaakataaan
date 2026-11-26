@@ -13,6 +13,7 @@ import * as Two from '../js/engine/catanForTwo.js';
 import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import { EP_MAPS, buildEpMap } from '../js/engine/explorersPirates/maps.js';
+import { epPlayersOk } from '../js/engine/expansions.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -3032,6 +3033,49 @@ t('E&P: bots juegan sin jugadas ilegales', () => {
   }
   ok(harbors > 0, 'algún bot construye un poblado portuario');
   ok(gold > 0, 'algún bot usa el oro');
+});
+
+t('E&P: no se construye camino sobre un barco', () => {
+  const s = epMain();
+  give(s, 0, { wood: 5, brick: 5 });
+  const ship = s.epShips.find(x => x.owner === 0);
+  ok(!G.legalRoads(s, 0).includes(ship.edge), 'la arista del barco no es legal');
+  ok(!act(s, { type: 'build', pid: 0, what: 'road', at: ship.edge }).ok);
+});
+
+t('E&P: los modos de eventos no traen el ladrón', () => {
+  for (const mut of [c => { c.modes.events = true; }, c => { c.rules.diceMode = 'eventCards'; }]) {
+    for (let seed = 1; seed <= 4; seed++) {
+      const s = G.createGame(epConfig(c => { c.seed = seed; mut(c); }));
+      for (let i = 0; i < 600 && s.phase !== 'gameOver'; i++) {
+        const a = botAct(s, G.pendingActors(s)[0]);
+        if (!a) break;
+        ok(G.applyAction(s, a).ok);
+        eq(s.board.robber, -1, `seed ${seed} jugada ${i}`);
+      }
+    }
+  }
+});
+
+t('E&P: "Rondas sin ladrón" no se salta los descartes', () => {
+  const s = epMain(c => { c.rules.robberGrace = 3; });
+  give(s, 1, { wood: 5, ore: 4 });
+  s.phase = 'roll';
+  s.config.rules.diceMode = 'balanced';
+  s.diceDeck = Array(7).fill([3, 4]);
+  act(s, { type: 'roll', pid: 0 });
+  eq(s.phase, 'discard');
+});
+
+t('E&P: números secretos: ves los de tus casillas de salida', () => {
+  const s = G.createGame(epConfig(c => { c.modes.hiddenNumbers = true; }));
+  for (const k of Object.keys(s.buildings)) for (const h of s.board.vertices[k].hexes) ok(s.board.tiles[h].numRevealed, 'casilla ' + h);
+});
+
+t('E&P: como mucho 4 jugadores', () => {
+  ok(epPlayersOk(epConfig()), '4 vale');
+  ok(!epPlayersOk(epConfig(c => { c.players.push({ ...c.players[0], name: 'X' }); })), '5 no');
+  ok(epPlayersOk(defaultConfig()), 'sin la expansión da igual');
 });
 
 

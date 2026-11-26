@@ -2,7 +2,7 @@ import { App } from '../app.js';
 import { h, s as S, clear, storage, toast } from './dom.js';
 import { BoardView } from './boardView.js';
 import { defaultConfig, MODES, PRESETS, PLAYER_COLORS, BOT_NAMES } from '../engine/config.js';
-import { EXPANSIONS, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, explorersPiratesOn, epScenarioOn } from '../engine/expansions.js';
+import { EXPANSIONS, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, explorersPiratesOn, epScenarioOn, epPlayersOk } from '../engine/expansions.js';
 import { EP_SCENARIOS } from '../engine/explorersPirates/scenarios.js';
 import { TB_SCENARIOS } from '../engine/tradersBarbarians/scenarios.js';
 import { SCENARIOS } from '../engine/seafarers/scenarios.js';
@@ -440,6 +440,7 @@ export function lobbyScreen(root, opts = {}) {
 
   function start() {
     if (cfg.players.length < 2) return toast(t('Necesitas al menos 2 jugadores'), 'error');
+    if (!epPlayersOk(cfg)) return toast(t('Exploradores y Piratas es para 2-4 jugadores.'), 'error');
     save();
     const game = JSON.parse(JSON.stringify(cfg));
     if (online) {

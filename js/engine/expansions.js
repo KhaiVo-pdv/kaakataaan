@@ -87,6 +87,8 @@ export const citiesKnightsOn = x => !!(cfgOf(x).expansions && cfgOf(x).expansion
 export const tradersBarbariansOn = x => !!(cfgOf(x).expansions && cfgOf(x).expansions.tradersBarbarians);
 // the Traders & Barbarians scenario id being played ('' when the expansion is off)
 export const tbScenarioOn = x => (tradersBarbariansOn(x) ? tbScenarioId(cfgOf(x).expansions.tbScenario) : '');
+// Explorers & Pirates seats at most 4 players (the scenarios' fixed start positions)
+export const epPlayersOk = c => !explorersPiratesOn(c) || c.players.length <= epScenarioOf(cfgOf(c).expansions.epScenario).players[1];
 export const explorersPiratesOn = x => !!(cfgOf(x).expansions && cfgOf(x).expansions.explorersPirates);
 // the Explorers & Pirates scenario id being played ('' when the expansion is off)
 export const epScenarioOn = x => (explorersPiratesOn(x) ? epScenarioId(cfgOf(x).expansions.epScenario) : '');
