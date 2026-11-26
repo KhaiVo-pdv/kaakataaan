@@ -26,6 +26,7 @@ import { Dice3D, diceFlyMs } from './dice3d.js';
 import { makeShip, makePirate, makeCloud, shipPose, piratePose } from './seafarers3d.js';
 import { epShipSpot } from './explorers2d.js';
 import { makeStyledBuilding, makeStyledMetro, makeStyledWall } from './pieceStyles3d.js';
+import { buildToonIsland, toonField, makeToonHouse, TOON_HOUSE_SCALE } from './toonBoard3d.js';
 import { makeKnight, makeMerchant, makeWall, makeMetro, makeBarbarianShip, makeBuoy, barbarianPath } from './citiesKnights3d.js';
 import { makeFishingGround } from './fishermen3d.js';
 import { makeBridge, makeBridgeSpot } from './rivers3d.js';
@@ -797,50 +798,6 @@ const TOON_RAMP = (() => {
   t.needsUpdate = true;
   return t;
 })();
-// summer colours of the 8 terrain layers, in L order: grass, forest, dirt, rock, sand, snow, field, meadow
-const TOON_LAYERS = ['#69c048', '#3f8f3c', '#cf7a4c', '#a3a9b1', '#f3da93', '#f6f9fc', '#f2c640', '#93d85c'];
-
-// terrain in the toon style: flat colour per layer (no photo textures), cel lighting,
-// wheat furrows and a dark ink line along every land hex edge
-let toonTerrainMat = null;
-function toonTerrainMaterial() {
-  if (toonTerrainMat) return toonTerrainMat;
-  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TOON_RAMP });
-  const cols = TOON_LAYERS.map(c => new THREE.Color(c));
-  m.onBeforeCompile = sh => {
-    sh.uniforms.uLayer = { value: cols };
-    sh.vertexShader = 'attribute vec4 aW0;\nattribute vec4 aW1;\nattribute float aRow;\nvarying vec4 vW0;\nvarying vec4 vW1;\nvarying float vRow;\nvarying vec3 vWorld;\n' +
-      sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-  vW0 = aW0; vW1 = aW1; vRow = aRow;
-  vWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
-    sh.fragmentShader = 'uniform vec3 uLayer[8];\nvarying vec4 vW0;\nvarying vec4 vW1;\nvarying float vRow;\nvarying vec3 vWorld;\n' +
-      `// distance from the centre of the pointy-top hex (size 1) holding p, scaled so an edge is 0.866
-      float hexDist(vec2 p) {
-        float q = 0.57735027 * p.x - p.y / 3.0, r = 0.66666667 * p.y;
-        vec3 c = vec3(q, -q - r, r), rc = floor(c + 0.5), d = abs(rc - c);
-        if (d.x > d.y && d.x > d.z) rc.x = -rc.y - rc.z; else if (d.y > d.z) rc.y = -rc.x - rc.z; else rc.z = -rc.x - rc.y;
-        vec2 ctr = vec2(1.7320508 * (rc.x + rc.z * 0.5), 1.5 * rc.z);
-        vec2 rd = p - ctr;
-        return max(abs(rd.x), max(abs(dot(rd, vec2(0.5, 0.8660254))), abs(dot(rd, vec2(-0.5, 0.8660254)))));
-      }\n` +
-      sh.fragmentShader.replace('#include <map_fragment>', `
-  vec3 salb = (vW0.x * uLayer[0] + vW0.y * uLayer[1] + vW0.z * uLayer[2] + vW0.w * uLayer[3] +
-               vW1.x * uLayer[4] + vW1.y * uLayer[5] + vW1.z * uLayer[6] + vW1.w * uLayer[7]) /
-               max(dot(vW0, vec4(1.0)) + dot(vW1, vec4(1.0)), 0.0001);
-  float fur = smoothstep(0.18, 0.5, abs(fract(vRow * 7.5) - 0.5));
-  salb = mix(salb, salb * vec3(0.78, 0.68, 0.5), vW1.z * (1.0 - fur) * 0.7);
-  // ink line along the hex edges, only on dry land
-  float hd = hexDist(vWorld.xz);
-  float ink = smoothstep(0.80, 0.835, hd) * smoothstep(-0.12, -0.02, vWorld.y);
-  salb = mix(salb, vec3(0.16, 0.13, 0.22), ink * 0.85);
-  diffuseColor.rgb *= salb;`);
-  };
-  m.customProgramCacheKey = () => 'terrainToon';
-  m.userData.noToon = true;
-  toonTerrainMat = patch(m, { key: 'terrainToon' });
-  return toonTerrainMat;
-}
-
 // average colour of a texture (so a toon copy can drop the photo texture but keep its colour)
 const avgCache = new Map();
 function textureAverage(tex) {
@@ -1682,12 +1639,22 @@ export class Board3D {
     }
     this.bobbers = [];
     this.tokens = [];
-    const field = (this.field = terrainOf(st, faceDown));
+    const toon = SETTINGS.mapStyle === 'toon';
+    let field = terrainOf(st, faceDown);
+    // toon style: flat tile tops instead of the heightfield (houses, roads and labels stand on them)
+    if (toon) field = toonField(field, bd);
+    this.field = field;
     const b = bd.bounds;
     const cx = (b.minX + b.maxX) / 2, cz = (b.minY + b.maxY) / 2;
     this.placeSun(cx, cz);
 
-    // ---- terrain mesh
+    if (toon) {
+      // toon style: separate raised hex tiles, toy props and a flat sea (toonBoard3d.js)
+      const isl = buildToonIsland(st, { patch, ramp: TOON_RAMP }, faceDown);
+      this.staticGroup.add(isl.group);
+      this.water = isl.sea;
+    } else {
+    // ---- terrain mesh (classic 3D)
     const STEP = SETTINGS.quality === 'high' ? 0.045 : 0.075;
     const x0 = b.minX - 0.8, z0 = b.minY - 0.8;
     const nx = Math.ceil((b.maxX - b.minX + 1.6) / STEP) + 1, nz = Math.ceil((b.maxY - b.minY + 1.6) / STEP) + 1;
@@ -1739,8 +1706,7 @@ export class Board3D {
       }
       w0[k * 4 + 3] += steep;
     }
-    const toon = SETTINGS.mapStyle === 'toon';
-    const terrain = new THREE.Mesh(geo, toon ? toonTerrainMaterial() : terrainMaterial(this.tex));
+    const terrain = new THREE.Mesh(geo, terrainMaterial(this.tex));
     terrain.receiveShadow = terrain.castShadow = true;
     terrain.userData.own = true;
     this.staticGroup.add(terrain);
@@ -1783,11 +1749,11 @@ export class Board3D {
     lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
     const grid = new THREE.LineSegments(lg, patch(new THREE.LineBasicMaterial({ color: '#fff6dc', transparent: true, opacity: 0.16 }), { key: 'grid' }));
     grid.userData.own = true;
-    grid.visible = !toon; // the toon terrain draws its own ink lines on the hex edges
     this.staticGroup.add(grid);
 
     this.placeProps(st);
     this.placeGrass(st);
+    } // end classic 3D terrain
 
     // ---- tokens + face-down runes (pixel UI labels)
     for (const t of bd.tiles) {
@@ -2568,6 +2534,16 @@ export class Board3D {
       const trims = [...(lv >= 1 ? ['Timber'] : []), ...(lv >= 3 ? ['Glass', 'StoneDark'] : [])];
       const pl = st.players[owner];
       // kingdom piece style (pieceStyles.js): code-built houses, or the Blender kit for 'classic'
+      if (SETTINGS.mapStyle === 'toon') {
+        // toon style: every kingdom uses the N3 house, 70% bigger, with a colour ring
+        const o = makeToonHouse(type, pl.color, pl.flag, { patch, ramp: TOON_RAMP }, banner);
+        o.position.set(V.x, vy(vid) - 0.01, V.y);
+        o.rotation.y = ((vid * 2.39996) % 6.28) * 0.4;
+        if (ghost) ghostify(o);
+        o.scale.setScalar(TOON_HOUSE_SCALE);
+        add(o, 'b' + vid + type + (ghost ? 'g' : ''), pl.color);
+        return;
+      }
       const styled = makeStyledBuilding(pl.style, type, pl.color);
       const o = gild(styled ? styled.obj : tinted(type === 'city' ? kit.city : kit.house, colors(pl.color)), trims, lv >= 5);
       const knob = styled ? styled.knob : type === 'city' ? KNOB_CITY : KNOB_HOUSE;
