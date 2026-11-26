@@ -37,15 +37,18 @@ export const EP_MAPS = {
       },
     },
     // fixed start positions (vertex coordinates in hex units): a settlement with its road
-    // (`road` = the far end) and a harbor settlement facing the unexplored areas.
-    // Picked by script: distance rule, >= 4 resources per seat, pips 16/15/16/16.
+    // (`road` = the far end) and a harbor settlement whose ship starts on the water next to it.
+    // Seats 0-3 are for 3-4 players, seats 4-5 for 2 players. Chosen by bot simulation
+    // (Nov 2026): every seat wins within about ±7 points of a fair share.
     starts: [
-      { settlement: { x: -6.06, y: -2.5 }, road: { x: -5.2, y: -2 }, harbor: { x: -3.46, y: -4 } },
-      { settlement: { x: -7.79, y: -3.5 }, road: { x: -6.93, y: -4 }, harbor: { x: -2.6, y: -0.5 } },
-      { settlement: { x: -5.2, y: -4 }, road: { x: -5.2, y: -5 }, harbor: { x: 0, y: -2 } },
-      { settlement: { x: -1.73, y: -2 }, road: { x: -2.6, y: -2.5 }, harbor: { x: -4.33, y: 0.5 } },
+      { settlement: { x: -6.06, y: -0.5 }, road: { x: -5.2, y: -1 }, harbor: { x: -2.6, y: -2.5 } }, // pips 14, ship 7 edges from the nearest face-down hex
+      { settlement: { x: -7.79, y: -2.5 }, road: { x: -7.79, y: -3.5 }, harbor: { x: -2.6, y: -0.5 } }, // pips 15, ship 7 edges from the nearest face-down hex
+      { settlement: { x: -4.33, y: -3.5 }, road: { x: -5.2, y: -4 }, harbor: { x: -0.87, y: -0.5 } }, // pips 14, ship 5 edges from the nearest face-down hex
+      { settlement: { x: -6.06, y: -2.5 }, road: { x: -6.06, y: -3.5 }, harbor: { x: -0.87, y: -2.5 } }, // pips 15, ship 5 edges from the nearest face-down hex
+      { settlement: { x: -5.2, y: -2 }, road: { x: -6.06, y: -2.5 }, harbor: { x: -1.73, y: -2 } }, // pips 16, ship 6 edges from the nearest face-down hex
+      { settlement: { x: -5.2, y: -4 }, road: { x: -6.06, y: -3.5 }, harbor: { x: -0.87, y: -0.5 } }, // pips 16, ship 5 edges from the nearest face-down hex
     ],
-    seatsFor: { 2: [0, 3], 3: [0, 2, 3], 4: [0, 1, 2, 3] },
+    seatsFor: { 2: [4, 5], 3: [1, 2, 3], 4: [0, 1, 2, 3] },
   },
 };
 
