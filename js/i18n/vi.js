@@ -585,6 +585,8 @@ export default {
   "🔗 Copiar enlace": "🔗 Sao chép link",
   "🔗 Enlace copiado: pásaselo a tus amigos": "🔗 Đã sao chép link: gửi cho bạn bè đi",
   "🔲 Contorno de piezas": "🔲 Viền quân cờ",
+  "🎨 Estilo Toon": "🎨 Kiểu Toon",
+  "Mapa de dibujos animados, siempre de día en verano": "Bản đồ kiểu hoạt hình, luôn là ban ngày mùa hè",
   "🕹️ Clásicos": "🕹️ Cổ điển",
   "🖱️ Botón del medio: clava un banderín de tu color en el mapa que ven todos. 😀: reacciona con un emoji que sale de todas tus construcciones.": "🖱️ Nút giữa chuột: cắm một lá cờ nhỏ màu của bạn lên bản đồ cho mọi người thấy. 😀: thả emoji bay ra từ mọi công trình của bạn.",
   "🗑️ @{p} descarta {n} cartas.": "🗑️ @{p} bỏ {n} lá.",

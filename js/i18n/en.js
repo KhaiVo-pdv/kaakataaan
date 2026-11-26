@@ -585,6 +585,8 @@ export default {
   "🔗 Copiar enlace": "🔗 Copy link",
   "🔗 Enlace copiado: pásaselo a tus amigos": "🔗 Link copied: send it to your friends",
   "🔲 Contorno de piezas": "🔲 Piece outlines",
+  "🎨 Estilo Toon": "🎨 Toon style",
+  "Mapa de dibujos animados, siempre de día en verano": "Cartoon map, always a summer day",
   "🕹️ Clásicos": "🕹️ Classics",
   "🖱️ Botón del medio: clava un banderín de tu color en el mapa que ven todos. 😀: reacciona con un emoji que sale de todas tus construcciones.": "🖱️ Middle button: plant a pennant in your color on the map for everyone to see. 😀: react with an emoji that pops out of all your buildings.",
   "🗑️ @{p} descarta {n} cartas.": "🗑️ @{p} discards {n} cards.",
