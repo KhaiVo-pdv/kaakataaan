@@ -1732,4 +1732,6 @@ export default {
   "🧭 Pasa a mover tus barcos.": "🧭 Chuyển sang di chuyển tàu.",
   "🧭 ¡Tierra nueva!": "🧭 Đất mới!",
   "🧭 ¡Tierra nueva! +1 recurso": "🧭 Đất mới! +1 tài nguyên",
+  "No tienes barcos.": "Bạn không có tàu nào.",
+  "Este barco ya ha terminado de navegar este turno.": "Tàu này đã đi xong trong lượt này.",
 };

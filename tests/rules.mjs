@@ -16,6 +16,7 @@ import { EP_MAPS, buildEpMap } from '../js/engine/explorersPirates/maps.js';
 import { epPlayersOk } from '../js/engine/expansions.js';
 import * as EpShips from '../js/engine/explorersPirates/ships.js';
 import { seaRevealKey, applySeaReveal } from '../js/engine/seafarers/board.js';
+import { fallbackAction } from '../js/app.js';
 import * as Ships from '../js/engine/seafarers/ships.js';
 import * as Islands from '../js/engine/seafarers/islands.js';
 import * as Improve from '../js/engine/citiesKnights/improvements.js';
@@ -3241,6 +3242,49 @@ t('E&P: los bots exploran', () => {
     flipped += s.board.tiles.filter(x => x.fog && x.revealed).length + s.board.sea.filter(x => x.fog && x.revealed).length;
   }
   ok(flipped / 4 >= 6, `media de casillas descubiertas ${flipped / 4}`);
+});
+
+t('E&P barcos: tras descubrir, la lana no reanuda el barco', () => {
+  const s = epMain();
+  const bd = s.board;
+  const ship = myShip(s);
+  const back = E => bd.vertices[E.a].edges.concat(bd.vertices[E.b].edges).find(e => e !== E.id && EpShips.sailable(bd, e) && !EpShips.discoveryEdge(s, e));
+  const target = bd.edges.find(E => EpShips.sailable(bd, E.id) && EpShips.discoveryEdge(s, E.id) && back(E) !== undefined);
+  ship.edge = back(target);
+  give(s, 0, { sheep: 2 });
+  act(s, { type: 'epSail', pid: 0 });
+  ok(sailTo(s, ship, target.id).ok);
+  ok(!act(s, { type: 'epBoost', pid: 0, ship: ship.id }).ok, 'descubrir detiene el barco');
+  eq(EpShips.shipMp(s, ship), 0);
+});
+
+t('E&P barcos: la lana no reanuda un barco ya terminado por otro', () => {
+  const s = epMain();
+  give(s, 0, { wood: 1, sheep: 3 });
+  act(s, { type: 'build', pid: 0, what: 'epShip', at: EpShips.shipBuildEdges(s, 0)[0] });
+  act(s, { type: 'epSail', pid: 0 });
+  const [a, b] = s.epShips.filter(x => x.owner === 0);
+  const step = sh => [...EpShips.reachable(s, sh).entries()].find(([e, c]) => c === 1 && !EpShips.discoveryEdge(s, e))[0];
+  ok(sailTo(s, a, step(a)).ok);
+  ok(sailTo(s, b, step(b)).ok);
+  ok(!act(s, { type: 'epBoost', pid: 0, ship: a.id }).ok, 'el primero ya terminó');
+  ok(act(s, { type: 'epBoost', pid: 0, ship: b.id }).ok, 'el activo sí');
+});
+
+t('E&P + niebla de guerra: lo ya descubierto sigue descubierto en la vista', () => {
+  const s = epMain(c => { c.modes.fog = true; });
+  for (const x of s.board.tiles) if (x.fog) x.revealed = x.numRevealed = true;
+  for (const x of s.board.sea) if (x.fog) x.revealed = true;
+  const v = G.viewFor(s, 0);
+  ok(v.board.tiles.filter(x => x.fog).every(x => x.revealed), 'cara arriba para todos');
+  eq(v.board.edges.filter(E => EpShips.discoveryEdge(v, E.id)).length, 0, 'sin descubrimientos falsos');
+});
+
+t('E&P: el bot de emergencia sabe terminar la fase de barcos', () => {
+  const s = epMain();
+  act(s, { type: 'epSail', pid: 0 });
+  const a = fallbackAction(s, 0);
+  ok(a && G.applyAction(s, a).ok, JSON.stringify(a));
 });
 
 

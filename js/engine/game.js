@@ -271,6 +271,7 @@ export function viewFor(s, pid) {
   }
   const tiles = bd.tiles.map(t => {
     const lit = visibility(vis, t.x, t.y);
+    if (s.explorers && t.fog) return { ...t, numRevealed: t.numRevealed && lit > 0 }; // Explorers & Pirates: a discovered hex stays face up for everyone
     return { ...t, revealed: t.revealed && lit > -0.86, numRevealed: t.numRevealed && lit > 0 };
   });
   const robberSeen = bd.robber >= 0 && tiles[bd.robber].numRevealed;
@@ -2818,6 +2819,7 @@ function epShipOf(s, a) {
 H.epSail = (s, a) => {
   if (!s.explorers) fail('Acción desconocida.');
   assertMain(s, a);
+  if (!s.epShips.some(x => x.owner === a.pid)) fail('No tienes barcos.');
   s.phase = 'epMove';
   s.explorers.activeShip = null;
 };
@@ -2828,7 +2830,7 @@ H.epMove = (s, a) => {
   if (cost === undefined) fail('El barco no llega ahí.');
   // one ship at a time: moving another one ends the previous ship's movement
   const prev = s.epShips.find(x => x.id === s.explorers.activeShip);
-  if (prev && prev !== ship) { EpShips.shipMp(s, prev); prev.mpLeft = 0; }
+  if (prev && prev !== ship) { EpShips.shipMp(s, prev); prev.mpLeft = 0; prev.stopped = true; }
   s.explorers.activeShip = ship.id;
   const from = ship.edge;
   ship.edge = a.to;
@@ -2836,7 +2838,8 @@ H.epMove = (s, a) => {
   s.fx.push({ kind: 'epShip', pid: a.pid, ship: ship.id, from, to: a.to });
   if (EpShips.discoveryEdge(s, a.to)) {
     const found = Explore.discover(s, a.pid, a.to, (pid, r, k) => giveFromBank(s, pid, r, k));
-    ship.mpLeft = 0; // discovering ends the move
+    ship.mpLeft = 0; // discovering ends the move (wool can't restart it)
+    ship.stopped = true;
     for (const f of found) {
       s.fx.push({ kind: 'epDiscover', pid: a.pid, ...f });
       if (f.gold) s.fx.push({ kind: 'gold', pid: a.pid, n: f.gold, what: 'discover' });
@@ -2849,9 +2852,10 @@ H.epBoost = (s, a) => {
   const ship = epShipOf(s, a);
   EpShips.shipMp(s, ship);
   if (ship.boosted) fail('Este barco ya ha usado la lana este turno.');
+  if (ship.stopped) fail('Este barco ya ha terminado de navegar este turno.');
   if (!canAfford(s.players[a.pid].res, EpRules.BOOST_COST)) fail('Te falta lana.');
   const prev = s.epShips.find(x => x.id === s.explorers.activeShip);
-  if (prev && prev !== ship) { EpShips.shipMp(s, prev); prev.mpLeft = 0; }
+  if (prev && prev !== ship) { EpShips.shipMp(s, prev); prev.mpLeft = 0; prev.stopped = true; }
   s.explorers.activeShip = ship.id;
   pay(s, a.pid, EpRules.BOOST_COST);
   ship.boosted = true;

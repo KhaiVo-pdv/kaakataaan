@@ -665,6 +665,7 @@ function epMoveAction(s, pid) {
   const order = mine.sort((a, b) => (b.id === s.explorers.activeShip) - (a.id === s.explorers.activeShip));
   for (const ship of order) {
     const mp = EpShips.shipMp(s, ship);
+    if (ship.stopped) continue; // done for this turn (discovered, or another ship moved)
     const tgt = epTarget(s, ship);
     if (!tgt) continue;
     const R = EpShips.reachable(s, ship);

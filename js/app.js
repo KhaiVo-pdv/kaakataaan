@@ -258,6 +258,7 @@ export const App = {
 export function fallbackAction(st, pid, failed) {
   const pick = arr => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : null);
   if (!st || st.phase === 'gameOver') return null;
+  if (st.phase === 'epMove') return st.current === pid ? { type: 'endTurn', pid } : null; // Explorers & Pirates: stop sailing
   if (st.phase === 'discard') {
     let need = st.pendingDiscards[pid];
     if (!need) return null;

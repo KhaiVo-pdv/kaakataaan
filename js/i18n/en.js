@@ -1733,4 +1733,6 @@ export default {
   "🧭 Pasa a mover tus barcos.": "🧭 Go on to moving your ships.",
   "🧭 ¡Tierra nueva!": "🧭 New land!",
   "🧭 ¡Tierra nueva! +1 recurso": "🧭 New land! +1 resource",
+  "No tienes barcos.": "You have no ships.",
+  "Este barco ya ha terminado de navegar este turno.": "This ship is done sailing this turn.",
 };

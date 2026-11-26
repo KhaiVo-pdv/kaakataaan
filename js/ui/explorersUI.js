@@ -87,12 +87,12 @@ export function epDescribe(a) {
 // the action bar while sailing: pick a ship, +2 for a wool, finish the turn
 export function epMoveBar(st, v, ui, { h, dispatch, canAfford }) {
   const mine = st.epShips.filter(x => x.owner === v);
-  const sel = mine.find(x => x.id === ui.epShip);
+  const sel = mine.find(x => x.id === ui.epShip && Ships.shipMp(st, x) > 0);
   const out = [h('div', { class: 'waiting' }, sel
     ? t('⛵ Barco: {n} pasos. Toca una arista resaltada.', { n: Ships.shipMp(st, sel) })
     : t('⛵ Toca uno de tus barcos'))];
   if (sel) out.push(h('button', {
-    class: 'btn', 'data-testid': 'ep-boost', disabled: sel.boosted || !canAfford(st.players[v].res, BOOST_COST),
+    class: 'btn', 'data-testid': 'ep-boost', disabled: sel.boosted || sel.stopped || !canAfford(st.players[v].res, BOOST_COST),
     title: t('🐑 Paga 1 lana: el barco navega 2 aristas más.'),
     onclick: () => dispatch({ type: 'epBoost', pid: v, ship: sel.id }),
   }, `🐑 +${BOOST_MP}`));

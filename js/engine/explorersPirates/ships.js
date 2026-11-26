@@ -26,12 +26,14 @@ export function shipBuildEdges(s, pid) {
 
 // movement points left this turn (resets once per turn)
 export function shipMp(s, ship) {
+  // (stopped ships report 0)
   if (ship.turn !== s.turn) {
     ship.turn = s.turn;
     ship.mpLeft = SHIP_MP;
     ship.boosted = false;
+    ship.stopped = false; // set when it discovers or another ship moves: done for the turn
   }
-  return ship.mpLeft;
+  return ship.stopped ? 0 : ship.mpLeft;
 }
 
 const neighbours = (bd, e) => {
