@@ -39,7 +39,8 @@ import { LAKE_NUMS } from '../engine/tradersBarbarians/fishermen.js';
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
 const TOKEN_SPAN = 0.75; // widest a number token gets on the map, in world units (a hex is 1.73 across)
 // every 3D graphics option starts OFF; players turn on what they want in the in-game menu
-export const SETTINGS = { pixel: 1, tiltShift: false, quality: 'low', ao: false, outline: false };
+// mapStyle: 'classic' = the realistic tabletop look (default), 'toon' = cartoon summer look (optional)
+export const SETTINGS = { pixel: 1, tiltShift: false, quality: 'low', ao: false, outline: false, mapStyle: 'classic' };
 // saved choices live under a new key, so everyone starts from the all-off defaults once
 // (the old 'katanittes.gfx' key is ignored)
 const GFX_KEY = 'kaakataaan.gfx';
@@ -766,12 +767,32 @@ function tuftGeometry(blades, height, width, base, tip) {
   return g;
 }
 
+// ---------- toon map style (optional, see SETTINGS.mapStyle) ----------
+// fixed summer daylight; colours tuned to read well under ACES tone mapping
+const TOON = { skyTop: '#5fb8f0', skyBottom: '#d8f1ff', fog: '#cfeefc', hemiSky: '#ffffff', hemiGround: '#9cb07a', hemiI: 1.15, sun: '#fffaf0', sunI: 2.6 };
+// vertical gradient used as the screen background (top of the screen = deeper blue)
+function toonSkyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 2;
+  c.height = 256;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, TOON.skyTop);
+  g.addColorStop(1, TOON.skyBottom);
+  x.fillStyle = g;
+  x.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export class Board3D {
   static SETTINGS_TILT() { return SETTINGS.tiltShift; }
   static SETTINGS_PIXEL() { return SETTINGS.pixel; }
   static SETTINGS_Q() { return SETTINGS.quality; }
   static SETTINGS_AO() { return SETTINGS.ao; }
   static SETTINGS_OUTLINE() { return SETTINGS.outline; }
+  static SETTINGS_MAP() { return SETTINGS.mapStyle; }
 
   static async create(container) {
     const [kit, tex] = await Promise.all([loadKit(), loadTextures()]);
@@ -812,6 +833,7 @@ export class Board3D {
     su.sunPosition.value.copy(sunDir);
     this.sunDir = sunDir;
     scene.add(sky);
+    this.sky = sky;
     const pm = new THREE.PMREMGenerator(r);
     const envScene = new THREE.Scene();
     envScene.add(sky.clone());
@@ -831,7 +853,8 @@ export class Board3D {
     this.visMat = pieceColorMat(false);
     this.allMat = pieceColorMat(true);
     this.hasPieces = false;
-    scene.add(new THREE.HemisphereLight('#e9f2ff', '#5b5243', 0.35));
+    this.hemi = new THREE.HemisphereLight('#e9f2ff', '#5b5243', 0.35);
+    scene.add(this.hemi);
     const sun = (this.sun = new THREE.DirectionalLight('#fff0d8', 3.4));
     sun.castShadow = true;
     const sm = hi ? 4096 : 2048;
@@ -845,6 +868,7 @@ export class Board3D {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), patch(new THREE.MeshStandardMaterial({ color: '#1d4f63', roughness: 1 }), { key: 'floor' }));
     floor.position.y = -1.25;
     scene.add(floor);
+    this.applyMapStyle();
 
     this.staticGroup = new THREE.Group();
     this.dynGroup = new THREE.Group();
@@ -940,11 +964,47 @@ export class Board3D {
   }
 
   setGraphics(opts) {
+    const styleChanged = 'mapStyle' in opts && opts.mapStyle !== SETTINGS.mapStyle;
     Object.assign(SETTINGS, opts);
     try {
       localStorage.setItem(GFX_KEY, JSON.stringify(SETTINGS));
     } catch {}
+    if (styleChanged) this.applyMapStyle();
     this.setupPasses();
+  }
+
+  // Sky, fog and lights of the chosen map style. 'classic' restores exactly the original values;
+  // 'toon' is a fixed bright summer day: soft gradient sky, strong even light, light haze.
+  applyMapStyle() {
+    const toon = SETTINGS.mapStyle === 'toon';
+    const scene = this.scene;
+    this.sky.visible = !toon;
+    if (toon) {
+      if (!this.toonSkyTex) this.toonSkyTex = toonSkyTexture();
+      scene.background = this.toonSkyTex;
+      scene.environmentIntensity = 0.35;
+      scene.fog.color.set(TOON.fog);
+      scene.fog.near = 45;
+      scene.fog.far = 120;
+      this.hemi.color.set(TOON.hemiSky);
+      this.hemi.groundColor.set(TOON.hemiGround);
+      this.hemi.intensity = TOON.hemiI;
+      this.sun.color.set(TOON.sun);
+      this.sun.intensity = TOON.sunI;
+      this.renderer.toneMappingExposure = 1.0;
+    } else {
+      scene.background = null;
+      scene.environmentIntensity = 0.55;
+      scene.fog.color.set('#bfd3db');
+      scene.fog.near = 34;
+      scene.fog.far = 95;
+      this.hemi.color.set('#e9f2ff');
+      this.hemi.groundColor.set('#5b5243');
+      this.hemi.intensity = 0.35;
+      this.sun.color.set('#fff0d8');
+      this.sun.intensity = 3.4;
+      this.renderer.toneMappingExposure = 0.92;
+    }
   }
 
   resize() {
