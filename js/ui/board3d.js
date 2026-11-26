@@ -792,7 +792,7 @@ function toonSkyTexture() {
 
 // 3-step light ramp of the toon shading (dark side, mid, lit)
 const TOON_RAMP = (() => {
-  const t = new THREE.DataTexture(new Uint8Array([110, 185, 255]), 3, 1, THREE.RedFormat);
+  const t = new THREE.DataTexture(new Uint8Array([150, 210, 255]), 3, 1, THREE.RedFormat);
   t.minFilter = t.magFilter = THREE.NearestFilter;
   t.needsUpdate = true;
   return t;
@@ -873,7 +873,8 @@ function toonMaterial(src) {
   if (src.map && !keepMap) color.multiply(textureAverage(src.map));
   const hsl = {};
   color.getHSL(hsl);
-  color.setHSL(hsl.h, Math.min(1, hsl.s * 1.2), Math.min(0.92, hsl.l * 1.06));
+  // lift dark colours (pines, rocks) so nothing turns into a black blob under cel lighting
+  color.setHSL(hsl.h, Math.min(1, hsl.s * 1.25), Math.min(0.9, Math.max(hsl.l * 1.15, 0.32)));
   const m = new THREE.MeshToonMaterial({
     name: src.name, color, gradientMap: TOON_RAMP, map: keepMap ? src.map : null, vertexColors: src.vertexColors,
     transparent: src.transparent, opacity: src.opacity, alphaTest: src.alphaTest, side: src.side,
