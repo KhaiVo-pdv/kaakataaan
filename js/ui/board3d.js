@@ -172,6 +172,8 @@ function patch(mat, opts = {}) {
   mat.userData.patched = true;
   const wind = opts.wind || 0, clouds = !!opts.clouds;
   const prev = mat.onBeforeCompile;
+  mat.userData.patchOpts = opts;
+  mat.userData.customShader = !!prev; // has its own shader changes: the toon style leaves it alone
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
     Object.assign(sh.uniforms, U);
@@ -718,6 +720,7 @@ function terrainMaterial(tex) {
         .replace('texture2D( normalMap, vNormalMapUv ).xyz', 'splat(uNrm, vSplatUv)');
   };
   base.customProgramCacheKey = () => 'terrainSplat';
+  base.userData.noToon = true;
   return patch(base, { clouds: true, key: 'terrain' });
 }
 
@@ -743,6 +746,7 @@ function waterMaterial(tex, heightTex) {
       .replace('texture2D( normalMap, vNormalMapUv ).xyz', `normalize(texture2D(normalMap, vWxz * 0.33 + uTime * vec2(0.012, 0.007)).xyz * 2.0 - 1.0 + texture2D(normalMap, vWxz * 0.57 - uTime * vec2(0.009, 0.013)).xyz * 2.0 - 1.0) * 0.5 + 0.5`);
   };
   m.customProgramCacheKey = () => 'water';
+  m.userData.noToon = true;
   return patch(m, { clouds: true, key: 'water' });
 }
 
@@ -784,6 +788,109 @@ function toonSkyTexture() {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+// 3-step light ramp of the toon shading (dark side, mid, lit)
+const TOON_RAMP = (() => {
+  const t = new THREE.DataTexture(new Uint8Array([150, 210, 255]), 3, 1, THREE.RedFormat);
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.needsUpdate = true;
+  return t;
+})();
+// summer colours of the 8 terrain layers, in L order: grass, forest, dirt, rock, sand, snow, field, meadow
+const TOON_LAYERS = ['#69c048', '#3f8f3c', '#cf7a4c', '#a3a9b1', '#f3da93', '#f6f9fc', '#f2c640', '#93d85c'];
+
+// terrain in the toon style: flat colour per layer (no photo textures), cel lighting,
+// wheat furrows and a dark ink line along every land hex edge
+let toonTerrainMat = null;
+function toonTerrainMaterial() {
+  if (toonTerrainMat) return toonTerrainMat;
+  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TOON_RAMP });
+  const cols = TOON_LAYERS.map(c => new THREE.Color(c));
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uLayer = { value: cols };
+    sh.vertexShader = 'attribute vec4 aW0;\nattribute vec4 aW1;\nattribute float aRow;\nvarying vec4 vW0;\nvarying vec4 vW1;\nvarying float vRow;\nvarying vec3 vWorld;\n' +
+      sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+  vW0 = aW0; vW1 = aW1; vRow = aRow;
+  vWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
+    sh.fragmentShader = 'uniform vec3 uLayer[8];\nvarying vec4 vW0;\nvarying vec4 vW1;\nvarying float vRow;\nvarying vec3 vWorld;\n' +
+      `// distance from the centre of the pointy-top hex (size 1) holding p, scaled so an edge is 0.866
+      float hexDist(vec2 p) {
+        float q = 0.57735027 * p.x - p.y / 3.0, r = 0.66666667 * p.y;
+        vec3 c = vec3(q, -q - r, r), rc = floor(c + 0.5), d = abs(rc - c);
+        if (d.x > d.y && d.x > d.z) rc.x = -rc.y - rc.z; else if (d.y > d.z) rc.y = -rc.x - rc.z; else rc.z = -rc.x - rc.y;
+        vec2 ctr = vec2(1.7320508 * (rc.x + rc.z * 0.5), 1.5 * rc.z);
+        vec2 rd = p - ctr;
+        return max(abs(rd.x), max(abs(dot(rd, vec2(0.5, 0.8660254))), abs(dot(rd, vec2(-0.5, 0.8660254)))));
+      }\n` +
+      sh.fragmentShader.replace('#include <map_fragment>', `
+  vec3 salb = (vW0.x * uLayer[0] + vW0.y * uLayer[1] + vW0.z * uLayer[2] + vW0.w * uLayer[3] +
+               vW1.x * uLayer[4] + vW1.y * uLayer[5] + vW1.z * uLayer[6] + vW1.w * uLayer[7]) /
+               max(dot(vW0, vec4(1.0)) + dot(vW1, vec4(1.0)), 0.0001);
+  float fur = smoothstep(0.18, 0.5, abs(fract(vRow * 7.5) - 0.5));
+  salb = mix(salb, salb * vec3(0.78, 0.68, 0.5), vW1.z * (1.0 - fur) * 0.7);
+  // ink line along the hex edges, only on dry land
+  float hd = hexDist(vWorld.xz);
+  float ink = smoothstep(0.80, 0.835, hd) * smoothstep(-0.12, -0.02, vWorld.y);
+  salb = mix(salb, vec3(0.16, 0.13, 0.22), ink * 0.85);
+  diffuseColor.rgb *= salb;`);
+  };
+  m.customProgramCacheKey = () => 'terrainToon';
+  m.userData.noToon = true;
+  toonTerrainMat = patch(m, { key: 'terrainToon' });
+  return toonTerrainMat;
+}
+
+// average colour of a texture (so a toon copy can drop the photo texture but keep its colour)
+const avgCache = new Map();
+function textureAverage(tex) {
+  if (avgCache.has(tex.uuid)) return avgCache.get(tex.uuid);
+  let c = new THREE.Color(1, 1, 1);
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 8;
+    const x = cv.getContext('2d', { willReadFrequently: true });
+    x.drawImage(tex.image, 0, 0, 8, 8);
+    const d = x.getImageData(0, 0, 8, 8).data;
+    let r = 0, g = 0, b = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    const n = (d.length / 4) * 255;
+    c = new THREE.Color().setRGB(r / n, g / n, b / n, THREE.SRGBColorSpace);
+  } catch {}
+  avgCache.set(tex.uuid, c);
+  return c;
+}
+
+// toon copy of a built-in material: same colour (a bit livelier), cel lighting, no photo texture.
+// Materials with their own shader code (gold, ghosts, outline masks, terrain, water) are kept as they are.
+const toonCache = new Map();
+function toonMaterial(src) {
+  if (!src || src.userData.noToon || src.userData.customShader || src.isMeshToonMaterial) return src;
+  if (!(src.isMeshStandardMaterial || src.isMeshLambertMaterial || src.isMeshPhongMaterial)) return src;
+  if (toonCache.has(src.uuid)) return toonCache.get(src.uuid);
+  const keepMap = !!src.map && (src.transparent || src.alphaTest > 0);
+  const color = src.color.clone();
+  if (src.map && !keepMap) color.multiply(textureAverage(src.map));
+  const hsl = {};
+  color.getHSL(hsl);
+  // lift dark colours (pines, rocks) so nothing turns into a black blob under cel lighting
+  color.setHSL(hsl.h, Math.min(1, hsl.s * 1.25), Math.min(0.9, Math.max(hsl.l * 1.15, 0.32)));
+  const m = new THREE.MeshToonMaterial({
+    name: src.name, color, gradientMap: TOON_RAMP, map: keepMap ? src.map : null, vertexColors: src.vertexColors,
+    transparent: src.transparent, opacity: src.opacity, alphaTest: src.alphaTest, side: src.side,
+    emissive: src.emissive ? src.emissive.clone() : new THREE.Color(0), emissiveIntensity: src.emissiveIntensity ?? 1,
+  });
+  const opts = src.userData.patchOpts;
+  if (opts) patch(m, { ...opts, clouds: false, key: 'toon' + (opts.key || '') });
+  toonCache.set(src.uuid, m);
+  return m;
+}
+// swap every mesh in a group to its toon material (cached, so cheap to repeat)
+function toonify(group) {
+  group.traverse(o => {
+    if (!o.isMesh || o.userData.noToon) return;
+    o.material = Array.isArray(o.material) ? o.material.map(toonMaterial) : toonMaterial(o.material);
+  });
 }
 
 export class Board3D {
@@ -969,7 +1076,12 @@ export class Board3D {
     try {
       localStorage.setItem(GFX_KEY, JSON.stringify(SETTINGS));
     } catch {}
-    if (styleChanged) this.applyMapStyle();
+    if (styleChanged) {
+      this.applyMapStyle();
+      // rebuild terrain, props and pieces in the new style
+      this.staticKey = this.dynKey = this._toonKey = 'restyle';
+      if (this.lastSt) this.render(this.lastSt, this.lastView || {});
+    }
     this.setupPasses();
   }
 
@@ -1529,6 +1641,7 @@ export class Board3D {
   // ---------- build ----------
   render(st, view = {}) {
     this.lastSt = st;
+    this.lastView = view;
     const bd = st.board;
     this.bounds = bd.bounds;
     const faceDown = !!view.faceDown;
@@ -1546,6 +1659,12 @@ export class Board3D {
     this.markRolled(view.rolled, view.rolledAt);
     this.updateFog(st, view);
     this.buildDynamic(st, view);
+    // toon style: props and pieces get cel-shaded copies of their materials
+    if (SETTINGS.mapStyle === 'toon' && this._toonKey !== this.dynKey) {
+      this._toonKey = this.dynKey;
+      toonify(this.staticGroup);
+      toonify(this.dynGroup);
+    }
   }
 
   heightAt(x, z) {
@@ -1620,7 +1739,8 @@ export class Board3D {
       }
       w0[k * 4 + 3] += steep;
     }
-    const terrain = new THREE.Mesh(geo, terrainMaterial(this.tex));
+    const toon = SETTINGS.mapStyle === 'toon';
+    const terrain = new THREE.Mesh(geo, toon ? toonTerrainMaterial() : terrainMaterial(this.tex));
     terrain.receiveShadow = terrain.castShadow = true;
     terrain.userData.own = true;
     this.staticGroup.add(terrain);
@@ -1663,6 +1783,7 @@ export class Board3D {
     lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
     const grid = new THREE.LineSegments(lg, patch(new THREE.LineBasicMaterial({ color: '#fff6dc', transparent: true, opacity: 0.16 }), { key: 'grid' }));
     grid.userData.own = true;
+    grid.visible = !toon; // the toon terrain draws its own ink lines on the hex edges
     this.staticGroup.add(grid);
 
     this.placeProps(st);
