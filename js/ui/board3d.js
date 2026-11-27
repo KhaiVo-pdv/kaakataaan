@@ -2652,7 +2652,7 @@ export class Board3D {
       add(o, 'metro' + tr + m.at + m.owner);
     }
     if (st.barbarians) {
-      const b = st.barbarians, way = barbarianPath(bd, b.track);
+      const b = st.barbarians, way = barbarianPath(bd, b.track, SETTINGS.mapStyle === 'toon' ? 2.2 : 0); // toon: out at sea, closing in
       way.forEach((p, i) => {
         const o = makeBuoy(i > 0 && i <= b.pos, i === b.track);
         float(o, { x: p.x, y: CK_WATER_Y, z: p.z, rotY: 0 }, i * 0.9);

@@ -117,12 +117,21 @@ export function makeBuoy(done, land) {
 }
 
 // where the barbarians sail: an arc across the sea east of the island, step 0 .. track (landing)
-export function barbarianPath(bd, track) {
+// `approach` (toon map style): the ship starts this much further out at sea and comes a little
+// closer with every step, landing just off the coast on the last buoy. 0 = the classic arc.
+export function barbarianPath(bd, track, approach = 0) {
   const R = Math.max(...bd.tiles.map(t => Math.hypot(t.x, t.y))) + 1.05;
   const out = [];
   for (let i = 0; i <= track; i++) {
     const a = (-60 + (120 * i) / track) * (Math.PI / 180);
-    out.push({ x: Math.cos(a) * R, z: Math.sin(a) * R, rotY: -(a + Math.PI / 2) });
+    const r = R + approach * (1 - i / track) + (approach ? 0.6 : 0);
+    out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, rotY: -(a + Math.PI / 2) });
   }
+  // heading: along the way from this buoy to the next one (the last keeps the previous heading)
+  if (approach)
+    for (let i = 0; i < out.length; i++) {
+      const p = out[Math.max(0, i - (i === out.length - 1 ? 1 : 0))], q = out[Math.min(out.length - 1, i + (i === out.length - 1 ? 0 : 1))];
+      out[i].rotY = -Math.atan2(q.z - p.z, q.x - p.x);
+    }
   return out;
 }
