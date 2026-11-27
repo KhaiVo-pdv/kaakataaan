@@ -123,7 +123,9 @@ export function barbarianPath(bd, track, approach = 0) {
   const R = Math.max(...bd.tiles.map(t => Math.hypot(t.x, t.y))) + 1.05;
   const out = [];
   for (let i = 0; i <= track; i++) {
-    const a = (-60 + (120 * i) / track) * (Math.PI / 180);
+    // toon: a tighter arc (-45..45 degrees) so the far start still fits in the camera's view
+    const span = approach ? 45 : 60;
+    const a = (-span + (2 * span * i) / track) * (Math.PI / 180);
     const r = R + approach * (1 - i / track) + (approach ? 0.6 : 0);
     out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, rotY: -(a + Math.PI / 2) });
   }
