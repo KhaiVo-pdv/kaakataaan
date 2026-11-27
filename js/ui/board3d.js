@@ -40,13 +40,17 @@ import { LAKE_NUMS } from '../engine/tradersBarbarians/fishermen.js';
 const FOV = 32, TOP_FOV = 11; // the normal lens and the narrow one of the top view
 const TOKEN_SPAN = 0.75; // widest a number token gets on the map, in world units (a hex is 1.73 across)
 // every 3D graphics option starts OFF; players turn on what they want in the in-game menu
-// mapStyle: 'classic' = the realistic tabletop look (default), 'toon' = cartoon summer look (optional)
-export const SETTINGS = { pixel: 1, tiltShift: false, quality: 'low', ao: false, outline: false, mapStyle: 'classic' };
+// mapStyle: 'toon' = cartoon summer look (default), 'classic' = the realistic tabletop look.
+// mapPicked: the player chose a map style in the menu (only then is a saved mapStyle kept)
+export const SETTINGS = { pixel: 1, tiltShift: false, quality: 'low', ao: false, outline: false, mapStyle: 'toon', mapPicked: false };
 // saved choices live under a new key, so everyone starts from the all-off defaults once
 // (the old 'katanittes.gfx' key is ignored)
 const GFX_KEY = 'kaakataaan.gfx';
 try {
-  Object.assign(SETTINGS, JSON.parse(localStorage.getItem(GFX_KEY) || '{}'));
+  const saved = JSON.parse(localStorage.getItem(GFX_KEY) || '{}');
+  // older saves stored mapStyle with every graphics change: keep it only if the player picked it
+  if (!saved.mapPicked) delete saved.mapStyle;
+  Object.assign(SETTINGS, saved);
 } catch {}
 
 const INR = Math.sqrt(3) / 2; // hex inradius
@@ -1033,6 +1037,7 @@ export class Board3D {
 
   setGraphics(opts) {
     const styleChanged = 'mapStyle' in opts && opts.mapStyle !== SETTINGS.mapStyle;
+    if ('mapStyle' in opts) opts = { ...opts, mapPicked: true }; // an explicit choice: remembered
     Object.assign(SETTINGS, opts);
     try {
       localStorage.setItem(GFX_KEY, JSON.stringify(SETTINGS));
