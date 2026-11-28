@@ -1,4 +1,5 @@
 import { DISCOVER_SEA_GOLD } from './rules.js';
+import { EP_SCENARIOS, epFlag } from './scenarios.js';
 
 // Explorers & Pirates: the unexplored areas. Their hexes start face down and are turned
 // over by ships (discovery comes with the ship rules). Only used when the expansion is on.
@@ -6,7 +7,8 @@ import { DISCOVER_SEA_GOLD } from './rules.js';
 // Sets up s.explorers and hides every face-down hex (land and sea).
 export function initExplorers(s) {
   s.explorers = { scenario: s.board.explorers.scenario, buys: null, waiting: {} }; // buys: gold purchases this turn (Rivers.goldBox); waiting: harbor vertex -> pid of a settler waiting there
-  for (const p of s.players) p.gold = 0;
+  for (const p of s.players) p.gold = EP_SCENARIOS[s.explorers.scenario].startGold || 0;
+  if (epFlag(s, 'lairs')) s.explorers.lairs = {}; // Pirate Lairs: tile id -> { crews, captured }
   for (const t of s.board.tiles) if (t.fog) t.revealed = t.numRevealed = false;
   for (const t of s.board.sea) if (t.fog) t.revealed = false;
 }

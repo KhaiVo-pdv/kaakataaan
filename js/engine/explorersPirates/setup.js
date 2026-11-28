@@ -1,7 +1,8 @@
 // Explorers & Pirates: fixed start positions. Instead of the placement rounds every player
 // gets a settlement + road, a harbor settlement and a ship carrying a settler.
 import { EP_MAPS } from './maps.js';
-import { PIECES } from './rules.js';
+import { PIECES, CREW_PIECES } from './rules.js';
+import { epFlag } from './scenarios.js';
 
 function vertexAt(bd, { x, y }) {
   const v = bd.vertices.find(V => Math.abs(V.x - x) < 0.05 && Math.abs(V.y - y) < 0.05);
@@ -25,6 +26,7 @@ export function placeStarts(s, give) {
     p.shipsLeft = PIECES.ships;
     p.settlersLeft = PIECES.settlers;
     p.citiesLeft = 0;
+    if (epFlag(s, 'crews')) p.crewsLeft = CREW_PIECES;
     const seat = seats[i] == null ? null : map.starts[seats[i]];
     if (!seat) return; // more players than seats: they start with nothing (the lobby warns)
     const sv = vertexAt(bd, seat.settlement), rv = vertexAt(bd, seat.road), hv = vertexAt(bd, seat.harbor);

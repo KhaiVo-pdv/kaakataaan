@@ -5,7 +5,7 @@
 //   .            open sea
 //   W B S H O D  starting island: wood / brick / sheep / wheat / ore / desert (fixed)
 //   1 / 2        a face-down slot of the north / south unexplored area, filled from that
-//                area's shuffled stack (land or sea); land also draws from the area's number stack
+//                area's shuffled stack (land, gold field or sea); land also draws from the area's number stack
 import { shuffle } from '../rng.js';
 import { layoutToAxial } from '../seafarers/scenarios.js';
 
@@ -50,6 +50,38 @@ export const EP_MAPS = {
     ],
     seatsFor: { 2: [4, 5], 3: [1, 2, 3], 4: [0, 1, 2, 3] },
   },
+};
+
+// Pirate Lairs: the Land Ho! starting island and start seats (kept so the starts stay balanced),
+// with bigger unexplored areas holding 3 gold fields each (the pirate lairs). 14 columns so the
+// areas keep a sea border.
+EP_MAPS.pirateLairs = {
+  layout: [
+    '..............',
+    '..WS....1111..',
+    '.HOBW...1111..',
+    '..SDWH...1111.',
+    '.BHOS.........',
+    '.........2222.',
+    '........2222..',
+    '.........2222.',
+    '..............',
+  ],
+  startNums: EP_MAPS.landHo.startNums,
+  areas: {
+    north: {
+      slot: '1',
+      tiles: ['wood', 'wood', 'brick', 'sheep', 'wheat', 'wheat', 'ore', 'gold', 'gold', 'gold', 'sea', 'sea'],
+      nums: [3, 4, 5, 6, 8, 9, 10, 11, 5, 9],
+    },
+    south: {
+      slot: '2',
+      tiles: ['wood', 'brick', 'brick', 'sheep', 'sheep', 'wheat', 'ore', 'gold', 'gold', 'gold', 'sea', 'sea'],
+      nums: [2, 4, 5, 6, 8, 9, 10, 12, 4, 10],
+    },
+  },
+  starts: EP_MAPS.landHo.starts,
+  seatsFor: EP_MAPS.landHo.seatsFor,
 };
 
 const FIXED = { W: 'wood', B: 'brick', S: 'sheep', H: 'wheat', O: 'ore', D: 'desert' };

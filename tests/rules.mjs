@@ -13,6 +13,7 @@ import * as Two from '../js/engine/catanForTwo.js';
 import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import { EP_MAPS, buildEpMap } from '../js/engine/explorersPirates/maps.js';
+import * as EpLairs from '../js/engine/explorersPirates/lairs.js';
 import { epScenarioId, epFlag, EP_SCENARIOS } from '../js/engine/explorersPirates/scenarios.js';
 import { epPlayersOk } from '../js/engine/expansions.js';
 import * as EpShips from '../js/engine/explorersPirates/ships.js';
@@ -3447,6 +3448,58 @@ t('E&P: epFlag', () => {
   eq(epFlag(G.createGame(base), 'lairs'), false, 'base');
   const s = G.createGame(lairsConfig());
   eq([epFlag(s, 'lairs'), epFlag(s, 'crews')], [true, true]);
+});
+
+t('E&P mapa Guaridas: forma y montones', () => {
+  const m = buildEpMap('pirateLairs', { s: 7 });
+  const start = m.land.filter(x => x.area === 'start');
+  eq(start.length, 14);
+  ok(start.every(x => !x.fog), 'la isla de salida está descubierta');
+  for (const area of ['north', 'south']) {
+    const land = m.land.filter(x => x.area === area), sea = m.sea.filter(x => x.area === area);
+    eq([land.length, sea.length], [10, 2], area);
+    eq(land.filter(x => x.res === 'gold').length, 3, area + ' campos de oro');
+    ok([...land, ...sea].every(x => x.fog), area + ' boca abajo');
+    const st = EP_MAPS.pirateLairs.areas[area];
+    eq(land.map(x => x.res).sort(), st.tiles.filter(r => r !== 'sea').sort(), area + ' recursos');
+    eq(land.map(x => x.num).sort((a, b) => a - b), [...st.nums].sort((a, b) => a - b), area + ' números');
+  }
+});
+
+t('E&P mapa Guaridas: tierras nuevas separadas', () => {
+  const m = buildEpMap('pirateLairs', { s: 5 });
+  const all = [...m.land, ...m.sea.filter(x => x.area)];
+  const D = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+  const nb = (a, b) => D.some(([dq, dr]) => a.q + dq === b.q && a.r + dr === b.r);
+  for (const a of all) for (const b of all) {
+    if (!nb(a, b) || a.area === b.area) continue;
+    throw new Error(`${a.area} toca ${b.area}`);
+  }
+});
+
+t('E&P Guaridas: arranque', () => {
+  const at = s => Object.keys(s.buildings).map(k => `${s.board.vertices[k].x.toFixed(2)},${s.board.vertices[k].y.toFixed(2)}:${s.buildings[k].type}`).sort();
+  for (let n = 2; n <= 4; n++)
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = G.createGame(lairsConfig(c => { c.seed = seed; c.players = c.players.slice(0, n); }));
+      const tag = `n=${n} seed=${seed}`;
+      eq(s.phase, 'roll', tag);
+      for (const p of s.players) eq([p.gold, p.crewsLeft], [2, 9], tag + ' p' + p.id);
+      eq(s.explorers.lairs, {}, tag);
+      eq(s.board.tiles.filter(x => x.res === 'gold' && x.fog && !x.revealed).length, 6, tag);
+      const ho = G.createGame(epConfig(c => { c.seed = seed; c.players = c.players.slice(0, n); }));
+      eq(at(s), at(ho), tag + ' mismas salidas');
+    }
+});
+
+t('E&P Tierra a la vista: sin claves de Guaridas', () => {
+  const s = G.createGame(epConfig());
+  eq(s.explorers.lairs, undefined);
+  ok(s.players.every(p => p.crewsLeft === undefined && p.gold === 0));
+  eq(EpLairs.lairBlocks(s, 'vertex', 0), false);
+  const old = JSON.parse(JSON.stringify(G.createGame(lairsConfig())));
+  delete old.explorers.lairs;
+  eq(EpLairs.lairBlocks(old, 'vertex', 0), false, 'partida guardada sin lairs');
 });
 
 

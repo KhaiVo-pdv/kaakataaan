@@ -14,6 +14,9 @@ export const SHIP_CAPACITY = 2; // settlers a ship can carry
 export const DISCOVER_SEA_GOLD = 2; // turning over a sea hex
 export const NO_PRODUCTION_GOLD = 1; // a roll (not a 7) that gives you nothing
 export const EP_TRADE_RATIO = 3; // no harbours: every bank trade is 3:1
+export const CREW_PIECES = 9; // crews per player (scenarios with crews)
+export const LAIR_MAX_CREWS = 3; // the 3rd crew captures a pirate lair
+export const DISCOVER_GOLD_FIELD = 2; // gold for turning over a gold field (Pirate Lairs)
 
 const hidden = t => !!t && t.fog && !t.revealed;
 
