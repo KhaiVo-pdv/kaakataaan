@@ -3609,6 +3609,47 @@ t('E&P Guaridas: bots juegan 60 rondas', () => {
     }
 });
 
+t('E&P Guaridas: un camino junto a la guarida no destapa su número', () => {
+  const s = lairsMain();
+  const bd = s.board;
+  for (const x of bd.tiles) if (x.fog) x.revealed = true;
+  for (const x of bd.sea) if (x.fog) x.revealed = true;
+  const T = bd.tiles.find(x => x.res === 'gold');
+  T.numRevealed = false;
+  EpLairs.addLair(s, T.id);
+  // a corner of T and an edge from it that doesn't border T; a road of player 0 reaches its far end
+  const v = T.verts.find(x => bd.vertices[x].edges.some(e => !bd.edges[e].hexes.includes(T.id) && bd.edges[e].hexes.length));
+  const e = bd.vertices[v].edges.find(e2 => !bd.edges[e2].hexes.includes(T.id) && bd.edges[e2].hexes.length);
+  const far = bd.edges[e].a === v ? bd.edges[e].b : bd.edges[e].a;
+  const feeder = bd.vertices[far].edges.find(e2 => e2 !== e && bd.edges[e2].hexes.length);
+  s.roads[feeder] = 0;
+  give(s, 0, { wood: 1, brick: 1 });
+  const r = act(s, { type: 'build', pid: 0, what: 'road', at: e });
+  ok(r.ok, JSON.stringify(r));
+  ok(!T.numRevealed, 'el número de la guarida sigue oculto');
+});
+
+t('E&P Guaridas: Tierra viva no mueve las tierras nuevas', () => {
+  const s = lairsMain(c => { c.modes.chaosEvery = 1; c.modes.chaosWhat = 'both'; });
+  const bd = s.board;
+  const T = bd.tiles.find(x => x.res === 'gold');
+  T.revealed = true;
+  EpLairs.addLair(s, T.id);
+  const snap = () => bd.tiles.filter(x => x.area !== 'start').map(x => `${x.id}:${x.res}:${x.num}`);
+  const before = snap();
+  s.phase = 'roll';
+  let guard = 0;
+  while (s.round < 6 && ++guard < 20000) {
+    const a = G.pendingActors(s).map(pid => botAct(s, pid)).find(Boolean);
+    if (!a) throw new Error('bloqueo en fase ' + s.phase);
+    const r = act(s, a);
+    if (!r.ok) throw new Error(JSON.stringify(a) + ' ' + r.error);
+  }
+  ok(s.round >= 6 && s.log.some(l => JSON.stringify(l).includes('Tierra viva')), 'hubo Tierra viva');
+  eq(snap(), before, 'las tierras nuevas y la guarida no se barajan');
+  eq(bd.tiles[T.id].res, 'gold');
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);

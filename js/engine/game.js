@@ -5,6 +5,7 @@ import { rand, randInt, shuffle, pick } from './rng.js';
 import { generateBoard } from './board.js';
 import { normalizeExpansions, seafarersOn, citiesKnightsOn, tradersBarbariansOn, tbScenarioOn, epScenarioOn, explorersPiratesOn } from './expansions.js';
 import { EP_SCENARIOS } from './explorersPirates/scenarios.js';
+import * as EpScenarios from './explorersPirates/scenarios.js';
 import * as Explore from './explorersPirates/explore.js';
 import * as EpSetup from './explorersPirates/setup.js';
 import * as EpRules from './explorersPirates/rules.js';
@@ -507,6 +508,7 @@ function revealAround(s, v) {
   for (const h of s.board.vertices[v].hexes) {
     const t = s.board.tiles[h];
     if (t.fog && !t.revealed) continue; // Seafarers fog lifts by exploring (Islands.explore), not by building near it
+    if (s.explorers && EpLairs.lairBlocks(s, 'tile', h)) continue; // Pirate Lairs: a lair's number stays hidden until it's captured
     if (!t.revealed || !t.numRevealed) {
       t.revealed = t.numRevealed = true;
       s.fx.push({ kind: 'revealTile', tile: h });
@@ -736,7 +738,8 @@ function startRound(s) {
   const M = s.config.modes;
   // Tierra viva: reshuffle numbers/resources every N rounds
   if (M.chaosEvery > 0 && s.round > 1 && (s.round - 1) % M.chaosEvery === 0) {
-    const tiles = s.board.tiles.filter(t => t.res !== 'desert');
+    const lairs = EpScenarios.epFlag(s, 'lairs'); // Pirate Lairs: the unexplored areas (and their lairs) stay put
+    const tiles = s.board.tiles.filter(t => t.res !== 'desert' && !(lairs && t.area !== 'start'));
     if (M.chaosWhat !== 'resources') {
       const nums = shuffle(s.rng, tiles.map(t => t.num));
       tiles.forEach((t, i) => (t.num = nums[i]));
