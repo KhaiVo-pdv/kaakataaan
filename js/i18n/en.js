@@ -1698,7 +1698,7 @@ export default {
   "Exploradores y piratas": "Explorers & Pirates",
   "Guaridas piratas": "Pirate Lairs",
   "Haz amistad con las aldeas de las islas de las especias y lleva sus sacos al consejo.": "Befriend the villages of the spice islands and bring their sacks to the council.",
-  "Lleva tripulaciones a los campos de oro y conquista las guaridas de los piratas.": "Bring crews to the gold fields and capture the pirate lairs.",
+  "Descubre los campos de oro, construye tripulaciones y llévalas en barco para conquistar las guaridas piratas. Se juega a 12 puntos.": "Find the gold fields, build crews and ship them out to capture the pirate lairs. Played to 12 points.",
   "Pesca en los bancos de peces y lleva el pescado al consejo de Catán.": "Fish the shoals and bring the catch to the Council of Catan.",
   "Pescado para Catán": "Fish for Catan",
   "Todas las misiones a la vez: tierras nuevas, guaridas piratas, pescado y especias.": "Every mission at once: new lands, pirate lairs, fish and spices.",

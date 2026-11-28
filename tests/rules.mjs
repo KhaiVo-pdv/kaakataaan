@@ -13,6 +13,7 @@ import * as Two from '../js/engine/catanForTwo.js';
 import * as BarbAttack from '../js/engine/tradersBarbarians/barbarianAttack.js';
 import { TB_SCENARIOS } from '../js/engine/tradersBarbarians/scenarios.js';
 import { EP_MAPS, buildEpMap } from '../js/engine/explorersPirates/maps.js';
+import { epScenarioId, epFlag, EP_SCENARIOS } from '../js/engine/explorersPirates/scenarios.js';
 import { epPlayersOk } from '../js/engine/expansions.js';
 import * as EpShips from '../js/engine/explorersPirates/ships.js';
 import { seaRevealKey, applySeaReveal } from '../js/engine/seafarers/board.js';
@@ -3429,6 +3430,23 @@ t('E&P + niebla: fundar junto a alguien oculto choca sin perder el colono', () =
   ok(r.ok && r.blocked, JSON.stringify(r));
   eq(s.buildings[v], undefined);
   eq(ship.cargo, ['settler'], 'el colono sigue en el barco');
+});
+
+// ---------- E&P: Pirate Lairs ----------
+t('E&P Guaridas: se puede elegir', () => {
+  eq(epScenarioId('pirateLairs'), 'pirateLairs');
+  eq(normalizeExpansions({ expansions: { explorersPirates: true, epScenario: 'pirateLairs' } }).epScenario, 'pirateLairs');
+  eq(epScenarioId('fishForCatan'), 'landHo', 'los no listos siguen cayendo a landHo');
+});
+
+const lairsConfig = (mut) => epConfig(c => { c.expansions.epScenario = 'pirateLairs'; c.rules.vpTarget = 12; if (mut) mut(c); });
+
+t('E&P: epFlag', () => {
+  eq(epFlag(G.createGame(epConfig()), 'lairs'), false, 'Tierra a la vista');
+  const base = defaultConfig(); base.seed = 5;
+  eq(epFlag(G.createGame(base), 'lairs'), false, 'base');
+  const s = G.createGame(lairsConfig());
+  eq([epFlag(s, 'lairs'), epFlag(s, 'crews')], [true, true]);
 });
 
 

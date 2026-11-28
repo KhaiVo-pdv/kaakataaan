@@ -1697,7 +1697,7 @@ export default {
   "Exploradores y piratas": "Thám hiểm & Cướp biển",
   "Guaridas piratas": "Hang cướp biển",
   "Haz amistad con las aldeas de las islas de las especias y lleva sus sacos al consejo.": "Kết thân với các làng trên đảo gia vị và chở bao gia vị về Hội đồng.",
-  "Lleva tripulaciones a los campos de oro y conquista las guaridas de los piratas.": "Đưa thủy thủ tới các mỏ vàng và chiếm hang cướp biển.",
+  "Descubre los campos de oro, construye tripulaciones y llévalas en barco para conquistar las guaridas piratas. Se juega a 12 puntos.": "Tìm các mỏ vàng, lập thủy thủ và chở họ bằng tàu đi chiếm hang cướp biển. Chơi tới 12 điểm.",
   "Pesca en los bancos de peces y lleva el pescado al consejo de Catán.": "Đánh cá ở các bãi cá và chở cá về Hội đồng Catan.",
   "Pescado para Catán": "Cá cho Catan",
   "Todas las misiones a la vez: tierras nuevas, guaridas piratas, pescado y especias.": "Mọi nhiệm vụ cùng lúc: đất mới, hang cướp biển, cá và gia vị.",
