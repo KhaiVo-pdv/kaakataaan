@@ -10,6 +10,7 @@ import * as EpSetup from './explorersPirates/setup.js';
 import * as EpRules from './explorersPirates/rules.js';
 import * as EpShips from './explorersPirates/ships.js';
 import * as EpSettlers from './explorersPirates/settlers.js';
+import * as EpLairs from './explorersPirates/lairs.js';
 import { TB_SCENARIOS } from './tradersBarbarians/scenarios.js';
 import * as Fish from './tradersBarbarians/fishermen.js';
 import * as Rivers from './tradersBarbarians/rivers.js';
@@ -362,6 +363,7 @@ export function canBuildRoad(s, pid, e) {
   const E = s.board.edges[e];
   if (!E || s.roads[e] !== undefined || !landEdge(s, e) || hasShip(s, e)) return false;
   if (s.explorers && (EpRules.nearHidden(s, 'edge', e) || s.epShips.some(x => x.edge === e))) return false; // Explorers & Pirates: not along a face-down hex, not under a ship
+  if (s.explorers && EpLairs.lairBlocks(s, 'edge', e)) return false; // Pirate Lairs: not along an uncaptured lair
   if (s.rivers && Rivers.isCrossing(s.board, e)) return false; // Rivers: only bridges cross the water
   if (s.barbAttack && BarbAttack.edgeBlocked(s, e)) return false; // Barbarian Attack: not along a conquered hex
   if (s.traders && Traders.edgeBlocked(s, e)) return false; // Traders & Barbarians: closed sea side / barbarian
@@ -379,6 +381,7 @@ export function canBuildRoad(s, pid, e) {
 export function canBuildSettlement(s, pid, v) {
   if (!s.board.vertices[v] || !vertexOpen(s, v)) return false;
   if (s.explorers && EpRules.nearHidden(s, 'vertex', v)) return false; // Explorers & Pirates: not next to a face-down hex
+  if (s.explorers && EpLairs.lairBlocks(s, 'vertex', v)) return false; // Pirate Lairs: not next to an uncaptured lair
   if (s.damagedRoads && s.board.vertices[v].edges.some(e => s.damagedRoads[e])) return false; // Event Cards earthquake: not next to a damaged road
   // a road reaches it, or (Seafarers) a ship lands there
   return s.board.vertices[v].edges.some(e => s.roads[e] === pid || (!!s.ships && s.ships[e] === pid));
@@ -660,6 +663,7 @@ function produce(s, sum) {
   for (const t of bd.tiles) {
     if (t.num !== sum || t.id === bd.robber) continue;
     if (t.fog && !t.revealed) continue; // Seafarers: undiscovered fog land doesn't produce
+    if (s.explorers && EpLairs.lairBlocks(s, 'tile', t.id)) continue; // Pirate Lairs: an uncaptured lair produces nothing
     if (s.event && s.event.id === 'drought' && s.event.res === t.res) continue;
     if (t.res === 'desert') continue;
     if (s.barbAttack && BarbAttack.isConquered(s, t.id)) continue; // Barbarian Attack: a conquered hex produces nothing
@@ -2860,6 +2864,7 @@ H.epMove = (s, a) => {
     }
     const what = found.map(f => (f.sea !== undefined ? '🌊' : (TILE_INFO[f.res] || {}).icon || f.res)).join(' ');
     log(s, msg('🧭 @{p} descubre: {what}.', { p: a.pid, what }), a.pid);
+    for (const f of found) if (f.lair) log(s, msg('🏴‍☠️ @{p} encuentra una guarida pirata en un campo de oro: +{n} de oro.', { p: a.pid, n: f.gold }), a.pid);
   }
 };
 H.epLoad = (s, a) => {

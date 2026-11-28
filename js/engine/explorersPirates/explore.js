@@ -1,4 +1,5 @@
-import { DISCOVER_SEA_GOLD } from './rules.js';
+import { DISCOVER_SEA_GOLD, DISCOVER_GOLD_FIELD } from './rules.js';
+import { addLair } from './lairs.js';
 import { EP_SCENARIOS, epFlag } from './scenarios.js';
 
 // Explorers & Pirates: the unexplored areas. Their hexes start face down and are turned
@@ -14,13 +15,22 @@ export function initExplorers(s) {
 }
 
 // A ship arrived on edge e: every face-down hex touching it turns over. Land shows its number
-// and pays 1 card of its type (if the bank has one); sea pays 2 gold. Returns what was found.
+// and pays 1 card of its type (if the bank has one); sea pays 2 gold; a gold field (Pirate Lairs)
+// pays 2 gold and gets a pirate lair. Returns what was found.
 export function discover(s, pid, e, give) {
   const bd = s.board, E = bd.edges[e], p = s.players[pid];
   const found = [];
   for (const h of E.hexes) {
     const t = bd.tiles[h];
     if (!t.fog || t.revealed) continue;
+    if (t.res === 'gold' && s.explorers.lairs) {
+      // Pirate Lairs: a gold field hides a pirate lair; its number stays hidden until it's captured
+      t.revealed = true;
+      p.gold += DISCOVER_GOLD_FIELD;
+      addLair(s, h);
+      found.push({ tile: h, res: 'gold', gold: DISCOVER_GOLD_FIELD, lair: true, got: false });
+      continue;
+    }
     t.revealed = t.numRevealed = true;
     const got = t.res !== 'desert' && s.bank[t.res] > 0;
     if (got) give(pid, t.res, 1);

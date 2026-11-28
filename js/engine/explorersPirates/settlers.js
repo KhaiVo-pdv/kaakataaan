@@ -2,6 +2,7 @@
 // harbor settlements (or waits on that harbor, 1 per harbor), and founds a free settlement at
 // either end of the coast edge its ship is on.
 import { SHIP_CAPACITY, nearHidden } from './rules.js';
+import { lairBlocks } from './lairs.js';
 
 const harborsOf = (s, pid) => Object.keys(s.buildings).map(Number).filter(v => s.buildings[v].owner === pid && s.buildings[v].type === 'harbor');
 const touches = (s, ship, v) => s.board.edges[ship.edge].a === v || s.board.edges[ship.edge].b === v;
@@ -27,7 +28,7 @@ export function canFound(s, pid, v) {
   const V = s.board.vertices[v];
   if (!V || !V.hexes.length || s.buildings[v] || s.players[pid].settlementsLeft <= 0) return false;
   if (V.adj.some(w => s.buildings[w])) return false;
-  return !nearHidden(s, 'vertex', v);
+  return !nearHidden(s, 'vertex', v) && !lairBlocks(s, 'vertex', v);
 }
 
 // the corners this ship's settler can found a settlement on

@@ -3502,6 +3502,87 @@ t('E&P Tierra a la vista: sin claves de Guaridas', () => {
   eq(EpLairs.lairBlocks(old, 'vertex', 0), false, 'partida guardada sin lairs');
 });
 
+const lairsMain = mut => epMain(c => { c.expansions.epScenario = 'pirateLairs'; c.rules.vpTarget = 12; if (mut) mut(c); });
+// sails player 0's ship onto a discovery edge touching a face-down gold field; returns { target, tile }
+function sailToGold(s) {
+  const bd = s.board, ship = myShip(s);
+  const back = E => bd.vertices[E.a].edges.concat(bd.vertices[E.b].edges).find(e => e !== E.id && EpShips.sailable(bd, e) && !EpShips.discoveryEdge(s, e));
+  const target = bd.edges.find(E => EpShips.sailable(bd, E.id) && EpShips.discoveryEdge(s, E.id) && E.hexes.some(h => bd.tiles[h].res === 'gold') && back(E) !== undefined);
+  ship.edge = back(target);
+  act(s, { type: 'epSail', pid: 0 });
+  const r = sailTo(s, ship, target.id);
+  return { r, target, tile: target.hexes.map(h => bd.tiles[h]).find(x => x.res === 'gold') };
+}
+
+t('E&P Guaridas: descubrir campo de oro', () => {
+  const s = lairsMain();
+  const bd = s.board;
+  const gold = s.players[0].gold, bank = { ...s.bank }, res = { ...s.players[0].res };
+  const { r, target, tile } = sailToGold(s);
+  ok(r.ok, JSON.stringify(r));
+  eq(s.explorers.lairs[tile.id], { crews: [], captured: false });
+  ok(tile.revealed && !tile.numRevealed, 'boca arriba, número oculto');
+  const others = target.hexes.map(h => bd.tiles[h]).filter(x => x !== tile && x.res !== 'gold');
+  const seas = target.sea.filter(id => bd.sea[id].fog).length;
+  eq(s.players[0].gold - gold, 2 + 2 * seas + 2 * target.hexes.filter(h => h !== tile.id && bd.tiles[h].res === 'gold').length, 'oro');
+  eq(s.bank.gold, bank.gold, 'el banco no tiene oro');
+  for (const k of ['wood', 'brick', 'sheep', 'wheat', 'ore']) {
+    const got = others.filter(x => x.res === k).length;
+    eq([bank[k] - s.bank[k], s.players[0].res[k] - res[k]], [got, got], k);
+  }
+  ok(s.log.some(l => JSON.stringify(l).includes('guarida pirata')), 'aviso en el historial');
+});
+
+t('E&P Guaridas: la guarida bloquea', () => {
+  const s = lairsMain();
+  const bd = s.board;
+  for (const x of bd.tiles) if (x.fog) x.revealed = true;
+  for (const x of bd.sea) if (x.fog) x.revealed = true;
+  const T = bd.tiles.find(x => x.res === 'gold');
+  EpLairs.addLair(s, T.id);
+  const v = T.verts.find(x => !s.buildings[x] && bd.vertices[x].adj.every(w => !s.buildings[w]));
+  const away = bd.vertices[v].edges.find(e => !bd.edges[e].hexes.includes(T.id));
+  s.roads[away] = 0;
+  const along = bd.vertices[v].edges.find(e => bd.edges[e].hexes.includes(T.id) && bd.edges[e].hexes.length);
+  ok(!G.legalSettlements(s, 0).includes(v), 'poblado no');
+  ok(!G.legalRoads(s, 0).includes(along), 'camino no');
+  ok(!Settlers.canFound(s, 0, v), 'colono no');
+  s.explorers.lairs[T.id].captured = true;
+  ok(G.legalSettlements(s, 0).includes(v), 'conquistada: poblado sí');
+  ok(G.legalRoads(s, 0).includes(along), 'conquistada: camino sí');
+  ok(Settlers.canFound(s, 0, v), 'conquistada: colono sí');
+});
+
+t('E&P Guaridas: la guarida no produce', () => {
+  const s = lairsMain();
+  const bd = s.board;
+  for (const k of Object.keys(s.buildings)) delete s.buildings[k];
+  const T = bd.tiles.find(x => x.res === 'gold');
+  T.revealed = true;
+  EpLairs.addLair(s, T.id);
+  s.buildings[T.verts[0]] = { owner: 0, type: 'settlement' };
+  const res = { ...s.players[0].res }, gold = s.players[0].gold;
+  s.phase = 'roll';
+  s.config.rules.diceMode = 'balanced';
+  const d1 = Math.min(6, T.num - 1);
+  s.diceDeck = Array(7).fill([d1, T.num - d1]);
+  act(s, { type: 'roll', pid: 0 });
+  const other = bd.vertices[T.verts[0]].hexes.filter(h => h !== T.id && bd.tiles[h].num === T.num && !(bd.tiles[h].fog && !bd.tiles[h].revealed)).length;
+  if (other) return; // another hex with the same number touches the corner: nothing to prove on this seed
+  eq(s.players[0].res, res, 'sin recursos');
+  eq(s.players[0].gold - gold, 1, 'solo el oro por tirada sin cosecha');
+  ok(!T.numRevealed, 'el número sigue oculto');
+});
+
+t('E&P Guaridas + niebla', () => {
+  const s = lairsMain(c => { c.modes.fog = true; });
+  const { r, tile } = sailToGold(s);
+  ok(r.ok);
+  const v = G.viewFor(s, 1);
+  const vt = v.board.tiles[tile.id];
+  ok(vt.revealed && !vt.numRevealed, 'visible como descubierta, número oculto');
+});
+
 
 console.log(`\n${pass} ok, ${failN} fallos`);
 process.exit(failN ? 1 : 0);
