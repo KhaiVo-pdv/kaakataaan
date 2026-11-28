@@ -3455,6 +3455,8 @@ t('E&P mapa Guaridas: forma y montones', () => {
   const start = m.land.filter(x => x.area === 'start');
   eq(start.length, 14);
   ok(start.every(x => !x.fog), 'la isla de salida está descubierta');
+  const pos = mm => mm.land.filter(x => x.area === 'start').map(x => `${x.q},${x.r},${x.res}`);
+  eq(pos(m), pos(buildEpMap('landHo', { s: 7 })), 'la isla está donde en Tierra a la vista');
   for (const area of ['north', 'south']) {
     const land = m.land.filter(x => x.area === area), sea = m.sea.filter(x => x.area === area);
     eq([land.length, sea.length], [10, 2], area);
@@ -3489,6 +3491,7 @@ t('E&P Guaridas: arranque', () => {
       eq(s.board.tiles.filter(x => x.res === 'gold' && x.fog && !x.revealed).length, 6, tag);
       const ho = G.createGame(epConfig(c => { c.seed = seed; c.players = c.players.slice(0, n); }));
       eq(at(s), at(ho), tag + ' mismas salidas');
+      ok(Object.keys(s.buildings).every(k => s.board.vertices[k].hexes.length), tag + ' salidas en tierra');
     }
 });
 
@@ -3581,6 +3584,29 @@ t('E&P Guaridas + niebla', () => {
   const v = G.viewFor(s, 1);
   const vt = v.board.tiles[tile.id];
   ok(vt.revealed && !vt.numRevealed, 'visible como descubierta, número oculto');
+});
+
+t('E&P Guaridas: bots juegan 60 rondas', () => {
+  for (let n = 2; n <= 4; n++)
+    for (let seed = 1; seed <= 5; seed++) {
+      const s = G.createGame(lairsConfig(c => { c.seed = seed; c.players = c.players.slice(0, n); }));
+      let guard = 0;
+      while (s.phase !== 'gameOver' && s.round <= 60 && ++guard < 50000) {
+        let acted = false;
+        for (const pid of G.pendingActors(s)) {
+          const a = botAct(s, pid);
+          if (!a) continue;
+          const before = new Set(Object.keys(s.buildings));
+          const r = act(s, a);
+          if (!r.ok) throw new Error(`n=${n} seed=${seed} acción ilegal ${JSON.stringify(a)}: ${r.error}`);
+          for (const k of Object.keys(s.buildings)) if (!before.has(k) && EpLairs.lairBlocks(s, 'vertex', +k)) throw new Error(`n=${n} seed=${seed} casa junto a guarida ${k}`);
+          ok(s.players.every(p => p.gold >= 0), 'oro no negativo');
+          acted = true;
+          break;
+        }
+        if (!acted) throw new Error(`n=${n} seed=${seed} bloqueo en fase ${s.phase}`);
+      }
+    }
 });
 
 

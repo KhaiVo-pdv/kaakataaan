@@ -53,19 +53,20 @@ export const EP_MAPS = {
 };
 
 // Pirate Lairs: the Land Ho! starting island and start seats (kept so the starts stay balanced),
-// with bigger unexplored areas holding 3 gold fields each (the pirate lairs). 14 columns so the
-// areas keep a sea border.
+// with bigger unexplored areas holding 3 gold fields each (the pirate lairs). 15 columns: one
+// extra sea column on each side, so the areas keep a sea border and the board centre (and with
+// it every start coordinate) stays where it is on the 13-column Land Ho! map.
 EP_MAPS.pirateLairs = {
   layout: [
-    '..............',
-    '..WS....1111..',
-    '.HOBW...1111..',
-    '..SDWH...1111.',
-    '.BHOS.........',
-    '.........2222.',
-    '........2222..',
-    '.........2222.',
-    '..............',
+    '...............',
+    '...WS....1111..',
+    '..HOBW...1111..',
+    '...SDWH...1111.',
+    '..BHOS.........',
+    '..........2222.',
+    '.........2222..',
+    '..........2222.',
+    '...............',
   ],
   startNums: EP_MAPS.landHo.startNums,
   areas: {

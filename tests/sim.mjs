@@ -8,6 +8,8 @@ import { RES } from '../js/engine/constants.js';
 import { SCENARIOS } from '../js/engine/seafarers/scenarios.js';
 import { MAX_SHIPS } from '../js/engine/seafarers/ships.js';
 import { COMMODITIES, COMMODITY_BANK } from '../js/engine/citiesKnights/commodities.js';
+import { EP_SCENARIOS } from '../js/engine/explorersPirates/scenarios.js';
+import { lairBlocks } from '../js/engine/explorersPirates/lairs.js';
 
 const GAMES = +process.argv[2] || 200;
 const shapes = Object.keys(SHAPES).filter(k => k !== 'custom');
@@ -18,14 +20,15 @@ const scenarios = Object.keys(SCENARIOS);
 const CK_GAMES = Math.ceil(GAMES / 5);
 // and one Traders & Barbarians (Fishermen) game per 5 base games, on the normal maps
 const TB_GAMES = Math.ceil(GAMES / 5);
-// and one Explorers & Pirates (Land Ho!) game per 5 base games, 2-4 players
+// and one Explorers & Pirates game (Land Ho! / Pirate Lairs in turn) per 5 base games, 2-4 players
 const EP_GAMES = Math.ceil(GAMES / 5);
 function makeExplorersConfig(i) {
   const c = makeConfig(i);
   c.players = c.players.slice(0, 2 + (i % 3));
-  c.expansions = { explorersPirates: true, epScenario: 'landHo' };
-  c.rules.vpTarget = 8;
-  c.map.shape = 'ep:landHo'; // only a label for the summary: the scenario draws the map
+  const sc = i % 2 ? 'pirateLairs' : 'landHo'; // Pirate Lairs games may hit the turn cap until lairs can be captured
+  c.expansions = { explorersPirates: true, epScenario: sc };
+  c.rules.vpTarget = EP_SCENARIOS[sc].vp;
+  c.map.shape = 'ep:' + sc; // only a label for the summary: the scenario draws the map
   return c;
 }
 function makeFishermenConfig(i) {
@@ -236,6 +239,8 @@ function check(s, where) {
       if (onShips + waiting + p.settlersLeft !== 2) errs.push(`colonos ${p.id}: ${onShips}+${waiting}+${p.settlersLeft}`);
     }
     if (s.board.robber !== -1) errs.push('ladrón en Exploradores y Piratas');
+    if (s.explorers.lairs) for (const v in s.buildings) if (lairBlocks(s, 'vertex', +v)) errs.push(`edificio junto a una guarida: ${v}`);
+    if (s.players.some(p => p.gold < 0)) errs.push('oro negativo');
   }
   if (s.phase !== 'gameOver' && s.phase !== 'setup' && victoryPoints(s, s.current) >= R.vpTarget + (s.fishermen && s.fishermen.boot === s.current ? 1 : 0)) errs.push('ganador no detectado');
   if (s.phase === 'discard' && !Object.keys(s.pendingDiscards).length) errs.push('fase descarte vacía');
